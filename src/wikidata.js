@@ -147,37 +147,10 @@ async function getEntityData(id) {
   };
 }
 
-async function getAllAncestorsViaSPARQL(id) {
-  const query = `SELECT ?taxon ?taxonLabel ?rank ?rankLabel WHERE {
-  wd:${id} wdt:P171* ?taxon.
-  OPTIONAL { ?taxon wdt:P105 ?rank. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}`;
-  const params = new URLSearchParams({ query, format: 'json' });
-  const data = await fetchJSON(`${SPARQL_ENDPOINT}?${params}`);
-  const bindings = data.results?.bindings || [];
-
-  const ancestorMap = new Map();
-  for (const b of bindings) {
-    const tid = b.taxon?.value?.split('/').pop();
-    if (!tid) continue;
-    if (!ancestorMap.has(tid)) {
-      ancestorMap.set(tid, {
-        id: tid,
-        label: b.taxonLabel?.value || tid,
-        rankId: b.rank?.value?.split('/').pop() || null,
-        rankLabel: b.rankLabel?.value || null
-      });
-    }
-  }
-  return ancestorMap;
-}
-
 const RANK_PREFERENCE = [
   'kingdom', 'phylum', 'division', 'class', 'order', 'family', 'genus', 'species',
   'superkingdom', 'superphylum', 'superclass', 'superorder', 'superfamily'
 ];
-const RANK_PREF_SET = new Set(RANK_PREFERENCE);
 
 function pickBestParent(parentIds, ancestorMap) {
   const valid = parentIds.filter(pid => ancestorMap.has(pid));
@@ -195,7 +168,35 @@ function pickBestParent(parentIds, ancestorMap) {
 
 async function getParentChain(id) {
   await rateLimit();
-  const ancestorMap = await getAllAncestorsViaSPARQL(id);
+  const query = `SELECT ?taxon ?taxonLabel ?rank ?rankLabel ?parent WHERE {
+  wd:${id} wdt:P171* ?taxon.
+  OPTIONAL { ?taxon wdt:P105 ?rank. }
+  OPTIONAL { ?taxon wdt:P171 ?parent. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
+}`;
+  const data = await fetchJSON(`${SPARQL_ENDPOINT}?${new URLSearchParams({ query, format: 'json' })}`);
+  const bindings = data.results?.bindings || [];
+
+  const ancestors = new Map();
+  for (const b of bindings) {
+    const tid = b.taxon?.value?.split('/').pop();
+    if (!tid) continue;
+    if (!ancestors.has(tid)) {
+      ancestors.set(tid, {
+        id: tid,
+        label: b.taxonLabel?.value || tid,
+        rankId: b.rank?.value?.split('/').pop() || null,
+        rankLabel: b.rankLabel?.value || null,
+        parentIds: new Set()
+      });
+    }
+    if (b.parent) {
+      const pid = b.parent.value.split('/').pop();
+      if (pid && pid !== tid) {
+        ancestors.get(tid).parentIds.add(pid);
+      }
+    }
+  }
 
   const chain = [];
   const visited = new Set();
@@ -203,50 +204,19 @@ async function getParentChain(id) {
 
   while (currentId && !visited.has(currentId)) {
     visited.add(currentId);
-    await rateLimit();
-    const data = await fetchJSON(`${WIKIDATA_API}?${new URLSearchParams({
-      action: 'wbgetentities',
-      ids: currentId,
-      props: 'claims|labels',
-      languages: 'en|mul',
-      format: 'json'
-    })}`);
-    const entity = data.entities?.[currentId];
-    if (!entity) {
-      const fallback = ancestorMap.get(currentId);
-      if (fallback) {
-        chain.unshift({ id: currentId, label: fallback.label, rankId: fallback.rankId, rankLabel: fallback.rankLabel });
-      }
-      break;
-    }
+    const info = ancestors.get(currentId);
+    if (!info) break;
 
-    const claims = entity.claims || {};
-    const parentIds = (claims.P171 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
-    const rankId = claims.P105?.[0]?.mainsnak?.datavalue?.value?.id;
-    const apiLabel = getLabel(entity.labels);
+    chain.unshift({
+      id: info.id,
+      label: info.label,
+      rankId: info.rankId,
+      rankLabel: info.rankLabel
+    });
 
-    let rankLabel = RANK_LABELS[rankId] || null;
-    if (!rankLabel && rankId) rankLabel = rankId;
-
-    let label = apiLabel || null;
-    if (!label) {
-      const ancestorInfo = ancestorMap.get(currentId);
-      if (ancestorInfo && !ancestorInfo.label.startsWith('Q')) {
-        label = ancestorInfo.label;
-      } else {
-        label = currentId;
-      }
-    }
-
-    chain.unshift({ id: currentId, label, rankId, rankLabel });
-
-    if (parentIds.length === 0) break;
-
-    if (ancestorMap.size > 0) {
-      currentId = pickBestParent(parentIds, ancestorMap);
-    } else {
-      currentId = parentIds[0];
-    }
+    const validParents = [...info.parentIds].filter(pid => ancestors.has(pid));
+    if (validParents.length === 0) break;
+    currentId = validParents.length === 1 ? validParents[0] : pickBestParent(validParents, ancestors);
   }
 
   return chain;

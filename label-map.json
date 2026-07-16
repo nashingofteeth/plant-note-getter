@@ -17,6 +17,12 @@
   "Embryophyta": null,
   "polysporangiophytes": null,
   "Polysporangiophytes": null,
+  "cam": null,
+  "CAM": null,
+  "cormophyta": null,
+  "Cormophyta": null,
+  "anthophyta": null,
+  "Anthophyta": null,
   "spermatophyta": "spermatophytes",
   "Spermatophyta": "spermatophytes",
   "Spermatophytes": "spermatophytes",
@@ -34,8 +40,8 @@
   "Rosids": "rosids",
   "eurosids": null,
   "fabids": null,
-  "superrosids": null,
   "malvids": null,
+  "superrosids": null,
   "Monochlamydeae": null,
   "Gymnospermae": "gymnospermae",
   "gymnospermae": "gymnospermae",
@@ -68,5 +74,7 @@
   "lamiids": null,
   "campanulids": null,
   "ericales": "ericales",
-  "Ericaceae": "ericaceae"
+  "Ericaceae": "ericaceae",
+  "asterales": "asterales",
+  "Asterales": "asterales"
 }
