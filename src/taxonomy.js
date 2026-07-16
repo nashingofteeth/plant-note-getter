@@ -26,7 +26,9 @@ function buildTagSegments(ancestors, ownId, labelMap) {
     if (mapped) label = mapped;
 
     const rank = a.rankLabel;
-    if (rank && (SKIP_RANKS.has(rank) || rank.startsWith('sub') || rank === 'domain')) continue;
+    if (rank && (SKIP_RANKS.has(rank) || rank.startsWith('sub') || rank === 'domain')) {
+      if (!mapped) continue;
+    }
 
     const seg = label.toLowerCase().replace(/\s+/g, '_');
     if (segments[segments.length - 1] !== seg) {
