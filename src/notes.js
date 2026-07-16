@@ -86,11 +86,14 @@ async function populateMissingProperties(applyChanges = false) {
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
     const { missing } = analyzeMissingProperties(note.frontMatter);
-    if (missing.length === 0) continue;
+    const existingAliases = note.frontMatter.aliases;
+    const anyMissing = missing.length > 0 || !existingAliases || existingAliases.length > 0;
+    if (!anyMissing) continue;
 
     const scientificName = note.filename.replace(/\.md$/, '');
+    const reasons = missing.length > 0 ? missing : ['aliases'];
     console.log(`${i + 1}. ${note.filename}`);
-    console.log(`   Missing: ${missing.join(', ')}`);
+    console.log(`   Checking: ${reasons.join(', ')}`);
 
     try {
       const results = await searchTaxon(scientificName);
@@ -109,8 +112,10 @@ async function populateMissingProperties(applyChanges = false) {
 
       const ancestors = await getParentChain(entity.id);
       const { updates } = analyzeMissingProperties(note.frontMatter, entity, ancestors, labelMap);
+      const neededProps = new Set(missing);
+      if (existingAliases && existingAliases.length > 0) neededProps.add('aliases');
       const filtered = {};
-      for (const prop of missing) {
+      for (const prop of neededProps) {
         if (updates[prop] !== undefined) filtered[prop] = updates[prop];
       }
 

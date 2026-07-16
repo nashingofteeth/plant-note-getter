@@ -89,12 +89,6 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
       newValue: () => [buildTag(ancestors || [], entity?.id, labelMap)]
     },
     {
-      key: 'aliases',
-      isEmpty: (v) => !Array.isArray(v) || v.length === 0,
-      hasNew: entity && buildAliases(entity),
-      newValue: () => buildAliases(entity)
-    },
-    {
       key: 'rank',
       isEmpty: (v) => !v,
       hasNew: entity?.rankLabel,
@@ -116,6 +110,26 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
         updates[check.key] = check.newValue();
       }
     }
+  }
+
+  const newAliases = (entity && buildAliases(entity)) || [];
+  const existingAliases = (frontMatter.aliases) || [];
+
+  if (newAliases.length > 0) {
+    const seen = new Set(existingAliases.map(a => a.toLowerCase()));
+    const merged = [...existingAliases];
+    for (const alias of newAliases) {
+      if (!seen.has(alias.toLowerCase())) {
+        merged.push(alias);
+        seen.add(alias.toLowerCase());
+      }
+    }
+    if (merged.length > existingAliases.length) {
+      updates.aliases = merged;
+      missing.push('aliases');
+    }
+  } else if (existingAliases.length === 0) {
+    missing.push('aliases');
   }
 
   return { missing, updates };
@@ -156,6 +170,11 @@ function updateFrontMatter(content, updates) {
           updatedLines.push(`${key}: ${updates[key]}`);
         }
         processedKeys.add(key);
+        if (key !== 'modified') {
+          while (i + 1 < lines.length && lines[i + 1].match(/^\s+- /)) {
+            i++;
+          }
+        }
       } else {
         updatedLines.push(line);
         if (line.endsWith(':') || line.match(/:\s*$/)) {
@@ -198,7 +217,7 @@ function updateFrontMatter(content, updates) {
   }
 
   frontMatterText = updatedLines.join('\n');
-  return content.replace(/^---\n[\s\S]*?\n---/, `---\n${frontMatterText}---`);
+  return content.replace(/^---\n[\s\S]*?\n---/, `---\n${frontMatterText}\n---`);
 }
 
 module.exports = {
