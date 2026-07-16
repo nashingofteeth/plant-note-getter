@@ -1,0 +1,76 @@
+const SKIP_RANKS = new Set([
+  'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
+  'subfamily', 'subtribe', 'subgenus', 'subspecies',
+  'superdomain', 'superkingdom', 'superdivision', 'superphylum', 'superclass',
+  'infrakingdom', 'infraphylum', 'infraclass', 'infraorder',
+  'domain', 'section', 'series', 'variety', 'form', 'forma',
+  'strain', 'population', 'subvariety', 'subform',
+  'nothoform', 'nothospecies', 'nothosubspecies',
+  'tribe', 'subtribe', 'cohort', 'subcohort', 'infraspecies',
+  'pathogroup', 'serogroup', 'serotype', 'biovar', 'chemovar'
+]);
+
+function buildTagSegments(ancestors, ownId, labelMap) {
+  const segments = ['life', 'eukaryota', 'plantae'];
+
+  for (const a of ancestors) {
+    if (a.id === ownId) continue;
+
+    let label = a.label;
+    if (label.startsWith('Q') && label.length > 1 && !isNaN(label.slice(1))) continue;
+
+    if (label.startsWith('super')) continue;
+
+    const mapped = labelMap[label];
+    if (mapped === null) continue;
+    if (mapped) label = mapped;
+
+    const rank = a.rankLabel;
+    if (rank && (SKIP_RANKS.has(rank) || rank.startsWith('sub') || rank === 'domain')) continue;
+
+    const seg = label.toLowerCase().replace(/\s+/g, '_');
+    if (segments[segments.length - 1] !== seg) {
+      segments.push(seg);
+    }
+  }
+
+  return segments;
+}
+
+function buildTag(ancestors, ownId, labelMap) {
+  return buildTagSegments(ancestors, ownId, labelMap).join('/');
+}
+
+function buildWikipediaUrl(entity) {
+  return entity.wikipediaUrl || null;
+}
+
+function buildAliases(entity) {
+  const aliases = [];
+  if (entity.commonNames && entity.commonNames.length > 0) {
+    const seen = new Set();
+    for (const name of entity.commonNames) {
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        aliases.push(name);
+      }
+    }
+  }
+  if (entity.aliases && entity.aliases.length > 0) {
+    const lowerAliases = aliases.map(a => a.toLowerCase());
+    for (const alias of entity.aliases) {
+      if (!lowerAliases.includes(alias.toLowerCase()) && alias.toLowerCase() !== entity.scientificName.toLowerCase()) {
+        aliases.push(alias);
+      }
+    }
+  }
+  return aliases.length > 0 ? aliases : null;
+}
+
+module.exports = {
+  buildTag,
+  buildTagSegments,
+  buildWikipediaUrl,
+  buildAliases
+};

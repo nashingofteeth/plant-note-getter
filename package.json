@@ -1,0 +1,25 @@
+{
+  "name": "plant-note-getter",
+  "version": "1.0.0",
+  "description": "CLI tool to generate Obsidian plant notes with Wikidata taxonomy",
+  "main": "app.js",
+  "bin": {
+    "plant-note": "./app.js"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "test": "node app.js \"Populus\""
+  },
+  "keywords": [
+    "obsidian",
+    "wikidata",
+    "plants",
+    "taxonomy",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.0"
+  }
+}
