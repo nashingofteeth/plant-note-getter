@@ -238,55 +238,34 @@ async function getParentChain(id) {
   return chain;
 }
 
-async function fetchGbifData(gbifId) {
-  if (!gbifId) return { synonymNames: [], commonNames: [] };
+async function fetchGbifCommonNames(gbifId) {
+  if (!gbifId) return [];
 
   await rateLimit();
-  const synUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}/synonyms?limit=100`;
-  const synData = await fetchJSON(synUrl);
-
-  const synonymNames = [];
-  const seenSyn = new Set();
-  for (const syn of synData.results || []) {
-    const name = syn.canonicalName || syn.scientificName;
-    if (!name) continue;
-    const lower = name.toLowerCase();
-    if (!seenSyn.has(lower)) {
-      seenSyn.add(lower);
-      synonymNames.push(name);
-    }
-  }
-
-  await rateLimit();
-  const speciesUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}?limit=1`;
+  const speciesUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}`;
   const speciesData = await fetchJSON(speciesUrl);
 
-  const commonNames = [];
-  const seenCn = new Set();
+  const names = [];
+  const seen = new Set();
   if (speciesData.vernacularName) {
     const lower = speciesData.vernacularName.toLowerCase();
-    if (!seenCn.has(lower)) {
-      seenCn.add(lower);
-      commonNames.push(speciesData.vernacularName);
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      names.push(speciesData.vernacularName);
     }
   }
-  if (speciesData.results) {
-    for (const r of speciesData.results) {
-      if (r.vernacularName && !seenCn.has(r.vernacularName.toLowerCase())) {
-        seenCn.add(r.vernacularName.toLowerCase());
-        commonNames.push(r.vernacularName);
-      }
+  for (const r of speciesData.results || []) {
+    if (r.vernacularName && !seen.has(r.vernacularName.toLowerCase())) {
+      seen.add(r.vernacularName.toLowerCase());
+      names.push(r.vernacularName);
     }
   }
 
-  if (synonymNames.length > 0 || commonNames.length > 0) {
-    const parts = [];
-    if (synonymNames.length > 0) parts.push(`${synonymNames.length} synonym(s)`);
-    if (commonNames.length > 0) parts.push(`${commonNames.length} common name(s)`);
-    console.log(`  [gbif] fetched: ${parts.join(', ')}`);
+  if (names.length > 0) {
+    console.log(`  [gbif] common names: ${names.join(', ')}`);
   }
 
-  return { synonymNames, commonNames };
+  return names;
 }
 
 const RANK_LABELS = {
@@ -402,5 +381,5 @@ module.exports = {
   getParentChain,
   isSynonymOf,
   collectSynonymData,
-  fetchGbifData
+  fetchGbifCommonNames
 };
