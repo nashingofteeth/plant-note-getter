@@ -3,7 +3,7 @@
 const fs = require('fs');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
 const { sanitizeFilename, loadLabelMap } = require('./src/utils');
-const { searchTaxon, getEntityData, getParentChain, collectSynonymData, fetchGbifCommonNames } = require('./src/wikidata');
+const { searchTaxon, getEntityData, getParentChain, collectSynonymData, fetchGbifCommonNames, fetchWikipediaCommonNames } = require('./src/wikidata');
 const { buildTagSegmentsWithOriginals, buildAliases } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
@@ -122,6 +122,17 @@ async function main() {
       const gbifNames = await fetchGbifCommonNames(gbifId);
       const seenLower = new Set((entity.commonNames || []).map(n => n.toLowerCase()));
       for (const name of gbifNames) {
+        if (!seenLower.has(name.toLowerCase())) {
+          seenLower.add(name.toLowerCase());
+          entity.commonNames.push(name);
+        }
+      }
+    }
+
+    if (entity.wikipediaTitle) {
+      const wikiNames = await fetchWikipediaCommonNames(entity.wikipediaTitle);
+      const seenLower = new Set((entity.commonNames || []).map(n => n.toLowerCase()));
+      for (const name of wikiNames) {
         if (!seenLower.has(name.toLowerCase())) {
           seenLower.add(name.toLowerCase());
           entity.commonNames.push(name);

@@ -250,15 +250,55 @@ async function fetchGbifCommonNames(gbifId) {
   for (const r of data.results || []) {
     if (r.language !== 'eng') continue;
     if (!r.vernacularName) continue;
-    const lower = r.vernacularName.toLowerCase();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      names.push(r.vernacularName);
+    const parts = r.vernacularName.split(',').map(s => s.trim()).filter(Boolean);
+    for (const name of parts) {
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        names.push(name);
+      }
     }
   }
 
   if (names.length > 0) {
     console.log(`  [gbif] common names: ${names.join(', ')}`);
+  }
+
+  return names;
+}
+
+const WIKIPEDIA_REST_API = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+
+async function fetchWikipediaCommonNames(wikipediaTitle) {
+  if (!wikipediaTitle) return [];
+
+  await rateLimit();
+  const url = `${WIKIPEDIA_REST_API}/${encodeURIComponent(wikipediaTitle)}`;
+  const data = await fetchJSON(url);
+  if (!data.extract_html) return [];
+
+  const names = [];
+  const seen = new Set();
+
+  const pMatch = data.extract_html.match(/<p>(.*?)<\/p>/);
+  if (!pMatch) return [];
+
+  const bTags = pMatch[1].match(/<b>([^<]+)<\/b>/g);
+  if (!bTags) return [];
+
+  for (let i = 0; i < bTags.length; i++) {
+    const name = bTags[i].replace(/<\/?b>/g, '').trim();
+    if (!name) continue;
+    if (i === 0) continue;
+    const lower = name.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      names.push(name);
+    }
+  }
+
+  if (names.length > 0) {
+    console.log(`  [wikipedia] common names: ${names.join(', ')}`);
   }
 
   return names;
@@ -377,5 +417,6 @@ module.exports = {
   getParentChain,
   isSynonymOf,
   collectSynonymData,
-  fetchGbifCommonNames
+  fetchGbifCommonNames,
+  fetchWikipediaCommonNames
 };
