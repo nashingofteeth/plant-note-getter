@@ -290,6 +290,9 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
   const mergedCommonNames = [...(primaryEntity.commonNames || [])];
   const seen = new Set(mergedCommonNames.map(n => n.toLowerCase()));
   let wikipediaUrl = primaryEntity.wikipediaUrl;
+  let synonymCount = 0;
+  let newCommonCount = 0;
+  let wikiFromSynonym = false;
 
   if (!candidateEntities?.length) {
     return { wikipediaUrl, commonNames: mergedCommonNames };
@@ -299,17 +302,28 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
     if (candidate.id === primaryEntity.id) continue;
     if (!isSynonymOf(primaryEntity, candidate)) continue;
 
+    synonymCount++;
+
     for (const name of (candidate.commonNames || [])) {
       const lower = name.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
         mergedCommonNames.push(name);
+        newCommonCount++;
       }
     }
 
     if (!wikipediaUrl && candidate.wikipediaUrl) {
       wikipediaUrl = candidate.wikipediaUrl;
+      wikiFromSynonym = true;
     }
+  }
+
+  if (synonymCount > 0) {
+    const parts = [];
+    if (wikiFromSynonym) parts.push('wikipedia');
+    if (newCommonCount > 0) parts.push(`${newCommonCount} common name(s)`);
+    console.log(`  [synonyms] ${synonymCount} verified synonym(s) contributed: ${parts.join(', ')}`);
   }
 
   return { wikipediaUrl, commonNames: mergedCommonNames };
