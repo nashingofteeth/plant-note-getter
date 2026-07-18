@@ -242,21 +242,17 @@ async function fetchGbifCommonNames(gbifId) {
   if (!gbifId) return [];
 
   await rateLimit();
-  const speciesUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}`;
-  const speciesData = await fetchJSON(speciesUrl);
+  const url = `${GBIF_API}/${encodeURIComponent(gbifId)}/vernacularNames?limit=100`;
+  const data = await fetchJSON(url);
 
   const names = [];
   const seen = new Set();
-  if (speciesData.vernacularName) {
-    const lower = speciesData.vernacularName.toLowerCase();
+  for (const r of data.results || []) {
+    if (r.language !== 'eng') continue;
+    if (!r.vernacularName) continue;
+    const lower = r.vernacularName.toLowerCase();
     if (!seen.has(lower)) {
       seen.add(lower);
-      names.push(speciesData.vernacularName);
-    }
-  }
-  for (const r of speciesData.results || []) {
-    if (r.vernacularName && !seen.has(r.vernacularName.toLowerCase())) {
-      seen.add(r.vernacularName.toLowerCase());
       names.push(r.vernacularName);
     }
   }
