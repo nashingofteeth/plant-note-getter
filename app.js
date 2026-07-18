@@ -7,6 +7,7 @@ const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = requi
 const { buildTag, buildAliases } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
+const { printHierarchy, resolveTagForNote } = require('./src/tagcheck');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -14,9 +15,11 @@ async function main() {
   if (args.length === 0) {
     console.error('Usage: plant-note "Scientific Name" [--apply]');
     console.error('       plant-note --populate [--apply]');
+    console.error('       plant-note --check "Note Name"');
     console.error('');
     console.error('Options:');
     console.error('  --apply    Auto-apply updates to existing files without prompting');
+    console.error('  --check    Show tag hierarchy child counts for a note');
     console.error('');
     console.error('Examples:');
     console.error('  plant-note "Populus"');
@@ -24,12 +27,29 @@ async function main() {
     console.error('  plant-note "Eschscholzia californica"');
     console.error('  plant-note --populate');
     console.error('  plant-note --populate --apply');
+    console.error('  plant-note --check "Lysimachia borealis"');
     process.exit(1);
   }
 
   if (args.includes('--populate')) {
     const applyChanges = args.includes('--apply');
     await populateMissingProperties(applyChanges);
+    return;
+  }
+
+  if (args.includes('--check')) {
+    const checkName = args.filter(a => a !== '--check').join(' ').trim();
+    if (!checkName) {
+      console.error('Error: --check requires a note name');
+      console.error('Usage: plant-note --check "Note Name"');
+      process.exit(1);
+    }
+    const result = await resolveTagForNote(checkName);
+    if (result.error) {
+      console.error(`Error: ${result.error}`);
+      process.exit(1);
+    }
+    printHierarchy(result.tag, checkName);
     return;
   }
 
