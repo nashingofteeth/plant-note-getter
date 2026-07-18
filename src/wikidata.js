@@ -106,6 +106,11 @@ async function getEntityData(id) {
 
   const instanceOf = (claims.P31 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
 
+  const replacedSynonymIds = (claims.P694 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+  const taxonSynonymIds = (claims.P1420 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+  const synonymOfIds = (claims.P12763 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+  const replacedSynonymOfIds = (claims.P12764 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+
   const commonNames = [];
   if (claims.P1843) {
     for (const claim of claims.P1843) {
@@ -126,8 +131,10 @@ async function getEntityData(id) {
   const scientificName = claims.P225?.[0]?.mainsnak?.datavalue?.value || getLabel(entity.labels) || id;
 
   let wikipediaUrl = null;
+  let wikipediaTitle = null;
   if (entity.sitelinks?.enwiki?.title) {
-    const title = entity.sitelinks.enwiki.title.replace(/ /g, '_');
+    wikipediaTitle = entity.sitelinks.enwiki.title;
+    const title = wikipediaTitle.replace(/ /g, '_');
     wikipediaUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`;
   }
 
@@ -141,9 +148,14 @@ async function getEntityData(id) {
     rankLabel,
     parentIds,
     instanceOf,
+    replacedSynonymIds,
+    taxonSynonymIds,
+    synonymOfIds,
+    replacedSynonymOfIds,
     commonNames,
     aliases,
-    wikipediaUrl
+    wikipediaUrl,
+    wikipediaTitle
   };
 }
 
@@ -261,8 +273,52 @@ const RANK_LABELS = {
   Q1425109: 'no rank'
 };
 
+function isSynonymOf(primaryEntity, candidateEntity) {
+  if (!primaryEntity || !candidateEntity) return false;
+  if ((primaryEntity.taxonSynonymIds || []).includes(candidateEntity.id)) return true;
+  if ((primaryEntity.replacedSynonymOfIds || []).includes(candidateEntity.id)) return true;
+  if ((candidateEntity.synonymOfIds || []).includes(primaryEntity.id)) return true;
+  if ((candidateEntity.replacedSynonymIds || []).includes(primaryEntity.id)) return true;
+
+  const primaryName = (primaryEntity.scientificName || primaryEntity.label || '').toLowerCase();
+  if (candidateEntity.wikipediaTitle && candidateEntity.wikipediaTitle.replace(/_/g, ' ').toLowerCase() === primaryName) return true;
+
+  return false;
+}
+
+async function collectSynonymData(primaryEntity, candidateEntities) {
+  const mergedCommonNames = [...(primaryEntity.commonNames || [])];
+  const seen = new Set(mergedCommonNames.map(n => n.toLowerCase()));
+  let wikipediaUrl = primaryEntity.wikipediaUrl;
+
+  if (!candidateEntities?.length) {
+    return { wikipediaUrl, commonNames: mergedCommonNames };
+  }
+
+  for (const candidate of candidateEntities) {
+    if (candidate.id === primaryEntity.id) continue;
+    if (!isSynonymOf(primaryEntity, candidate)) continue;
+
+    for (const name of (candidate.commonNames || [])) {
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        mergedCommonNames.push(name);
+      }
+    }
+
+    if (!wikipediaUrl && candidate.wikipediaUrl) {
+      wikipediaUrl = candidate.wikipediaUrl;
+    }
+  }
+
+  return { wikipediaUrl, commonNames: mergedCommonNames };
+}
+
 module.exports = {
   searchTaxon,
   getEntityData,
-  getParentChain
+  getParentChain,
+  isSynonymOf,
+  collectSynonymData
 };

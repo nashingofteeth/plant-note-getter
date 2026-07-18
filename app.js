@@ -3,7 +3,7 @@
 const fs = require('fs');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
 const { sanitizeFilename, loadLabelMap } = require('./src/utils');
-const { searchTaxon, getEntityData, getParentChain } = require('./src/wikidata');
+const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./src/wikidata');
 const { buildTag, buildAliases } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
@@ -47,11 +47,13 @@ async function main() {
     }
 
     let selected = results[0];
+    const entityCache = new Map();
 
     if (results.length > 1) {
       const taxonResults = [];
       for (const r of results) {
         const entity = await getEntityData(r.id);
+        entityCache.set(r.id, entity);
         if (entity && entity.instanceOf.some(id => ['Q16521', 'Q7136226'].includes(id))) {
           taxonResults.push({ ...r, rankLabel: entity.rankLabel });
         }
@@ -75,7 +77,7 @@ async function main() {
       }
     }
 
-    const entity = await getEntityData(selected.id);
+    const entity = entityCache.get(selected.id) || await getEntityData(selected.id);
     if (!entity) {
       console.error(`Error: Could not fetch data for ${selected.id}`);
       process.exit(1);
@@ -86,6 +88,11 @@ async function main() {
       console.error(`Error: '${input}' is not a taxon or clade on Wikidata`);
       process.exit(1);
     }
+
+    const candidateEntities = [...entityCache.values()].filter(e => e && e.id !== selected.id);
+    const synonymData = await collectSynonymData(entity, candidateEntities);
+    entity.wikipediaUrl = synonymData.wikipediaUrl;
+    entity.commonNames = synonymData.commonNames;
 
     console.log(`Entity: ${entity.label} (${entity.id})`);
     console.log(`Rank: ${entity.rankLabel || 'unknown'}`);

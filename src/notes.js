@@ -3,7 +3,7 @@ const path = require('path');
 const { NOTE_ROOT, UPDATES_FILE_PATH } = require('./config');
 const { sanitizeFilename, logUpdates, loadLabelMap } = require('./utils');
 const { parseFrontMatter, generateFrontMatter, hasPlantTag, analyzeMissingProperties, updateFrontMatter } = require('./frontmatter');
-const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
+const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./wikidata');
 const { buildTag } = require('./taxonomy');
 
 function getPlantNotes(noteRoot) {
@@ -108,6 +108,17 @@ async function populateMissingProperties(applyChanges = false) {
         console.log(`   Not a taxon or clade\n`);
         plannedUpdates.push({ filename: note.filename, filepath: note.filepath, error: 'Not a taxon or clade' });
         continue;
+      }
+
+      if (results.length > 1) {
+        const candidateEntities = [];
+        for (const r of results.slice(1)) {
+          const c = await getEntityData(r.id);
+          if (c) candidateEntities.push(c);
+        }
+        const synonymData = await collectSynonymData(entity, candidateEntities);
+        entity.wikipediaUrl = synonymData.wikipediaUrl;
+        entity.commonNames = synonymData.commonNames;
       }
 
       const ancestors = await getParentChain(entity.id);
