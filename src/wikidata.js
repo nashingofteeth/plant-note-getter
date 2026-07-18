@@ -3,6 +3,7 @@ const http = require('http');
 
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
 const SPARQL_ENDPOINT = 'https://query.wikidata.org/sparql';
+const GBIF_API = 'https://api.gbif.org/v1/species';
 const USER_AGENT = 'plant-note-getter/1.0.0 (https://github.com/nash/plant-note-getter)';
 
 let lastRequestTime = 0;
@@ -130,6 +131,8 @@ async function getEntityData(id) {
 
   const scientificName = claims.P225?.[0]?.mainsnak?.datavalue?.value || getLabel(entity.labels) || id;
 
+  const gbifId = claims.P846?.[0]?.mainsnak?.datavalue?.value || null;
+
   let wikipediaUrl = null;
   let wikipediaTitle = null;
   if (entity.sitelinks?.enwiki?.title) {
@@ -154,6 +157,7 @@ async function getEntityData(id) {
     replacedSynonymOfIds,
     commonNames,
     aliases,
+    gbifId,
     wikipediaUrl,
     wikipediaTitle
   };
@@ -232,6 +236,57 @@ async function getParentChain(id) {
   }
 
   return chain;
+}
+
+async function fetchGbifData(gbifId) {
+  if (!gbifId) return { synonymNames: [], commonNames: [] };
+
+  await rateLimit();
+  const synUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}/synonyms?limit=100`;
+  const synData = await fetchJSON(synUrl);
+
+  const synonymNames = [];
+  const seenSyn = new Set();
+  for (const syn of synData.results || []) {
+    const name = syn.canonicalName || syn.scientificName;
+    if (!name) continue;
+    const lower = name.toLowerCase();
+    if (!seenSyn.has(lower)) {
+      seenSyn.add(lower);
+      synonymNames.push(name);
+    }
+  }
+
+  await rateLimit();
+  const speciesUrl = `${GBIF_API}/${encodeURIComponent(gbifId)}?limit=1`;
+  const speciesData = await fetchJSON(speciesUrl);
+
+  const commonNames = [];
+  const seenCn = new Set();
+  if (speciesData.vernacularName) {
+    const lower = speciesData.vernacularName.toLowerCase();
+    if (!seenCn.has(lower)) {
+      seenCn.add(lower);
+      commonNames.push(speciesData.vernacularName);
+    }
+  }
+  if (speciesData.results) {
+    for (const r of speciesData.results) {
+      if (r.vernacularName && !seenCn.has(r.vernacularName.toLowerCase())) {
+        seenCn.add(r.vernacularName.toLowerCase());
+        commonNames.push(r.vernacularName);
+      }
+    }
+  }
+
+  if (synonymNames.length > 0 || commonNames.length > 0) {
+    const parts = [];
+    if (synonymNames.length > 0) parts.push(`${synonymNames.length} synonym(s)`);
+    if (commonNames.length > 0) parts.push(`${commonNames.length} common name(s)`);
+    console.log(`  [gbif] fetched: ${parts.join(', ')}`);
+  }
+
+  return { synonymNames, commonNames };
 }
 
 const RANK_LABELS = {
@@ -346,5 +401,6 @@ module.exports = {
   getEntityData,
   getParentChain,
   isSynonymOf,
-  collectSynonymData
+  collectSynonymData,
+  fetchGbifData
 };
