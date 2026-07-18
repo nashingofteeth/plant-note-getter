@@ -93,6 +93,9 @@ async function main() {
     const synonymData = await collectSynonymData(entity, candidateEntities);
     entity.wikipediaUrl = synonymData.wikipediaUrl;
     entity.commonNames = synonymData.commonNames;
+    if (synonymData.synonymNames.length > 0) {
+      entity.aliases = [...(entity.aliases || []), ...synonymData.synonymNames];
+    }
 
     console.log(`Entity: ${entity.label} (${entity.id})`);
     console.log(`Rank: ${entity.rankLabel || 'unknown'}`);

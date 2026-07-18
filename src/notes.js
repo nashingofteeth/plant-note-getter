@@ -119,6 +119,9 @@ async function populateMissingProperties(applyChanges = false) {
         const synonymData = await collectSynonymData(entity, candidateEntities);
         entity.wikipediaUrl = synonymData.wikipediaUrl;
         entity.commonNames = synonymData.commonNames;
+        if (synonymData.synonymNames.length > 0) {
+          entity.aliases = [...(entity.aliases || []), ...synonymData.synonymNames];
+        }
       }
 
       const ancestors = await getParentChain(entity.id);
