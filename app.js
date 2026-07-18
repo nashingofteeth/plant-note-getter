@@ -4,10 +4,10 @@ const fs = require('fs');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
 const { sanitizeFilename, loadLabelMap } = require('./src/utils');
 const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./src/wikidata');
-const { buildTag, buildAliases } = require('./src/taxonomy');
+const { buildTagSegmentsWithOriginals, buildAliases } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
-const { printHierarchy, resolveTagForNote } = require('./src/tagcheck');
+const { checkAndPruneTag, printHierarchy, resolveTagForNote } = require('./src/tagcheck');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -38,7 +38,7 @@ async function main() {
   }
 
   if (args.includes('--check')) {
-    const checkName = args.filter(a => a !== '--check').join(' ').trim();
+    const checkName = args.filter(a => a !== '--check' && a !== '--apply').join(' ').trim();
     if (!checkName) {
       console.error('Error: --check requires a note name');
       console.error('Usage: plant-note --check "Note Name"');
@@ -49,7 +49,7 @@ async function main() {
       console.error(`Error: ${result.error}`);
       process.exit(1);
     }
-    printHierarchy(result.tag, checkName);
+    await printHierarchy(result.tag, checkName, result.originals);
     return;
   }
 
@@ -129,7 +129,8 @@ async function main() {
     console.log(`Found ${ancestors.length} ancestors in the chain.\n`);
 
     const labelMap = loadLabelMap(LABEL_MAP_PATH);
-    const tag = buildTag(ancestors, entity.id, labelMap);
+    const { segments, originals } = buildTagSegmentsWithOriginals(ancestors, entity.id, labelMap);
+    let tag = segments.join('/');
     const aliases = buildAliases(entity);
 
     console.log(`Tag: ${tag}`);
@@ -138,8 +139,14 @@ async function main() {
     if (entity.wikipediaUrl) console.log(`Wikipedia: ${entity.wikipediaUrl}`);
     console.log('');
 
-    const content = generateFrontMatter(entity, ancestors, labelMap);
+    const noteName = entity.scientificName || entity.label;
     const filename = sanitizeFilename(entity.scientificName);
+    const filepath = require('path').join(NOTE_ROOT, filename);
+    const isNew = !fs.existsSync(filepath);
+    tag = await checkAndPruneTag(tag, originals, noteName, autoApply, isNew, ancestors, entity.id);
+
+    const finalLabelMap = loadLabelMap(LABEL_MAP_PATH);
+    const content = generateFrontMatter(entity, ancestors, finalLabelMap);
 
     console.log(`Filename: ${filename}`);
     console.log('');
@@ -157,7 +164,7 @@ async function main() {
         result.frontMatter,
         entity,
         ancestors,
-        labelMap
+        finalLabelMap
       );
 
       if (missing.length === 0) {

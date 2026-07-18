@@ -43,6 +43,38 @@ function buildTag(ancestors, ownId, labelMap) {
   return buildTagSegments(ancestors, ownId, labelMap).join('/');
 }
 
+function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
+  const segments = ['life', 'eukaryota', 'plantae'];
+  const originals = ['', '', ''];
+
+  for (const a of ancestors) {
+    if (a.id === ownId) continue;
+
+    let label = a.label;
+    if (label.startsWith('Q') && label.length > 1 && !isNaN(label.slice(1))) continue;
+
+    if (label.startsWith('super')) continue;
+
+    const originalLabel = label;
+    const mapped = labelMap[label];
+    if (mapped === null) continue;
+    if (mapped) label = mapped;
+
+    const rank = a.rankLabel;
+    if (rank && (SKIP_RANKS.has(rank) || rank.startsWith('sub') || rank === 'domain')) {
+      if (!mapped) continue;
+    }
+
+    const seg = label.toLowerCase().replace(/\s+/g, '_');
+    if (segments[segments.length - 1] !== seg) {
+      segments.push(seg);
+      originals.push(originalLabel);
+    }
+  }
+
+  return { segments, originals };
+}
+
 function buildWikipediaUrl(entity) {
   return entity.wikipediaUrl || null;
 }
@@ -73,6 +105,7 @@ function buildAliases(entity) {
 module.exports = {
   buildTag,
   buildTagSegments,
+  buildTagSegmentsWithOriginals,
   buildWikipediaUrl,
   buildAliases
 };
