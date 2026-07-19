@@ -277,12 +277,12 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const data = await fetchJSON(url);
   if (!data.extract) return [];
 
-  const m = data.extract.match(/(?:commonly )?(?:also )?known as (.+?)(?:, (?:is|are|was|were) | — | – )/i);
+  const m = data.extract.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:\.(?:\s+[A-Z]|$)|$)/i);
   if (!m) return [];
 
   const names = [];
   const seen = new Set();
-  for (const raw of m[1].split(/,(?:\s+or)?\s*|\s+or\s+/)) {
+  for (const raw of m[1].replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
     const name = raw.trim();
     if (!name) continue;
     const lower = name.toLowerCase();
