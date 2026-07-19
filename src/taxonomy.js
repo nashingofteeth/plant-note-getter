@@ -21,7 +21,7 @@ function buildTagSegments(ancestors, ownId, labelMap) {
 
     if (label.startsWith('super')) continue;
 
-    const mapped = labelMap[label];
+    const mapped = labelMap[label] ?? labelMap[label.toLowerCase()];
     if (mapped === null) continue;
     if (mapped) label = mapped;
 
@@ -56,7 +56,7 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
     if (label.startsWith('super')) continue;
 
     const originalLabel = label;
-    const mapped = labelMap[label];
+    const mapped = labelMap[label] ?? labelMap[label.toLowerCase()];
     if (mapped === null) continue;
     if (mapped) label = mapped;
 
