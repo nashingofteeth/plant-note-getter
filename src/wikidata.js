@@ -1,6 +1,10 @@
 const https = require('https');
 const http = require('http');
 
+function stripArticle(name) {
+  return name.replace(/^(the|a|an)\s+/i, '').trim();
+}
+
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
 const SPARQL_ENDPOINT = 'https://query.wikidata.org/sparql';
 const GBIF_API = 'https://api.gbif.org/v1/species';
@@ -252,10 +256,11 @@ async function fetchGbifCommonNames(gbifId) {
     if (!r.vernacularName) continue;
     const parts = r.vernacularName.split(',').map(s => s.trim()).filter(Boolean);
     for (const name of parts) {
-      const lower = name.toLowerCase();
+      const normalized = stripArticle(name);
+      const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
-        names.push(name);
+        names.push(normalized);
       }
     }
   }
@@ -285,10 +290,11 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   for (const raw of m[1].replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
     const name = raw.trim();
     if (!name) continue;
-    const lower = name.toLowerCase();
+    const normalized = stripArticle(name);
+    const lower = normalized.toLowerCase();
     if (!seen.has(lower)) {
       seen.add(lower);
-      names.push(name);
+      names.push(normalized);
     }
   }
 
@@ -372,10 +378,11 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
     synonymCount++;
 
     for (const name of (candidate.commonNames || [])) {
-      const lower = name.toLowerCase();
+      const normalized = stripArticle(name);
+      const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
-        mergedCommonNames.push(name);
+        mergedCommonNames.push(normalized);
         newCommonCount++;
       }
     }
@@ -413,5 +420,6 @@ module.exports = {
   isSynonymOf,
   collectSynonymData,
   fetchGbifCommonNames,
-  fetchWikipediaCommonNames
+  fetchWikipediaCommonNames,
+  stripArticle
 };

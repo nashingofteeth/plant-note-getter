@@ -79,15 +79,20 @@ function buildWikipediaUrl(entity) {
   return entity.wikipediaUrl || null;
 }
 
+function stripArticle(name) {
+  return name.replace(/^(the|a|an)\s+/i, '').trim();
+}
+
 function buildAliases(entity) {
   const aliases = [];
   if (entity.commonNames && entity.commonNames.length > 0) {
     const seen = new Set();
     for (const name of entity.commonNames) {
-      const lower = name.toLowerCase();
+      const normalized = stripArticle(name);
+      const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
-        aliases.push(name);
+        aliases.push(normalized);
       }
     }
   }
