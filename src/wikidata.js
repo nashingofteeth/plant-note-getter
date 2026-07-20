@@ -2,7 +2,7 @@ const https = require('https');
 const http = require('http');
 
 function stripArticle(name) {
-  return name.replace(/^(the|a|an|and|just|simply)\s+/i, '').trim();
+  return name.replace(/^(the|a|an|and|or|just|simply)\s+/i, '').trim();
 }
 
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
@@ -302,6 +302,36 @@ async function fetchGbifCommonNames(gbifId) {
 
 const WIKIPEDIA_REST_API = 'https://en.wikipedia.org/api/rest_v1/page/summary';
 
+const WIKI_PATTERNS = [
+  // "known as" or "commonly known as" before main verb
+  (text) => text.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:,\s+(?:is|are|was|were|has|have|refers|the\b|a\b|an\b|which|that)\b|\.(?:\s+[A-Z]|$)|$)/i),
+  // Appositive: ", the/a/an {names}," before main verb
+  (text) => text.match(/^[^,]+,\s+(?:the|a|an)\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i),
+  // "Other common names" sentence: "Other common names for the {thing} include/are {list}."
+  (text) => text.match(/other common names (?:for (?:the|a|an|this)\s+\w+\s+)?(?:include|are)\s+(.+?)\./i),
+  // "often/also called" pattern
+  (text) => text.match(/(?:often|also)\s+called (.+?)(?:\.|,)/i),
+];
+
+function extractNamesFromCapture(captured) {
+  const names = [];
+  const seen = new Set();
+  for (const raw of captured.replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
+    const name = raw.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
+    if (!name) continue;
+    if (name.split(/\s+/).length > 5) continue;
+    if (/\b(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)\b/i.test(name)) continue;
+    const normalized = stripArticle(name);
+    if (!normalized) continue;
+    const lower = normalized.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      names.push(normalized);
+    }
+  }
+  return names;
+}
+
 async function fetchWikipediaCommonNames(wikipediaTitle) {
   if (!wikipediaTitle) return [];
 
@@ -310,21 +340,17 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const data = await fetchJSON(url);
   if (!data.extract) return [];
 
-  const m = data.extract.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:,\s+(?:is|are|was|were|has|have|refers|the\b|a\b|an\b|which|that)\b|\.(?:\s+[A-Z]|$)|$)/i);
-  if (!m) return [];
-
   const names = [];
   const seen = new Set();
-  for (const raw of m[1].replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
-    const name = raw.trim();
-    if (!name) continue;
-    if (name.split(/\s+/).length > 5) continue;
-    if (/\b(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)\b/i.test(name)) continue;
-    const normalized = stripArticle(name);
-    const lower = normalized.toLowerCase();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      names.push(normalized);
+  for (const pattern of WIKI_PATTERNS) {
+    const m = pattern(data.extract);
+    if (!m) continue;
+    for (const name of extractNamesFromCapture(m[1])) {
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        names.push(name);
+      }
     }
   }
 
