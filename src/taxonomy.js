@@ -80,7 +80,7 @@ function buildWikipediaUrl(entity) {
 }
 
 function stripArticle(name) {
-  return name.replace(/^(the|a|an)\s+/i, '').trim();
+  return name.replace(/^(the|a|an|and|just|simply)\s+/i, '').trim();
 }
 
 function buildAliases(entity) {

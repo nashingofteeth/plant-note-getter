@@ -2,7 +2,7 @@ const https = require('https');
 const http = require('http');
 
 function stripArticle(name) {
-  return name.replace(/^(the|a|an)\s+/i, '').trim();
+  return name.replace(/^(the|a|an|and|just|simply)\s+/i, '').trim();
 }
 
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
@@ -254,9 +254,11 @@ async function fetchGbifCommonNames(gbifId) {
   for (const r of data.results || []) {
     if (r.language !== 'eng') continue;
     if (!r.vernacularName) continue;
-    const parts = r.vernacularName.split(',').map(s => s.trim()).filter(Boolean);
+    const clean = r.vernacularName.replace(/\s*\[.*?\]\s*/g, ' ').replace(/,?\s+(?:or|and)\s+/gi, ', ').trim();
+    const parts = clean.split(/\s*,\s*/).filter(Boolean);
     for (const name of parts) {
       const normalized = stripArticle(name);
+      if (!normalized) continue;
       const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
@@ -282,7 +284,7 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const data = await fetchJSON(url);
   if (!data.extract) return [];
 
-  const m = data.extract.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:\.(?:\s+[A-Z]|$)|$)/i);
+  const m = data.extract.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:,\s+(?:is|are|was|were|has|have|refers|the\b|a\b|an\b|which|that)\b|\.(?:\s+[A-Z]|$)|$)/i);
   if (!m) return [];
 
   const names = [];
@@ -290,6 +292,8 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   for (const raw of m[1].replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
     const name = raw.trim();
     if (!name) continue;
+    if (name.split(/\s+/).length > 5) continue;
+    if (/\b(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)\b/i.test(name)) continue;
     const normalized = stripArticle(name);
     const lower = normalized.toLowerCase();
     if (!seen.has(lower)) {
