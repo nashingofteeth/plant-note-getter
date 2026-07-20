@@ -68,15 +68,41 @@ async function searchTaxon(name) {
     format: 'json'
   });
   const data = await fetchJSON(`${WIKIDATA_API}?${params}`);
-  if (!data.search || data.search.length === 0) {
-    return [];
+  if (data.search && data.search.length > 0) {
+    return data.search.map(item => ({
+      id: item.id,
+      label: item.label,
+      description: item.description,
+      match: item.match
+    }));
   }
-  return data.search.map(item => ({
-    id: item.id,
-    label: item.label,
-    description: item.description,
-    match: item.match
-  }));
+
+  console.log(`  No Wikidata results for '${name}', trying GBIF fallback...`);
+  try {
+    const gbifData = await fetchJSON(`${GBIF_API}/match?name=${encodeURIComponent(name)}`);
+    if (gbifData && gbifData.usageKey && gbifData.matchType !== 'NONE') {
+      const gbifId = gbifData.usageKey;
+      const query = `SELECT ?item WHERE { ?item wdt:P846 "${gbifId}" }`;
+      const sparqlData = await fetchJSON(`${SPARQL_ENDPOINT}?${new URLSearchParams({ query, format: 'json' })}`);
+      if (sparqlData.results?.bindings?.length > 0) {
+        const qId = sparqlData.results.bindings[0].item.value.split('/').pop();
+        const labelData = await fetchJSON(`${WIKIDATA_API}?${new URLSearchParams({
+          action: 'wbgetentities',
+          ids: qId,
+          props: 'labels',
+          languages: 'en|mul',
+          format: 'json'
+        })}`);
+        const label = labelData.entities?.[qId]?.labels?.en?.value || gbifData.canonicalName || name;
+        console.log(`  GBIF fallback resolved to ${qId} (${label})`);
+        return [{ id: qId, label, description: gbifData.canonicalName || null, match: { type: 'gbif_fallback' } }];
+      }
+    }
+  } catch (e) {
+    console.log(`  GBIF fallback failed: ${e.message}`);
+  }
+
+  return [];
 }
 
 function getLabel(labels) {
