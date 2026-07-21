@@ -275,6 +275,12 @@ async function fetchGbifCommonNames(gbifId) {
   const url = `${GBIF_API}/${encodeURIComponent(gbifId)}/vernacularNames?limit=100`;
   const data = await fetchJSON(url);
 
+  const nonEnglishNames = new Set();
+  for (const r of data.results || []) {
+    if (r.language === 'eng' || !r.vernacularName) continue;
+    nonEnglishNames.add(stripArticle(r.vernacularName).toLowerCase());
+  }
+
   const names = [];
   const seen = new Set();
   for (const r of data.results || []) {
@@ -286,6 +292,7 @@ async function fetchGbifCommonNames(gbifId) {
       const normalized = stripArticle(name);
       if (!normalized) continue;
       const lower = normalized.toLowerCase();
+      if (nonEnglishNames.has(lower)) continue;
       if (!seen.has(lower)) {
         seen.add(lower);
         names.push(normalized);
@@ -318,15 +325,17 @@ const WIKI_PATTERNS = [
 function extractNamesFromCapture(captured) {
   const names = [];
   const seen = new Set();
-  for (const raw of captured.replace(/,?\s+(?:or|and)\s+/g, ', ').split(/\s*,\s*/)) {
+  const cleaned = captured.replace(/,?\s+(?:or|and)\s*,?\s*/, ',').replace(/\s*,\s*,/g, ',');
+  for (const raw of cleaned.split(/\s*,\s*/)) {
     const name = raw.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
     if (!name) continue;
     if (name.split(/\s+/).length > 5) continue;
     const normalized = stripArticle(name);
     if (!normalized) continue;
     if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(normalized)) continue;
-    if (!normalized) continue;
     const lower = normalized.toLowerCase();
+    if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at)$/i.test(lower)) continue;
+    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as)\b/i.test(lower)) continue;
     if (!seen.has(lower)) {
       seen.add(lower);
       names.push(normalized);
