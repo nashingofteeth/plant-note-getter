@@ -130,8 +130,9 @@ function addToLabelMap(labels) {
   const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
   let addedCount = 0;
   for (const lbl of labels) {
-    if (map[lbl] === undefined) {
-      map[lbl] = null;
+    const key = lbl.toLowerCase();
+    if (map[key] === undefined) {
+      map[key] = null;
       addedCount++;
     }
   }
