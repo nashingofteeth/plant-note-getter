@@ -11,6 +11,7 @@ const SKIP_RANKS = new Set([
 ]);
 
 function buildTagSegments(ancestors, ownId, labelMap) {
+  const injections = labelMap._inject || {};
   const segments = ['life', 'eukaryota', 'plantae'];
 
   for (const a of ancestors) {
@@ -31,6 +32,15 @@ function buildTagSegments(ancestors, ownId, labelMap) {
     }
 
     const seg = label.toLowerCase().replace(/\s+/g, '_');
+
+    if (injections[seg]) {
+      for (const inj of injections[seg]) {
+        if (segments[segments.length - 1] !== inj) {
+          segments.push(inj);
+        }
+      }
+    }
+
     if (segments[segments.length - 1] !== seg) {
       segments.push(seg);
     }
@@ -44,6 +54,7 @@ function buildTag(ancestors, ownId, labelMap) {
 }
 
 function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
+  const injections = labelMap._inject || {};
   const segments = ['life', 'eukaryota', 'plantae'];
   const originals = ['', '', ''];
 
@@ -66,6 +77,16 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
     }
 
     const seg = label.toLowerCase().replace(/\s+/g, '_');
+
+    if (injections[seg]) {
+      for (const inj of injections[seg]) {
+        if (segments[segments.length - 1] !== inj) {
+          segments.push(inj);
+          originals.push(inj);
+        }
+      }
+    }
+
     if (segments[segments.length - 1] !== seg) {
       segments.push(seg);
       originals.push(originalLabel);

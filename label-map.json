@@ -55,5 +55,10 @@
   "oak": "quercus",
   "acrogymnospermae": "gymnospermae",
   "conifer": "pinophyta",
-  "genistoids": null
+  "genistoids": null,
+  "aspleniales": "polypodiales",
+  "_inject": {
+    "pteridophyta": ["tracheophytes"],
+    "polypodiopsida": ["polypodiophyta"]
+  }
 }
