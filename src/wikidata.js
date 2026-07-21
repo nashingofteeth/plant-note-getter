@@ -300,7 +300,7 @@ async function fetchGbifCommonNames(gbifId) {
   return names;
 }
 
-const WIKIPEDIA_REST_API = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const WIKIPEDIA_MEDIAWIKI_API = 'https://en.wikipedia.org/w/api.php';
 
 const WIKI_PATTERNS = [
   // "known as" or "commonly known as" before main verb
@@ -311,6 +311,8 @@ const WIKI_PATTERNS = [
   (text) => text.match(/other common names (?:for (?:the|a|an|this)\s+\w+\s+)?(?:include|are)\s+(.+?)\./i),
   // "often/also called" pattern
   (text) => text.match(/(?:often|also)\s+called (.+?)(?:\.|,)/i),
+  // Parenthetical: "ScientificName (name1, name2, or name3) is/are/was/were..."
+  (text) => text.match(/^[^(]+\((.+?)\)\s+(?:is|are|was|were|has|have|refers)\b/i),
 ];
 
 function extractNamesFromCapture(captured) {
@@ -320,8 +322,9 @@ function extractNamesFromCapture(captured) {
     const name = raw.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
     if (!name) continue;
     if (name.split(/\s+/).length > 5) continue;
-    if (/\b(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)\b/i.test(name)) continue;
     const normalized = stripArticle(name);
+    if (!normalized) continue;
+    if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(normalized)) continue;
     if (!normalized) continue;
     const lower = normalized.toLowerCase();
     if (!seen.has(lower)) {
@@ -336,14 +339,17 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   if (!wikipediaTitle) return [];
 
   await rateLimit();
-  const url = `${WIKIPEDIA_REST_API}/${encodeURIComponent(wikipediaTitle)}`;
+  const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&exintro=&explaintext=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
   const data = await fetchJSON(url);
-  if (!data.extract) return [];
+  const pages = data?.query?.pages;
+  if (!pages) return [];
+  const extract = Object.values(pages)[0]?.extract;
+  if (!extract) return [];
 
   const names = [];
   const seen = new Set();
   for (const pattern of WIKI_PATTERNS) {
-    const m = pattern(data.extract);
+    const m = pattern(extract);
     if (!m) continue;
     for (const name of extractNamesFromCapture(m[1])) {
       const lower = name.toLowerCase();
