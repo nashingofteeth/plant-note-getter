@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node app.js",
-    "test": "node test/common-names.test.js && node test/hierarchy.test.js"
+    "test": "node test/common-names.test.js && node test/hierarchy.test.js && node test/frontmatter.test.js && node test/utils.test.js && node test/taxonomy.test.js && node test/wikidata.test.js"
   },
   "keywords": [
     "obsidian",
