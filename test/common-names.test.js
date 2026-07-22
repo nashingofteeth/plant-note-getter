@@ -68,6 +68,11 @@ const TESTS = [
     expected: ['ramps', 'ramson', 'wild leek', 'wood leek', 'wild garlic'],
   },
   {
+    name: 'Rubus idaeus (Pattern A — "also called" prefix in middle segment)',
+    extract: 'Rubus idaeus (raspberry, also called red raspberry or occasionally European red raspberry to distinguish it from other raspberry species) is a red-fruited species of Rubus native to Eurasia and commonly cultivated in other temperate regions.',
+    expected: ['raspberry', 'red raspberry'],
+  },
+  {
     name: 'Asimina triloba (appositive with article, among many regional names filler)',
     extract: 'Asimina triloba, the American papaw, pawpaw, paw paw, or paw-paw, among many regional names, is a species of small deciduous tree.',
     expected: ['American papaw', 'pawpaw', 'paw paw', 'paw-paw'],

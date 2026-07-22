@@ -362,7 +362,7 @@ function extractNamesFromCapture(captured) {
   let segment = captured;
 
   // Strip introductory prefixes like "commonly known as", "also known as", "also called"
-  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:known\s+(?:commonly\s+)?as|called)\s+/i, '');
+  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called)\s+/i, '');
 
   // Remove bracketed content: (pronunciation), [...], etc.
   segment = segment.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
@@ -389,6 +389,10 @@ function extractNamesFromCapture(captured) {
 
     // Strip leading "common name", "common names", "vernacular name" etc.
     name = name.replace(/^(?:common|vernacular|local)\s+names?\s*/i, '').trim();
+    if (!name) continue;
+
+    // Strip "also called", "also known as" from individual segments
+    name = name.replace(/^(?:also|commonly|often|sometimes)\s+(?:called|known\s+as)\s+/i, '').trim();
     if (!name) continue;
 
     // Skip if over 5 words (likely not a common name)
