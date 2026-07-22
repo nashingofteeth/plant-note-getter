@@ -321,17 +321,26 @@ const WIKI_PATTERNS = [
     return m || null;
   },
 
+  // J: "ScientificName or commonName is/are..." (no commas, e.g., "Abies balsamea or balsam fir is...")
+  (text) => text.match(/^[A-Z][a-z]+\s+[a-z]+\s+or\s+(.+?)\s+(?:is|are|was|were|has|have)\b/i),
+
   // B: Appositive with article: "ScientificName, the/a/an names list, is/are..."
   // Handle both "names, is" and "names is" (no comma before verb)
-  (text) => text.match(/^[^,]+,\s+(?:the|a|an)\s+(.+?),?\s+(?:is|are|was|were|has|have)\b/i),
+  // Use negative lookbehind to reject relative clause fragments ending in
+  // "which" or "that" (e.g., "the fruit of which is")
+  (text) => text.match(/^[^,]{1,100},\s+(?:the|a|an)\s+(.+?)(?<!\b(?:which|that))\s*,?\s+(?:is|are|was|were|has|have)\b/i),
 
   // C: Appositive without article: "ScientificName, commonName, is/are..."
   // NOT preceded by "the", "a", or "an"
-  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)([A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*),\s+(?:is|are|was|were|has|have)\b/),
+  // Lazy non-period capture to support comma-separated name lists
+  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)([^.]+?),\s+(?:is|are|was|were|has|have)\b/i),
 
   // D: "known as" / "commonly known as" / "also known as"
   // Lazy capture, non-period chars to prevent crossing sentence boundaries
   (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
+
+  // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
+  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i),
 
   // E: "also/often/sometimes/commonly called"
   (text) => text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+),\s+(?:is|are|was|were|has|have)\b/i),
@@ -383,7 +392,7 @@ function extractNamesFromCapture(captured) {
   // Clean up double commas and comma-whitespace
   segment = segment.replace(/\s*,\s*,/g, ',').replace(/,\s*,/g, ',').trim();
 
-  for (const raw of segment.split(/\s*,\s*/)) {
+  for (const raw of segment.split(/\s*[,;]\s*/)) {
     let name = raw.replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
     if (!name) continue;
 
@@ -394,6 +403,9 @@ function extractNamesFromCapture(captured) {
     // Strip "also called", "also known as" from individual segments
     name = name.replace(/^(?:also|commonly|often|sometimes)\s+(?:called|known\s+as)\s+/i, '').trim();
     if (!name) continue;
+
+    // Skip "botanical name", "scientific name" labels (these introduce the scientific name, not a common name)
+    if (/^(?:botanical|scientific)\s+name\s+/i.test(name)) continue;
 
     // Skip if over 5 words (likely not a common name)
     if (name.split(/\s+/).length > 5) continue;
@@ -406,6 +418,9 @@ function extractNamesFromCapture(captured) {
     normalized = normalized.replace(/\s+in\s+(?:greek|latin|french|spanish|italian|german|portuguese|dutch|turkish|russian|polish|czech|swedish|danish|norwegian|finnish|hungarian|romanian|ukrainian|bulgarian|croatian|serbian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|gaelic|basque|catalan|arabic|hebrew|persian|hindi|urdu|bengali|tamil|telugu|kannada|malayalam|chinese|japanese|korean|vietnamese|thai|burmese|khmer|indonesian|malay|tagalog|swahili|zulu|hausa|yoruba|amharic|georgian|armenian|azerbaijani|kazakh|nepali|sinhala|tibetan|mongolian|english|native)\s*$/i, '').trim();
 
     if (!normalized) continue;
+
+    // Skip label-value pairs (e.g. "simplified Chinese: 三角枫", "pinyin: sānjiǎofēng")
+    if (/^[\w\s]+:/.test(normalized)) continue;
 
     // Skip pure rank terms
     if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(normalized)) continue;

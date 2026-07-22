@@ -27,6 +27,8 @@ ls /path/to/NOTE_ROOT/ | grep -E '^[A-Z][a-z]+ [a-z]+\.md$' | sed 's/\.md$//' > 
 
 Filter out non-species files (movies, albums, organizations, etc).
 
+Randomly select 20 species that do **not** already have a test case in `test/common-names.test.js`. This ensures each round discovers new patterns rather than re-testing already-covered species. Use the `expected` field from the TESTS array to check coverage — any species name not appearing in any test's name is a fresh target.
+
 ### 2. Batch-fetch Wikipedia extracts
 
 Use the Wikipedia API in batches of 20 titles (larger batches truncate extracts):
@@ -35,7 +37,9 @@ Use the Wikipedia API in batches of 20 titles (larger batches truncate extracts)
 const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&titles=${titlesParam}&format=json&redirects=1`;
 ```
 
-Rate limit: 1200ms between requests, or batch 20 titles per request. Use a descriptive `User-Agent` header with contact info per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
+Rate limit: 1200ms between requests, or batch 20 titles per request (but individual requests are more reliable for extract fetching). Use a descriptive `User-Agent` header with contact info per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
+
+**Rate-limit errors**: The API returns `"You are making too many requests"` (non-JSON) when throttled. If your batch script gets non-JSON responses, implement exponential backoff (start 2s, double each retry, max 3 retries). Log which species got rate-limited so you can re-run them.
 
 ### 3. Run extraction and flag suspicious results
 
@@ -86,7 +90,11 @@ Common root causes:
 - Use `\b` word boundaries on connectors like `and`, `or`
 - Add filters in `extractNamesFromCapture` for new categories of junk
 
-**e. Add a test case**
+**e. Verify the fix on the original species**
+
+Before adding the test, re-run `extractWikipediaCommonNames` on the actual Wikipedia extract that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. This catches cases where the fix is too aggressive.
+
+**f. Add a test case**
 
 Add to `TESTS` array in `test/common-names.test.js`:
 
@@ -100,7 +108,7 @@ Add to `TESTS` array in `test/common-names.test.js`:
 
 Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a regression anchor.
 
-**f. Run full test suite**
+**g. Run full test suite**
 
 ```bash
 npm test
@@ -117,6 +125,7 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 | Prefix strip only on first segment | "also called" in middle segment | Apply strip per segment inside the comma-split loop |
 | `\n` in extract breaking regex | Multi-paragraph extracts | Use `.replace(/\n+/g, ' ')` before matching |
 | Redirect titles changing page content | `Pinus attenuata` → `Knobcone pine` | Always use `redirects=1` in API, handle in mapping |
+| Unbounded `^[^,]+` in patterns B and C | Consumes 129 chars past no-comma-after-sci-name, matches "Balkan Peninsula, ... Ukraine. It" | Limit initial segment length: `^[^,]{1,100}` |
 
 ### 6. What NOT to fix
 

@@ -73,6 +73,21 @@ const TESTS = [
     expected: ['raspberry', 'red raspberry'],
   },
   {
+    name: 'Quercus robur (Pattern C — comma-separated list without article)',
+    extract: 'Quercus robur, pedunculate oak, European oak, or English oak, is a species of flowering plant in the beech and oak family, Fagaceae.',
+    expected: ['pedunculate oak', 'European oak', 'English oak'],
+  },
+  {
+    name: 'Olea europaea (Pattern A — "botanical name" prefix stripped)',
+    extract: 'The olive (botanical name Olea europaea, "European olive") is a species of subtropical evergreen tree in the family Oleaceae.',
+    expected: ['European olive'],
+  },
+  {
+    name: 'Rubus parviflorus (Pattern B should not match relative clause — no "fruit of which")',
+    extract: 'Rubus parviflorus, the fruit of which is commonly called the thimbleberry or redcap, is a species of Rubus with large hairy leaves and no thorns.',
+    expected: ['thimbleberry', 'redcap'],
+  },
+  {
     name: 'Asimina triloba (appositive with article, among many regional names filler)',
     extract: 'Asimina triloba, the American papaw, pawpaw, paw paw, or paw-paw, among many regional names, is a species of small deciduous tree.',
     expected: ['American papaw', 'pawpaw', 'paw paw', 'paw-paw'],
@@ -86,6 +101,26 @@ const TESTS = [
     name: 'Jasminum officinale (Pattern D + I — also known as in second paragraph)',
     extract: 'Jasminum officinale, known as the common jasmine or simply jasmine, is a species of flowering plant in the olive family Oleaceae. It is native to the Caucasus and parts of Asia, also widely naturalized.\nIt is also known as summer jasmine, poet\'s jasmine, white jasmine, true jasmine or jessamine, and is particularly valued by gardeners throughout the temperate world for the intense fragrance of its flowers in summer. It is also the National flower of Pakistan.',
     expected: ['common jasmine', 'jasmine', 'summer jasmine', 'poet\'s jasmine', 'white jasmine', 'true jasmine', 'jessamine'],
+  },
+  {
+    name: 'Crataegus rhipidophylla (Pattern B should not consume past 100 chars — no geographic terms)',
+    extract: 'Crataegus rhipidophylla is a species of hawthorn which occurs naturally from southern Scandinavia and the Baltic region to France, the Balkan Peninsula, Turkey, Caucasia, and Ukraine. It is poorly known as a landscape and garden plant, but seems to have potential for those uses.',
+    expected: [],
+  },
+  {
+    name: 'Abies balsamea (Pattern J — "X or Y is" construction)',
+    extract: 'Abies balsamea or balsam fir is a North American fir, native to most of eastern and central Canada (Newfoundland west to central Alberta) and the northeastern United States (Minnesota east to Maine, and south in the Appalachian Mountains to West Virginia).',
+    expected: ['balsam fir'],
+  },
+  {
+    name: 'Abronia latifolia (Pattern K — "known commonly as X, or Y. It is")',
+    extract: 'The perennial flower Abronia latifolia or Abronia arenaria is a species of sand-verbena known commonly as the coastal sand-verbena, or yellow sand-verbena. It is native to the west coast of North America.',
+    expected: ['coastal sand-verbena', 'yellow sand-verbena'],
+  },
+  {
+    name: 'Acer buergerianum (Pattern A — parenthetical with semicolons and Chinese translations)',
+    extract: 'Acer buergerianum (trident maple; simplified Chinese: 三角枫; traditional Chinese: 三角楓; pinyin: sānjiǎofēng) is a species of maple native to eastern China (from Shandong west to southeastern Gansu, south to Guangdong, and southwest to Sichuan), Taiwan and Japan.',
+    expected: ['trident maple'],
   },
   {
     name: 'Iris foetidissima (Pattern D should not cross sentences — no "bruised")',
