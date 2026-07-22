@@ -9,6 +9,7 @@ A CLI tool that generates [Obsidian](https://obsidian.md/) markdown notes for pl
 - **Label normalization** — Uses `label-map.json` to skip generic clades or normalize Wikidata labels to consistent tags.
 - **`--populate` mode** — Scans an existing vault for plant-tagged notes and backfills missing front matter properties from Wikidata.
 - **`--check` mode** — Analyzes tag hierarchies in existing notes to detect sparse branches or unrecognized clades, with interactive suggestions for `label-map.json` updates.
+- **`--apply` flag** — Skips dry-run prompts and writes/updates notes directly.
 - **Automatic alias collection** — Gathers scientific synonyms, common names, and vernacular names from Wikidata.
 
 ## Requirements
@@ -23,10 +24,11 @@ cd plant-note-getter
 npm install
 ```
 
-Optionally link globally:
+Optionally link globally to use the `plant-note` binary:
 
 ```bash
 npm link
+plant-note "Eschscholzia californica" --apply
 ```
 
 ## Configuration
@@ -44,6 +46,7 @@ Controls how Wikidata taxon labels become tag segments:
 - `null` — Skip the clade (not included in the tag path)
 - A string — Replace the Wikidata label with a custom tag name
 - Missing — Use the Wikidata label as-is (lowercased, spaces → underscores)
+- `"_inject"` — An object mapping a label to an array of tag segments that are inserted before it (e.g. `"gymnospermae": ["tracheophytes", "spermatophytes"]`). Useful when Wikidata skips intermediate ranks in the ancestor chain.
 
 ## Usage
 
@@ -69,7 +72,7 @@ node app.js --check "Lysimachia borealis"
 | Command | Description |
 |---------|-------------|
 | `npm start` | Run `node app.js` |
-| `npm test` | Run `node app.js "Populus"` |
+| `npm test` | Run test suite (`common-names.test.js` + `hierarchy.test.js`) |
 
 ## Project structure
 
