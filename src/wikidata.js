@@ -564,6 +564,25 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
   return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
 }
 
+function extractWikipediaCommonNames(text) {
+  const names = [];
+  const seen = new Set();
+  for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {
+    const m = WIKI_PATTERNS[pi](text);
+    if (!m) continue;
+    const captured = m[1];
+    const extracted = extractNamesFromCapture(captured);
+    for (const name of extracted) {
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
 module.exports = {
   searchTaxon,
   getEntityData,
@@ -572,5 +591,7 @@ module.exports = {
   collectSynonymData,
   fetchGbifCommonNames,
   fetchWikipediaCommonNames,
+  extractNamesFromCapture,
+  extractWikipediaCommonNames,
   stripArticle
 };
