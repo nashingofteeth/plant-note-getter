@@ -326,8 +326,8 @@ const WIKI_PATTERNS = [
   (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)([A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*),\s+(?:is|are|was|were|has|have)\b/),
 
   // D: "known as" / "commonly known as" / "also known as"
-  // Greedy capture backtracks to comma before main verb
-  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+(.+),\s+(?:is|are|was|were|has|have|refers)\b/i),
+  // Lazy capture, non-period chars to prevent crossing sentence boundaries
+  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
 
   // E: "also/often/sometimes/commonly called"
   (text) => text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+),\s+(?:is|are|was|were|has|have)\b/i),
