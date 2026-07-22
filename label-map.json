@@ -59,6 +59,8 @@
   "aspleniales": "polypodiales",
   "_inject": {
     "pteridophyta": ["tracheophytes"],
-    "polypodiopsida": ["polypodiophyta"]
+    "polypodiopsida": ["polypodiophyta"],
+    "gymnospermae": ["tracheophytes", "spermatophytes"],
+    "cupressaceae": ["pinopsida", "cupressales"]
   }
 }

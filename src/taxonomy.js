@@ -35,7 +35,7 @@ function buildTagSegments(ancestors, ownId, labelMap) {
 
     if (injections[seg]) {
       for (const inj of injections[seg]) {
-        if (segments[segments.length - 1] !== inj) {
+        if (!segments.includes(inj)) {
           segments.push(inj);
         }
       }
@@ -80,7 +80,7 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
 
     if (injections[seg]) {
       for (const inj of injections[seg]) {
-        if (segments[segments.length - 1] !== inj) {
+        if (!segments.includes(inj)) {
           segments.push(inj);
           originals.push(inj);
         }
