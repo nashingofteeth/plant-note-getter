@@ -122,7 +122,7 @@ async function main() {
       const gbifNames = await fetchGbifCommonNames(gbifId);
       const seenLower = new Set((entity.commonNames || []).map(n => stripArticle(n).toLowerCase()));
       for (const name of gbifNames) {
-        const normalized = stripArticle(name);
+        const normalized = stripArticle(name).replace(/\.+$/, '').trim();
         const lower = normalized.toLowerCase();
         if (!seenLower.has(lower)) {
           seenLower.add(lower);
@@ -135,7 +135,7 @@ async function main() {
       const wikiNames = await fetchWikipediaCommonNames(entity.wikipediaTitle);
       const seenLower = new Set((entity.commonNames || []).map(n => stripArticle(n).toLowerCase()));
       for (const name of wikiNames) {
-        const normalized = stripArticle(name);
+        const normalized = stripArticle(name).replace(/\.+$/, '').trim();
         const lower = normalized.toLowerCase();
         if (!seenLower.has(lower)) {
           seenLower.add(lower);

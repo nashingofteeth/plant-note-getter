@@ -147,7 +147,7 @@ async function getEntityData(id) {
     for (const claim of claims.P1843) {
       const val = claim.mainsnak?.datavalue?.value;
       if (val?.language === 'en' || val?.language === 'en-ca' || val?.language === 'en-gb') {
-        commonNames.push(val.text);
+        commonNames.push(val.text.replace(/\.+$/, '').trim());
       }
     }
   }
@@ -310,32 +310,110 @@ async function fetchGbifCommonNames(gbifId) {
 const WIKIPEDIA_MEDIAWIKI_API = 'https://en.wikipedia.org/w/api.php';
 
 const WIKI_PATTERNS = [
-  // "known as" or "commonly known as" before main verb
-  (text) => text.match(/(?:commonly |also )?known (?:commonly )?as (.+?)(?:,\s+(?:is|are|was|were|has|have|refers|the\b|a\b|an\b|which|that)\b|\.(?:\s+[A-Z]|$)|$)/i),
-  // Appositive: ", the/a/an {names}," before main verb
-  (text) => text.match(/^[^,]+,\s+(?:the|a|an)\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i),
-  // "Other common names" sentence: "Other common names for the {thing} include/are {list}."
-  (text) => text.match(/other common names (?:for (?:the|a|an|this)\s+\w+\s+)?(?:include|are)\s+(.+?)\./i),
-  // "often/also called" pattern
-  (text) => text.match(/(?:often|also)\s+called (.+?)(?:\.|,)/i),
-  // Parenthetical: "ScientificName (name1, name2, or name3) is/are/was/were..."
-  (text) => text.match(/^[^(]+\((.+?)\)\s+(?:is|are|was|were|has|have|refers)\b/i),
+  // A: Parenthetical: "ScientificName (name1, name2, or name3) is/are/was/were..."
+  // Only match within first 100 chars to avoid mid-text parentheticals like "(nuts)"
+  (text) => {
+    const m = text.match(/^[^(]{1,100}\(([^)]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    return m || null;
+  },
+
+  // B: Appositive with article: "ScientificName, the/a/an names list, is/are..."
+  // Handle both "names, is" and "names is" (no comma before verb)
+  (text) => text.match(/^[^,]+,\s+(?:the|a|an)\s+(.+?),?\s+(?:is|are|was|were|has|have)\b/i),
+
+  // C: Appositive without article: "ScientificName, commonName, is/are..."
+  // NOT preceded by "the", "a", or "an"
+  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)([A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*),\s+(?:is|are|was|were|has|have)\b/),
+
+  // D: "known as" / "commonly known as" / "also known as"
+  // Greedy capture backtracks to comma before main verb
+  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+(.+),\s+(?:is|are|was|were|has|have|refers)\b/i),
+
+  // E: "also/often/sometimes/commonly called"
+  (text) => text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+),\s+(?:is|are|was|were|has|have)\b/i),
+
+  // F: "Common names include/are" / "Other common names include/are"
+  // Lazy match to stop at the first sentence-ending period
+  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+\S+\s+)?(?:include|are)\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+
+  // G: "English/vernacular names variously applied/include"
+  (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+
+  // H: "known by the common names X, Y, and Z"
+  (text) => text.match(/known by the common names\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 ];
 
 function extractNamesFromCapture(captured) {
   const names = [];
   const seen = new Set();
-  const cleaned = captured.replace(/,?\s+(?:or|and)\s*,?\s*/, ',').replace(/\s*,\s*,/g, ',');
-  for (const raw of cleaned.split(/\s*,\s*/)) {
-    const name = raw.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
+
+  let segment = captured;
+
+  // Strip introductory prefixes like "commonly known as", "also known as", "also called"
+  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:known\s+(?:commonly\s+)?as|called)\s+/i, '');
+
+  // Remove bracketed content: (pronunciation), [...], etc.
+  segment = segment.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
+  // Strip leading/trailing non-word chars
+  segment = segment.trim().replace(/^[\s,;:.\-–—]+|[\s,;:.\-–—]+$/g, '');
+
+  // Split on semicolons and take the part before any synonym mention
+  const semiParts = segment.split(';');
+  segment = semiParts[0];
+  for (let i = 1; i < semiParts.length; i++) {
+    if (/^\s*syn/i.test(semiParts[i])) break;
+    segment += ';' + semiParts[i];
+  }
+
+  // Replace "and", "or" (with or without adjacent commas) with commas
+  // Use word boundaries to avoid matching inside words like "oregano" or "andromeda"
+  segment = segment.replace(/,?\s+\b(?:and|or)\b\s*,?\s*/gi, ',');
+  // Clean up double commas and comma-whitespace
+  segment = segment.replace(/\s*,\s*,/g, ',').replace(/,\s*,/g, ',').trim();
+
+  for (const raw of segment.split(/\s*,\s*/)) {
+    let name = raw.replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
     if (!name) continue;
+
+    // Strip leading "common name", "common names", "vernacular name" etc.
+    name = name.replace(/^(?:common|vernacular|local)\s+names?\s*/i, '').trim();
+    if (!name) continue;
+
+    // Skip if over 5 words (likely not a common name)
     if (name.split(/\s+/).length > 5) continue;
-    const normalized = stripArticle(name);
+
+    // Strip leading "as" (from "known as" constructions)  
+    let normalized = name.replace(/^as\s+/i, '').trim();
+    normalized = stripArticle(normalized);
+
+    // Strip trailing language qualifiers like "in Greek", "in Latin"
+    normalized = normalized.replace(/\s+in\s+(?:greek|latin|french|spanish|italian|german|portuguese|dutch|turkish|russian|polish|czech|swedish|danish|norwegian|finnish|hungarian|romanian|ukrainian|bulgarian|croatian|serbian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|gaelic|basque|catalan|arabic|hebrew|persian|hindi|urdu|bengali|tamil|telugu|kannada|malayalam|chinese|japanese|korean|vietnamese|thai|burmese|khmer|indonesian|malay|tagalog|swahili|zulu|hausa|yoruba|amharic|georgian|armenian|azerbaijani|kazakh|nepali|sinhala|tibetan|mongolian|english|native)\s*$/i, '').trim();
+
     if (!normalized) continue;
+
+    // Skip pure rank terms
     if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(normalized)) continue;
+
     const lower = normalized.toLowerCase();
-    if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at)$/i.test(lower)) continue;
-    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as)\b/i.test(lower)) continue;
+
+    // Skip stopwords
+    if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
+
+    // Skip filler starts and descriptive phrases
+    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less)\b/i.test(lower)) continue;
+    if (/^(among\s+(?:many|other)|more\s+commonly)/i.test(lower)) continue;
+
+    // Skip if it looks like a scientific name (e.g. "R. eglanteria")
+    if (/^[A-Z]\.\s+[a-z]+/.test(normalized)) continue;
+    if (/^[A-Z][a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+/.test(normalized) && !normalized.includes('-')) continue;
+    if (normalized.split(/\s+/).length >= 3 && /^[A-Z][a-z]*\./.test(normalized)) continue;
+
+    // Skip names with numeric digits or standalone abbreviations
+    if (/\d/.test(lower)) continue;
+
+    // Skip generic food/plant terms that aren't meaningful common names
+    if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?)$/i.test(normalized)) continue;
+
     if (!seen.has(lower)) {
       seen.add(lower);
       names.push(normalized);
@@ -357,10 +435,12 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
 
   const names = [];
   const seen = new Set();
-  for (const pattern of WIKI_PATTERNS) {
-    const m = pattern(extract);
+  for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {
+    const m = WIKI_PATTERNS[pi](extract);
     if (!m) continue;
-    for (const name of extractNamesFromCapture(m[1])) {
+    const captured = m[1];
+    const extracted = extractNamesFromCapture(captured);
+    for (const name of extracted) {
       const lower = name.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
