@@ -8,7 +8,7 @@ function stripArticle(name) {
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
 const SPARQL_ENDPOINT = 'https://query.wikidata.org/sparql';
 const GBIF_API = 'https://api.gbif.org/v1/species';
-const USER_AGENT = 'plant-note-getter/1.0.0 (https://github.com/nash/plant-note-getter)';
+const USER_AGENT = 'plant-note-getter/1.0.0 (https://github.com/nashingofteeth/plant-note-getter)';
 
 let lastRequestTime = 0;
 const MIN_INTERVAL = 600;
