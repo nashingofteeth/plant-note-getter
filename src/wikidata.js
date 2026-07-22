@@ -347,7 +347,12 @@ const WIKI_PATTERNS = [
   (text) => text.match(/known by the common names\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
-  (text) => text.match(/(?:also|commonly)\s+(?:known\s+as|called)\s+(.+?),\s+and\s+(?:is|are|was|were|has|have)\b/i),
+  // Constrain to current sentence — don't cross period boundaries
+  (text) => {
+    const clean = text.replace(/\n+/g, ' ');
+    const m = clean.match(/(?:also|commonly)\s+(?:known\s+as|called)\s+([^.;]+?),\s+and\s+(?:is|are|was|were|has|have)\b/i);
+    return m || null;
+  },
 ];
 
 function extractNamesFromCapture(captured) {

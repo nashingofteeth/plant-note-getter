@@ -63,6 +63,11 @@ const TESTS = [
     expected: ['ramps', 'ramson', 'wild leek', 'wood leek', 'wild garlic'],
   },
   {
+    name: 'Allium tricoccum full (Pattern A + I trap — no indigenous cuisines)',
+    extract: 'Allium tricoccum (commonly known as ramps, ramson, wild leek, wood leek, or wild garlic) is a bulbous perennial flowering plant in the amaryllis family Amaryllidaceae. It is a North American species of wild onion or garlic found in eastern North America. Many of the common English names for this plant are also used for other Allium species, particularly the similar Allium ursinum, which is native to Eurasia.  An edible plant, Allium tricoccum is used in a variety of North American and indigenous cuisines, and has also been used by Native Americans in traditional medicine. A French rendering (chicagou) of a Miami–Illinois name for this plant is the namesake of the American city of Chicago.',
+    expected: ['ramps', 'ramson', 'wild leek', 'wood leek', 'wild garlic'],
+  },
+  {
     name: 'Asimina triloba (appositive with article, among many regional names filler)',
     extract: 'Asimina triloba, the American papaw, pawpaw, paw paw, or paw-paw, among many regional names, is a species of small deciduous tree.',
     expected: ['American papaw', 'pawpaw', 'paw paw', 'paw-paw'],
