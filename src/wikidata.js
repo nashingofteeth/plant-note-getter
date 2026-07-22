@@ -147,7 +147,11 @@ async function getEntityData(id) {
     for (const claim of claims.P1843) {
       const val = claim.mainsnak?.datavalue?.value;
       if (val?.language === 'en' || val?.language === 'en-ca' || val?.language === 'en-gb') {
-        commonNames.push(val.text.replace(/\.+$/, '').trim());
+        const parts = val.text.replace(/\.+$/, '').split(/\s*,\s*/);
+        for (const part of parts) {
+          const trimmed = part.trim().replace(/\.+$/, '');
+          if (trimmed) commonNames.push(trimmed);
+        }
       }
     }
   }
