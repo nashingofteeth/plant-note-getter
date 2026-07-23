@@ -123,6 +123,11 @@ const TESTS = [
     expected: ['trident maple'],
   },
   {
+    name: 'Farfugium japonicum (Pattern A — parenthetical "syn." filtered out)',
+    extract: 'Farfugium japonicum (syn. Ligularia tussilaginea) is a species of flowering plant in the family Asteraceae, also known as leopard plant, green leopard plant or tractor seat plant. It is native to streams and seashores of Japan, where it is called tsuwabuki (石蕗).\n\n',
+    expected: ['leopard plant', 'green leopard plant', 'tractor seat plant', 'tsuwabuki'],
+  },
+  {
     name: 'Iris foetidissima (Pattern D should not cross sentences — no "bruised")',
     extract: 'Iris foetidissima, the stinking iris, gladdon, Gladwin iris, roast-beef plant, or stinking gladwin, is a species of flowering plant in the family Iridaceae, found in open woodland, hedgebanks and on sea-cliffs.\nIts natural range is Western Europe, including England (south of Durham) and also Ireland, and from France south and east to N. Africa, Italy and Greece. \n\nIt is one of two iris species native to Britain, the other being the yellow iris (Iris pseudacorus).\nIt has tufts of dark green leaves. Its flowers are usually of a dull, leaden-blue colour, or dull buff-yellow tinged with blue. The petals have delicate veining. It blooms between June and July, but the flowers only last a day or so.\nThe green seed capsules, which remain attached to the plant throughout the winter, are 5\u20138 cm (2\u20133 in) long; and the seeds are scarlet.\nIt is known as "stinking" because some people find the smell of its leaves unpleasant when crushed or bruised, an odour that has been described as "beefy". Its common names of \'gladdon\' and \'gladwyn\' or \'gladwin\', are in reference to an old word for a sword (Latin gladius) due to the shape of the iris\'s leaves.\nThis plant is cultivated in gardens in the temperate zones. Both the species and its cultivar \'Variegata\' have gained the Royal Horticultural Society\'s Award of Garden Merit.',
     expected: ['stinking iris', 'gladdon', 'Gladwin iris', 'roast-beef plant', 'stinking gladwin'],

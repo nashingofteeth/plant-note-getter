@@ -342,6 +342,9 @@ const WIKI_PATTERNS = [
   // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
   (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i),
 
+  // L: "where it is called X" at end of sentence (e.g., "where it is called tsuwabuki (石蕗).")
+  (text) => text.match(/where\s+it\s+is\s+called\s+(.+?)\.(?:\s+[A-Z]|\s*$)/i),
+
   // E: "also/often/sometimes/commonly called"
   (text) => text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+),\s+(?:is|are|was|were|has|have)\b/i),
 
@@ -403,6 +406,9 @@ function extractNamesFromCapture(captured) {
     // Strip "also called", "also known as" from individual segments
     name = name.replace(/^(?:also|commonly|often|sometimes)\s+(?:called|known\s+as)\s+/i, '').trim();
     if (!name) continue;
+
+    // Skip "syn. " prefixed names (taxonomic synonym notation, not common names)
+    if (/^syn\.\s+/i.test(name)) continue;
 
     // Skip "botanical name", "scientific name" labels (these introduce the scientific name, not a common name)
     if (/^(?:botanical|scientific)\s+name\s+/i.test(name)) continue;
