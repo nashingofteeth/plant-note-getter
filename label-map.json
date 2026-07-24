@@ -58,9 +58,20 @@
   "genistoids": null,
   "aspleniales": "polypodiales",
   "_inject": {
-    "pteridophyta": ["tracheophytes"],
-    "polypodiopsida": ["polypodiophyta"],
-    "gymnospermae": ["tracheophytes", "spermatophytes"],
-    "cupressaceae": ["pinopsida", "cupressales"]
-  }
+    "pteridophyta": [
+      "tracheophytes"
+    ],
+    "polypodiopsida": [
+      "polypodiophyta"
+    ],
+    "gymnospermae": [
+      "tracheophytes",
+      "spermatophytes"
+    ],
+    "cupressaceae": [
+      "pinopsida",
+      "cupressales"
+    ]
+  },
+  "non-protein amino acid-accumulating clade": null
 }
