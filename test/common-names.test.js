@@ -197,6 +197,11 @@ const TESTS = [
     extract: 'Arisaema triphyllum, the Jack-in-the-pulpit, is a species of flowering plant in the arum family Araceae. It is a member of the Arisaema triphyllum complex, a group of four or five closely related taxa in eastern North America. The specific name triphyllum means "three-leaved", a characteristic feature of the species, which is also referred to as Indian turnip, bog onion, and brown dragon.',
     expected: ['Jack-in-the-pulpit', 'Indian turnip', 'bog onion', 'brown dragon'],
   },
+  {
+    name: 'Wisteria frutescens (Pattern D negative lookbehind — no "previously known as")',
+    extract: 'Wisteria frutescens (common names American wisteria, swamp wisteria, Mississippi wisteria, and Atlantic wisteria) is a woody, deciduous, perennial climbing vine.\nRhizobium radiobacter, previously known as Agrobacterium tumefaciens and commonly as crown gall, is a soil-borne bacterium that occasionally infects wisteria.',
+    expected: ['American wisteria', 'swamp wisteria', 'Mississippi wisteria', 'Atlantic wisteria'],
+  },
 ];
 
 let passed = 0;

@@ -374,7 +374,8 @@ const WIKI_PATTERNS = [
 
   // D: "known as" / "commonly known as" / "also known as"
   // Lazy capture, non-period chars to prevent crossing sentence boundaries
-  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
+  // Negative lookbehind blocks "previously/formerly/originally known as" (taxonomic history, not common names)
+  (text) => text.match(/(?<!(?:previously|formerly|originally)\s+)(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
 
   // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
   (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i),
