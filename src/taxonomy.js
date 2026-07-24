@@ -121,8 +121,14 @@ function buildAliases(entity) {
   if (entity.aliases && entity.aliases.length > 0) {
     const lowerAliases = aliases.map(a => a.toLowerCase());
     for (const alias of entity.aliases) {
-      if (!lowerAliases.includes(alias.toLowerCase()) && alias.toLowerCase() !== entity.scientificName.toLowerCase()) {
-        aliases.push(alias);
+      const parts = alias.split(/\s*,\s*/);
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        if (!lowerAliases.includes(trimmed.toLowerCase()) && trimmed.toLowerCase() !== entity.scientificName.toLowerCase()) {
+          lowerAliases.push(trimmed.toLowerCase());
+          aliases.push(trimmed);
+        }
       }
     }
   }

@@ -53,6 +53,55 @@ test('buildAliases: returns null when nothing to alias', () => {
   assert.strictEqual(buildAliases({ scientificName: 'X' }), null);
 });
 
+test('buildAliases: splits comma-separated alias entries into individual names', () => {
+  const entity = {
+    commonNames: [],
+    aliases: ['African fountain grass, Tender fountain grass, Fountain grass, Purple fountain grass'],
+    scientificName: 'Cenchrus setaceus'
+  };
+  assert.deepStrictEqual(buildAliases(entity), [
+    'African fountain grass',
+    'Tender fountain grass',
+    'Fountain grass',
+    'Purple fountain grass'
+  ]);
+});
+
+test('buildAliases: comma-separated alias deduped against common names', () => {
+  const entity = {
+    commonNames: ['Fountain grass', 'Purple Fountain Grass'],
+    aliases: ['African fountain grass, Tender fountain grass, Fountain grass, Purple fountain grass'],
+    scientificName: 'Cenchrus setaceus'
+  };
+  const result = buildAliases(entity);
+  assert.ok(result.includes('African fountain grass'));
+  assert.ok(result.includes('Tender fountain grass'));
+  // Common names should still be present
+  assert.ok(result.includes('Fountain grass'), 'common name should be present');
+  assert.ok(result.includes('Purple Fountain Grass'), 'common name should be present');
+  // Alias-split duplicates should be deduped — count occurrences
+  assert.strictEqual(result.filter(n => n.toLowerCase() === 'fountain grass').length, 1);
+  assert.strictEqual(result.filter(n => n.toLowerCase() === 'purple fountain grass').length, 1);
+});
+
+test('buildAliases: comma-separated alias part matching scientific name is excluded', () => {
+  const entity = {
+    commonNames: [],
+    aliases: ['Fountain grass, Cenchrus setaceus, Purple fountain grass'],
+    scientificName: 'Cenchrus setaceus'
+  };
+  assert.deepStrictEqual(buildAliases(entity), ['Fountain grass', 'Purple fountain grass']);
+});
+
+test('buildAliases: comma-separated alias with empty parts skips empties', () => {
+  const entity = {
+    commonNames: [],
+    aliases: ['apple, , banana, '],
+    scientificName: 'X'
+  };
+  assert.deepStrictEqual(buildAliases(entity), ['apple', 'banana']);
+});
+
 // ─── buildWikipediaUrl ──────────────────────────────────────────────────────
 
 test('buildWikipediaUrl: returns url or null', () => {
