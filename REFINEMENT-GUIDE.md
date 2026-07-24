@@ -1,8 +1,8 @@
-# Common Name Extraction: Regex Refinement Guide
+# Common Name Extraction: Per-Note Processing & Refinement Guide
 
 ## Goal
 
-Use existing plant notes as ground truth to find and fix gaps in the Wikipedia common name extraction pipeline. Each round fixes one issue, adds a test, and verifies no regressions.
+The user provides a taxon name (or a list of taxon names). Process that single note through the Wikipedia common name extraction pipeline, verify the output against the note's on-disk frontmatter, and fix any gaps or false positives. Each fix adds a regression test.
 
 ## Data Flow
 
@@ -13,38 +13,56 @@ app.js → wikidata.js (fetchWikipediaCommonNames → WIKI_PATTERNS → extractN
 
 The extraction pipeline:
 1. Fetch Wikipedia extract via `action=query&prop=extracts&exintro&explaintext`
-2. Try each pattern in `WIKI_PATTERNS` (A through I) against the extract
+2. Try each pattern in `WIKI_PATTERNS` against the extract
 3. Pass captured text to `extractNamesFromCapture()` for cleanup
 4. Return deduplicated list of common names
 
 ## Process
 
-### 1. Build a list of species from existing notes
+### 1. Resolve the taxon name
 
-```bash
-ls /path/to/NOTE_ROOT/ | grep -E '^[A-Z][a-z]+ [a-z]+\.md$' | sed 's/\.md$//' > /tmp/plant_list.txt
-```
+The user provides a scientific name like `Quercus rubra`. Determine the Wikipedia page title:
+- Via Wikidata: `searchTaxon(name)` → Q-item → `entity.wikipediaUrl` → extract title from URL
+- Or directly by treating the scientific name as a Wikipedia title (works for most species)
 
-Filter out non-species files (movies, albums, organizations, etc).
-
-Randomly select 20 species that do **not** already have a test case in `test/common-names.test.js`. This ensures each round discovers new patterns rather than re-testing already-covered species. Use the `expected` field from the TESTS array to check coverage — any species name not appearing in any test's name is a fresh target.
-
-### 2. Batch-fetch Wikipedia extracts
-
-Use the Wikipedia API in batches of 20 titles (larger batches truncate extracts):
+### 2a. Fetch the Wikipedia extract
 
 ```js
-const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&titles=${titlesParam}&format=json&redirects=1`;
+const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&titles=${title}&format=json&redirects=1`;
 ```
 
-Rate limit: 1200ms between requests, or batch 20 titles per request (but individual requests are more reliable for extract fetching). Use a descriptive `User-Agent` header with contact info per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
+Use a descriptive `User-Agent` header per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
 
-**Rate-limit errors**: The API returns `"You are making too many requests"` (non-JSON) when throttled. If your batch script gets non-JSON responses, implement exponential backoff (start 2s, double each retry, max 3 retries). Log which species got rate-limited so you can re-run them.
+**Rate-limit errors**: If the API returns `"You are making too many requests"` (non-JSON), implement exponential backoff (start 2s, double each retry, max 3 retries).
 
-### 3. Run extraction and flag suspicious results
+### 2b. Read the existing note from NOTE_ROOT
 
-For each note, run `extractWikipediaCommonNames(extract)` and flag results containing:
+The note file lives at `<NOTE_ROOT>/<sanitized-name>.md` where `sanitizeFilename()` replaces `/\/*?"<>|/` with `''` and appends `.md`.
 
+Parse the frontmatter (using `parseFrontMatter` from `src/frontmatter.js` or the regex `/^---\n([\s\S]*?)\n---/`). Collect:
+
+- **`aliases`** — the common names already stored for this note
+- **`tags`** — the hierarchy tag (useful to confirm the note is a plant)
+- **`wikipedia`** — the Wikipedia page title used when the note was created
+
+These are the ground truth for what the pipeline **did** extract. Any name in `aliases` that the current pipeline misses is a candidate bug. Any junk the pipeline now produces that isn't in `aliases` is a candidate false positive.
+
+### 3. Run extraction and compare
+
+```js
+const { extractWikipediaCommonNames } = require('./src/wikidata');
+const extracted = extractWikipediaCommonNames(extract);
+```
+
+Cross-reference against the note's `aliases`:
+
+| Situation | Meaning |
+|-----------|---------|
+| Name in `aliases` but not in `extracted` | Pipeline missed it — likely a pattern gap |
+| Name in `extracted` but not in `aliases` | May be newly discovered, or a false positive |
+| Extracted names contain junk (geographic terms, prefixes, scientific names leaking) | Filter gap |
+
+Flag suspicious extracted results containing:
 - Geographic terms used as names: `found in`, `native to`, `subcontinent`, `asia`, `europe`, `boreal`, `temperate`, `tropical`, `regions`, `northern`, `southern`
 - Unstripped prefixes: `also called`, `also known as`, `sometimes called`
 - Procedural text: `consists`, `grows`, `ranging`, `occurs`, `includes`, `especially`, `within`
@@ -70,14 +88,14 @@ const WIKI_PATTERNS = [ /* paste from src/wikidata.js */ ];
 const text = '...';
 for (let i = 0; i < WIKI_PATTERNS.length; i++) {
   const m = WIKI_PATTERNS[i](text);
-  if (m) console.log(`Pattern ${String.fromCharCode(65+i)}: ${m[1].slice(0, 80)}`);
+  if (m) console.log(`Pattern [${i}]: ${m[1].slice(0, 80)}`);
 }
 ```
 
 **c. Identify the root cause**
 
 Common root causes:
-- Pattern matches across sentence boundaries (e.g., Pattern I before the `[^.;]` fix)
+- Pattern matches across sentence boundaries (e.g., a pattern matching after a period that should have been constrained)
 - Prefix strip doesn't apply to middle segments (e.g., "also called" after a comma)
 - `\b` word boundary missing, matching inside words (e.g., "or" matching in "oregano")
 - Lazy `.+?` matching too far before hitting the terminator
@@ -92,7 +110,7 @@ Common root causes:
 
 **e. Verify the fix on the original species**
 
-Before adding the test, re-run `extractWikipediaCommonNames` on the actual Wikipedia extract that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. This catches cases where the fix is too aggressive.
+Before adding the test, re-run `extractWikipediaCommonNames` on the actual Wikipedia extract that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
 
 **f. Add a test case**
 
@@ -121,11 +139,11 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 | Pitfall | Example | Fix |
 |---------|---------|-----|
 | Missing `\b` on connectors | `or` matching in `oregano` | Use `\b(?:and\|or)\b` |
-| Lazy match crossing sentences | Pattern I matching entire extract | Use `[^.;]+?` to stop at period/semicolon |
+| Lazy match crossing sentences | A pattern matching across the entire extract instead of the first sentence | Use `[^.;]+?` to stop at period/semicolon |
 | Prefix strip only on first segment | "also called" in middle segment | Apply strip per segment inside the comma-split loop |
 | `\n` in extract breaking regex | Multi-paragraph extracts | Use `.replace(/\n+/g, ' ')` before matching |
 | Redirect titles changing page content | `Pinus attenuata` → `Knobcone pine` | Always use `redirects=1` in API, handle in mapping |
-| Unbounded `^[^,]+` in patterns B and C | Consumes 129 chars past no-comma-after-sci-name, matches "Balkan Peninsula, ... Ukraine. It" | Limit initial segment length: `^[^,]{1,100}` |
+| Unbounded `^[^,]+` in appositive patterns | Consumes 129 chars past no-comma-after-sci-name, matches "Balkan Peninsula, ... Ukraine. It" | Limit initial segment length: `^[^,]{1,100}` |
 
 ### 6. What NOT to fix
 
@@ -137,23 +155,24 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 
 | File | Role |
 |------|------|
-| `src/wikidata.js:316-351` | `WIKI_PATTERNS` array (regex patterns A-I) |
-| `src/wikidata.js:358-430` | `extractNamesFromCapture()` (cleanup, filtering) |
-| `src/wikidata.js:437-469` | `fetchWikipediaCommonNames()` (orchestrator) |
+| `src/wikidata.js` | `WIKI_PATTERNS` array — search for `const WIKI_PATTERNS` |
+| `src/wikidata.js` | `extractNamesFromCapture()` — cleanup and filtering |
+| `src/wikidata.js` | `fetchWikipediaCommonNames()` — orchestrator |
 | `test/common-names.test.js` | Test cases (hardcoded extracts, no API calls) |
+| `src/frontmatter.js` | `parseFrontMatter()` — read existing note's YAML |
+| `src/utils.js` | `sanitizeFilename()` — compute note path from name |
+| `src/config.js` | `NOTE_ROOT` — directory containing plant notes |
 
-### 8. Batch check script
+### 8. Verification checklist
 
-Use `/tmp/batch.js` pattern (or equivalent) to scan notes:
+After fixing, verify:
 
-```js
-// Batch 20 titles per request
-// Run extractWikipediaCommonNames on each
-// Flag suspicious results
-// Report summary
-```
+1. `npm test` passes (all regression tests)
+2. The original species' Wikipedia extract returns the correct expected names
+3. The extracted names match (or improve upon) the note's existing `aliases`
+4. No junk terms leak through (verify with the flag list from step 3)
 
-Process notes in random order to avoid bias toward recently-added species.
+For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
 
 ## Example fix commit
 
@@ -166,5 +185,5 @@ raspberry"), it wasn't stripped and leaked through as a common name.
 
 Added per-segment prefix stripping inside the comma-split loop.
 
-Test: Rubus idaeus (Pattern A — "also called" prefix in middle segment)
+Test: Rubus idaeus ("also called" prefix in middle segment)
 ```
