@@ -523,6 +523,9 @@ function extractNamesFromCapture(captured) {
 
     if (!normalized) continue;
 
+    // Skip geographic qualifiers like "in New Zealand", "in Europe", "in southwestern China"
+    if (/^in\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$/i.test(normalized)) continue;
+
     // Skip label-value pairs (e.g. "simplified Chinese: 三角枫", "pinyin: sānjiǎofēng")
     if (/^[\w\s]+:/.test(normalized)) continue;
 

@@ -207,6 +207,11 @@ const TESTS = [
     extract: 'Marimo (also known as Cladophora ball, moss ball, moss ball pet, or lake ball) is a rare growth form of Aegagropila brownii (a species of filamentous green algae) in which the algae grow into large green spheres with a velvety appearance.\nThe species can be found in a number of lakes and rivers in Japan and Northern Europe. Colonies of marimo balls are known to form in Japan and Iceland, but their population has been declining.',
     expected: ['Marimo', 'Cladophora ball', 'moss ball', 'moss ball pet', 'lake ball'],
   },
+  {
+    name: 'Lilium regale (geographic qualifier "in New Zealand" filtered)',
+    extract: "Lilium regale, called the regal lily, royal lily, king's lily,or, in New Zealand, the Christmas lily, is a species of flowering plant in the lily family Liliaceae, with trumpet-shaped flowers.",
+    expected: ['regal lily', 'royal lily', "king's lily", 'Christmas lily'],
+  },
 ];
 
 let passed = 0;
