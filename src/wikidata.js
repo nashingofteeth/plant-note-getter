@@ -343,10 +343,19 @@ const WIKI_PATTERNS = [
       if (/^syn\.\s+/i.test(firstSegment)) return null;
       // Try extracting names from inside the parenthetical first
       const fromInside = extractNamesFromCapture(m2[1]);
-      if (fromInside.length > 0) return m2;
-      // If nothing extracted from inside, extract the name BEFORE the parenthetical
+      // Also try to extract the name BEFORE the parenthetical
       const beforeParen = m2[0].replace(/\([^)]+\)\s*(?:is|are|was|were|has|have|refers)\b.*$/, '').trim();
       const nameMatch = beforeParen.match(/([A-Z][a-z]+(?:\s+[a-z]+)*)$/);
+      if (fromInside.length > 0 && nameMatch) {
+        // Include single-word before-paren name (e.g., "Marimo") alongside inside-paren names.
+        // Skip multi-word names to avoid leaking scientific names like "Quercus robur".
+        if (!nameMatch[1].includes(' ')) {
+          return [m2[0], nameMatch[1] + ', ' + m2[1]];
+        }
+        return m2;
+      }
+      if (fromInside.length > 0) return m2;
+      // If nothing extracted from inside, extract the name BEFORE the parenthetical
       if (nameMatch) return [m2[0], nameMatch[1]];
     }
     return m2 || null;

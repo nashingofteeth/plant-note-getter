@@ -202,6 +202,11 @@ const TESTS = [
     extract: 'Wisteria frutescens (common names American wisteria, swamp wisteria, Mississippi wisteria, and Atlantic wisteria) is a woody, deciduous, perennial climbing vine.\nRhizobium radiobacter, previously known as Agrobacterium tumefaciens and commonly as crown gall, is a soil-borne bacterium that occasionally infects wisteria.',
     expected: ['American wisteria', 'swamp wisteria', 'Mississippi wisteria', 'Atlantic wisteria'],
   },
+  {
+    name: 'Aegagropila brownii (Pattern A — single-word name before parenthetical)',
+    extract: 'Marimo (also known as Cladophora ball, moss ball, moss ball pet, or lake ball) is a rare growth form of Aegagropila brownii (a species of filamentous green algae) in which the algae grow into large green spheres with a velvety appearance.\nThe species can be found in a number of lakes and rivers in Japan and Northern Europe. Colonies of marimo balls are known to form in Japan and Iceland, but their population has been declining.',
+    expected: ['Marimo', 'Cladophora ball', 'moss ball', 'moss ball pet', 'lake ball'],
+  },
 ];
 
 let passed = 0;
