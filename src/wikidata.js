@@ -316,8 +316,18 @@ const WIKIPEDIA_MEDIAWIKI_API = 'https://en.wikipedia.org/w/api.php';
 const WIKI_PATTERNS = [
   // A: Parenthetical: "ScientificName (name1, name2, or name3) is/are/was/were..."
   // Only match within first 100 chars to avoid mid-text parentheticals like "(nuts)"
+  // Capture the common name BEFORE the parenthetical, not inside it
   (text) => {
-    const m = text.match(/^[^(]{1,100}\(([^)]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    const m = text.match(/^([A-Z][a-z]+ [a-z]+),?\s+\((?:[A-Z][a-z]+ [a-z]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    if (m) return [m[0], m[1]];
+    // Fallback: match names inside parenthetical
+    const m2 = text.match(/^[^(]{1,100}\(([^)]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    return m2 || null;
+  },
+
+  // A2: "The common name (ScientificName), also called..." — capture name before parenthetical
+  (text) => {
+    const m = text.match(/^The\s+(.+?)\s+\([A-Z][a-z]+ [a-z]+\)/i);
     return m || null;
   },
 
@@ -346,7 +356,15 @@ const WIKI_PATTERNS = [
   (text) => text.match(/where\s+it\s+is\s+called\s+(.+?)\.(?:\s+[A-Z]|\s*$)/i),
 
   // E: "also/often/sometimes/commonly called"
-  (text) => text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+),\s+(?:is|are|was|were|has|have)\b/i),
+  // Match "called X, is/are..." or "called X. It is..." (period before next sentence)
+  (text) => {
+    // Try comma-verb first (primary case)
+    const m1 = text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i);
+    if (m1) return m1;
+    // Fallback: period followed by "It/They" (e.g., "commonly called X. It includes...")
+    const m2 = text.match(/(?:also|often|sometimes|commonly)\s+called\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were|has|have|includes)\b/i);
+    return m2 || null;
+  },
 
   // F: "Common names include/are" / "Other common names include/are"
   // Lazy match to stop at the first sentence-ending period
@@ -355,8 +373,8 @@ const WIKI_PATTERNS = [
   // G: "English/vernacular names variously applied/include"
   (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
-  // H: "known by the common names X, Y, and Z"
-  (text) => text.match(/known by the common names\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+  // H: "known by the common name(s) X, Y, and Z" (singular or plural)
+  (text) => text.match(/known by the common names?\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
   // Constrain to current sentence — don't cross period boundaries
@@ -365,6 +383,9 @@ const WIKI_PATTERNS = [
     const m = clean.match(/(?:also|commonly)\s+(?:known\s+as|called)\s+([^.;]+?),\s+and\s+(?:is|are|was|were|has|have)\b/i);
     return m || null;
   },
+
+  // M: "The name X is (often|sometimes|generally|widely) applied to..." — e.g., "The name Peruvian lily is often applied to..."
+  (text) => text.match(/\bThe\s+name\s+(.+?)\s+(?:is|are|was|were)\s+(?:(?:often|sometimes|generally|widely|also)\s+)?applied\s+to\b/i),
 ];
 
 function extractNamesFromCapture(captured) {
@@ -373,8 +394,8 @@ function extractNamesFromCapture(captured) {
 
   let segment = captured;
 
-  // Strip introductory prefixes like "commonly known as", "also known as", "also called"
-  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called)\s+/i, '');
+  // Strip introductory prefixes like "commonly known as", "also known as", "also called", "commonly named"
+  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called|named)\s+/i, '');
 
   // Remove bracketed content: (pronunciation), [...], etc.
   segment = segment.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
@@ -409,6 +430,9 @@ function extractNamesFromCapture(captured) {
 
     // Skip "syn. " prefixed names (taxonomic synonym notation, not common names)
     if (/^syn\.\s+/i.test(name)) continue;
+
+    // Skip "synonym " prefixed names (taxonomic synonym notation)
+    if (/^synonym\s+/i.test(name)) continue;
 
     // Skip "botanical name", "scientific name" labels (these introduce the scientific name, not a common name)
     if (/^(?:botanical|scientific)\s+name\s+/i.test(name)) continue;
@@ -463,7 +487,7 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   if (!wikipediaTitle) return [];
 
   await rateLimit();
-  const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&exintro=&explaintext=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
+  const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&explaintext=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
   const data = await fetchJSON(url);
   const pages = data?.query?.pages;
   if (!pages) return [];

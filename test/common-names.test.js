@@ -132,6 +132,41 @@ const TESTS = [
     extract: 'Iris foetidissima, the stinking iris, gladdon, Gladwin iris, roast-beef plant, or stinking gladwin, is a species of flowering plant in the family Iridaceae, found in open woodland, hedgebanks and on sea-cliffs.\nIts natural range is Western Europe, including England (south of Durham) and also Ireland, and from France south and east to N. Africa, Italy and Greece. \n\nIt is one of two iris species native to Britain, the other being the yellow iris (Iris pseudacorus).\nIt has tufts of dark green leaves. Its flowers are usually of a dull, leaden-blue colour, or dull buff-yellow tinged with blue. The petals have delicate veining. It blooms between June and July, but the flowers only last a day or so.\nThe green seed capsules, which remain attached to the plant throughout the winter, are 5\u20138 cm (2\u20133 in) long; and the seeds are scarlet.\nIt is known as "stinking" because some people find the smell of its leaves unpleasant when crushed or bruised, an odour that has been described as "beefy". Its common names of \'gladdon\' and \'gladwyn\' or \'gladwin\', are in reference to an old word for a sword (Latin gladius) due to the shape of the iris\'s leaves.\nThis plant is cultivated in gardens in the temperate zones. Both the species and its cultivar \'Variegata\' have gained the Royal Horticultural Society\'s Award of Garden Merit.',
     expected: ['stinking iris', 'gladdon', 'Gladwin iris', 'roast-beef plant', 'stinking gladwin'],
   },
+  {
+    name: 'Pelargonium (Pattern E — "commonly called" with period before next sentence)',
+    extract: 'Pelargonium () is a genus of flowering plants commonly called geraniums, pelargoniums, or storksbills. It includes about 280 species of perennials, succulents, and shrubs.',
+    expected: ['geraniums', 'pelargoniums', 'storksbills'],
+  },
+  {
+    name: 'Erigeron glaucus (Pattern H — singular "common name" not just "common names")',
+    extract: 'Erigeron glaucus is a species of flowering plant in the family Asteraceae known by the common name seaside fleabane, beach aster, or seaside daisy. It is native to the  West Coast of the United States.',
+    expected: ['seaside fleabane', 'beach aster', 'seaside daisy'],
+  },
+  {
+    name: 'Quercus agrifolia (Pattern A2 — "The common name (ScientificName)")',
+    extract: 'The coast live oak (Quercus agrifolia), also called the California live oak, is a live oak (an semi-evergreen oak) native to the California Floristic Province.',
+    expected: ['coast live oak', 'California live oak'],
+  },
+  {
+    name: 'Narcissus pseudonarcissus ("commonly named" prefix stripped)',
+    extract: 'Narcissus pseudonarcissus, commonly named the wild daffodil or Lent lily (Welsh: Cennin Pedr), is a perennial flowering plant.',
+    expected: ['wild daffodil', 'Lent lily'],
+  },
+  {
+    name: 'Tillandsia usneoides (Pattern A — common name before parenthetical, not scientific name inside)',
+    extract: 'Spanish moss (Tillandsia usneoides) is an epiphytic flowering plant that often grows upon large trees in tropical and subtropical climates.',
+    expected: ['Spanish moss'],
+  },
+  {
+    name: 'Oreomecon nudicaulis ("synonym" prefix filtered)',
+    extract: 'Oreomecon nudicaulis, synonym Papaver nudicaule, the Iceland poppy, is a boreal flowering plant.',
+    expected: ['Iceland poppy'],
+  },
+  {
+    name: 'Alstroemeria aurea (Pattern M — "The name X is often applied to")',
+    extract: 'Alstroemeria aurea is a species of flowering plant in the family Alstroemeriaceae, native to Chile and Argentina, but naturalised in Australia, New Zealand and the United Kingdom. It is also widely cultivated as an ornamental.\n\n\n== Common names ==\nCommon names include yellow alstroemeria, though cultivars have been selected in a range of colours. The name Peruvian lily is often applied to this and other species of Alstroemeriaceae, despite the fact that most are not native to that country.',
+    expected: ['yellow alstroemeria', 'Peruvian lily'],
+  },
 ];
 
 let passed = 0;

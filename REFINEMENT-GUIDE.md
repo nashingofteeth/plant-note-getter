@@ -12,10 +12,18 @@ app.js → wikidata.js (fetchWikipediaCommonNames → WIKI_PATTERNS → extractN
 ```
 
 The extraction pipeline:
-1. Fetch Wikipedia extract via `action=query&prop=extracts&exintro&explaintext`
+1. Fetch Wikipedia extract (full article — `exintro` removed so patterns can reach `== Common names ==` sections)
 2. Try each pattern in `WIKI_PATTERNS` against the extract
 3. Pass captured text to `extractNamesFromCapture()` for cleanup
 4. Return deduplicated list of common names
+
+### Intro-only vs full-article extraction
+
+`fetchWikipediaCommonNames()` fetches the full article (no `exintro`). This allows patterns to match content in `== Common names ==` sections and other non-intro locations. Patterns that fire on section-level content:
+- **Pattern F** — `"Common names include X, Y, and Z"` (section heading content)
+- **Pattern M** — `"The name X is (often|sometimes) applied to"` (section content)
+
+To verify what the pipeline currently extracts for a species, call `fetchWikipediaCommonNames(title)` directly.
 
 ## Process
 
@@ -28,8 +36,10 @@ The user provides a scientific name like `Quercus rubra`. Determine the Wikipedi
 ### 2a. Fetch the Wikipedia extract
 
 ```js
-const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&titles=${title}&format=json&redirects=1`;
+const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=&titles=${title}&format=json&redirects=1`;
 ```
+
+The production pipeline fetches the full article (no `exintro`) so patterns can match `== Common names ==` sections. Use `redirects=1` to follow page redirects.
 
 Use a descriptive `User-Agent` header per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
 
@@ -37,7 +47,17 @@ Use a descriptive `User-Agent` header per [Wikimedia API etiquette](https://www.
 
 ### 2b. Read the existing note from NOTE_ROOT
 
-The note file lives at `<NOTE_ROOT>/<sanitized-name>.md` where `sanitizeFilename()` replaces `/\/*?"<>|/` with `''` and appends `.md`.
+Plant notes live directly in `NOTE_ROOT` (set in `.env`, typically `~/wikihew/`) as `.md` files. There are no subdirectories for plant species.
+
+**Finding plant notes**: Filter by tag. Plant notes have a tag starting with `life/eukaryota/plantae`. Use `hasPlantTag()` from `src/frontmatter.js` or check manually:
+
+```js
+const { hasPlantTag } = require('./src/frontmatter');
+const fm = parseFrontMatter(content);
+if (hasPlantTag(fm)) { /* this is a plant note */ }
+```
+
+The note file path is `<NOTE_ROOT>/<sanitized-name>.md` where `sanitizeFilename()` (in `src/utils.js`) replaces `/\/*?"<>|/` with `''` and appends `.md`.
 
 Parse the frontmatter (using `parseFrontMatter` from `src/frontmatter.js` or the regex `/^---\n([\s\S]*?)\n---/`). Collect:
 
@@ -50,11 +70,11 @@ These are the ground truth for what the pipeline **did** extract. Any name in `a
 ### 3. Run extraction and compare
 
 ```js
-const { extractWikipediaCommonNames } = require('./src/wikidata');
-const extracted = extractWikipediaCommonNames(extract);
+const { fetchWikipediaCommonNames } = require('./src/wikidata');
+const extracted = await fetchWikipediaCommonNames(wikipediaTitle);
 ```
 
-Cross-reference against the note's `aliases`:
+The pipeline extracts from the full article, including `== Common names ==` sections. Cross-reference against the note's `aliases`:
 
 | Situation | Meaning |
 |-----------|---------|
@@ -110,7 +130,7 @@ Common root causes:
 
 **e. Verify the fix on the original species**
 
-Before adding the test, re-run `extractWikipediaCommonNames` on the actual Wikipedia extract that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
+Before adding the test, re-run `fetchWikipediaCommonNames` on the actual Wikipedia title that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
 
 **f. Add a test case**
 
@@ -149,7 +169,7 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 
 - **Legitimate geographic common names**: "European holly", "American basswood", "Chinese juniper" are real common names. Don't filter these.
 - **Regional variants**: "Spanish bluebell" vs "wood hyacinth" — both are valid.
-- **Pattern coverage gaps**: Some Wikipedia intros are too complex for any pattern. If the correct names come from Wikidata P1843 or GBIF, that's fine — Wikipedia extraction is supplementary.
+- **Pattern coverage gaps**: Some Wikipedia articles are too complex for any pattern. If the correct names come from Wikidata P1843 or GBIF, that's fine — Wikipedia extraction is supplementary.
 
 ### 7. Key files
 
@@ -168,7 +188,7 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 After fixing, verify:
 
 1. `npm test` passes (all regression tests)
-2. The original species' Wikipedia extract returns the correct expected names
+2. The original species' Wikipedia extract returns the correct expected names (via `fetchWikipediaCommonNames`)
 3. The extracted names match (or improve upon) the note's existing `aliases`
 4. No junk terms leak through (verify with the flag list from step 3)
 
