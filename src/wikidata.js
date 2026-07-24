@@ -22,7 +22,7 @@ async function rateLimit() {
   lastRequestTime = Date.now();
 }
 
-function fetchJSON(url, body = null) {
+function fetchJSON(url, body = null, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
     const isHttps = urlObj.protocol === 'https:';
@@ -40,9 +40,19 @@ function fetchJSON(url, body = null) {
       options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
     const req = transport.request(options, (res) => {
+      if (res.statusCode >= 400) {
+        let errData = '';
+        res.on('data', chunk => errData += chunk);
+        res.on('end', () => {
+          clearTimeout(timer);
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage} — ${errData.slice(0, 200)}`));
+        });
+        return;
+      }
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        clearTimeout(timer);
         try {
           resolve(JSON.parse(data));
         } catch (e) {
@@ -50,7 +60,10 @@ function fetchJSON(url, body = null) {
         }
       });
     });
-    req.on('error', reject);
+    const timer = setTimeout(() => {
+      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    req.on('error', (err) => { clearTimeout(timer); reject(err); });
     if (body) {
       req.write(typeof body === 'string' ? body : new URLSearchParams(body).toString());
     }
@@ -381,9 +394,9 @@ const WIKI_PATTERNS = [
   },
 
   // F: "Common names include/are" / "Other common names include/are" / "Common names exist...such as"
-  // Lazy match to stop at the first sentence-ending period, allowing periods inside parentheticals
+  // Match to the first sentence-ending period outside parentheses
   // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
-  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+.+?\s+)?(?:include|are|exist),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?((?:[^.]+|\([^)]*\))*?)\.(?:\s+[A-Z]|$)/i),
+  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+.+?\s+)?(?:include|are|exist),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // G: "English/vernacular names variously applied/include"
   (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
