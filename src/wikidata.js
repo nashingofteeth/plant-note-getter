@@ -318,10 +318,24 @@ const WIKI_PATTERNS = [
   // Only match within first 100 chars to avoid mid-text parentheticals like "(nuts)"
   // Capture the common name BEFORE the parenthetical, not inside it
   (text) => {
+    // Primary: "Genus species (Genus species) is" — two-word scientific name in parenthetical
     const m = text.match(/^([A-Z][a-z]+ [a-z]+),?\s+\((?:[A-Z][a-z]+ [a-z]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
     if (m) return [m[0], m[1]];
-    // Fallback: match names inside parenthetical
-    const m2 = text.match(/^[^(]{1,100}\(([^)]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    // Fallback: "CommonName (description) is" or "ScientificName (names) is"
+    const m2 = text.match(/^[^(]{1,200}\(([^)]+)\)\s*(?:is|are|was|were|has|have|refers)\b/i);
+    if (m2) {
+      const firstSegment = m2[1].split(';')[0].trim();
+      if (firstSegment.includes(':')) return null; // Skip pronunciation guides
+      // Skip "syn." notation (taxonomic synonym, not a common name)
+      if (/^syn\.\s+/i.test(firstSegment)) return null;
+      // Try extracting names from inside the parenthetical first
+      const fromInside = extractNamesFromCapture(m2[1]);
+      if (fromInside.length > 0) return m2;
+      // If nothing extracted from inside, extract the name BEFORE the parenthetical
+      const beforeParen = m2[0].replace(/\([^)]+\)\s*(?:is|are|was|were|has|have|refers)\b.*$/, '').trim();
+      const nameMatch = beforeParen.match(/([A-Z][a-z]+(?:\s+[a-z]+)*)$/);
+      if (nameMatch) return [m2[0], nameMatch[1]];
+    }
     return m2 || null;
   },
 
@@ -366,9 +380,10 @@ const WIKI_PATTERNS = [
     return m2 || null;
   },
 
-  // F: "Common names include/are" / "Other common names include/are"
-  // Lazy match to stop at the first sentence-ending period
-  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+\S+\s+)?(?:include|are)\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+  // F: "Common names include/are" / "Other common names include/are" / "Common names exist...such as"
+  // Lazy match to stop at the first sentence-ending period, allowing periods inside parentheticals
+  // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
+  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+.+?\s+)?(?:include|are|exist),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?((?:[^.]+|\([^)]*\))*?)\.(?:\s+[A-Z]|$)/i),
 
   // G: "English/vernacular names variously applied/include"
   (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
@@ -377,15 +392,18 @@ const WIKI_PATTERNS = [
   (text) => text.match(/known by the common names?\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
-  // Constrain to current sentence — don't cross period boundaries
+  // Constrain to current sentence — don't cross period or section header boundaries
   (text) => {
     const clean = text.replace(/\n+/g, ' ');
-    const m = clean.match(/(?:also|commonly)\s+(?:known\s+as|called)\s+([^.;]+?),\s+and\s+(?:is|are|was|were|has|have)\b/i);
+    const m = clean.match(/(?:also|commonly)\s+(?:known\s+as|called)\s+([^.;=]+?),\s+and\s+(?:is|are|was|were|has|have)\b/i);
     return m || null;
   },
 
   // M: "The name X is (often|sometimes|generally|widely) applied to..." — e.g., "The name Peruvian lily is often applied to..."
   (text) => text.match(/\bThe\s+name\s+(.+?)\s+(?:is|are|was|were)\s+(?:(?:often|sometimes|generally|widely|also)\s+)?applied\s+to\b/i),
+
+  // N: "also/commonly referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
+  (text) => text.match(/(?:also|commonly)\s+referred\s+to\s+as\s+([^.]+)\./i),
 ];
 
 function extractNamesFromCapture(captured) {
@@ -396,6 +414,35 @@ function extractNamesFromCapture(captured) {
 
   // Strip introductory prefixes like "commonly known as", "also known as", "also called", "commonly named"
   segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called|named)\s+/i, '');
+
+  // Extract names from parentheticals with comma-separated lists before stripping them
+  // e.g., "(e.g. ox-eye daisy, Shasta daisy)" -> extract "ox-eye daisy", "Shasta daisy"
+  const parentheticalMatches = segment.match(/\([^)]+\)/g) || [];
+  for (const paren of parentheticalMatches) {
+    const inner = paren.slice(1, -1); // Remove parentheses
+    // Skip parentheticals that are just pronunciation, translations, or syn. notations
+    if (/^(?:syn\.|simplified|traditional|pinyin|[Α-Ωα-ω]|[\u4e00-\u9fff]|\d)/i.test(inner)) continue;
+    // Skip parentheticals that are clarifications (e.g., "not to be confused with")
+    if (/not\s+to\s+be\s+confused/i.test(inner)) continue;
+    // Skip parentheticals that are geographic/language qualifiers (e.g., "US, via Kikongo")
+    if (/\b(?:US|UK|via|from|in)\b/i.test(inner)) continue;
+    // Skip parentheticals that contain colons (pronunciation guides like "US: , UK: ")
+    if (inner.includes(':')) continue;
+    // Check if it contains comma-separated items (likely a list of names)
+    if (inner.includes(',')) {
+      // Strip "e.g." or "i.e." prefixes
+      const cleaned = inner.replace(/^(?:e\.g\.|i\.e\.)\s*/i, '');
+      // Extract comma-separated items
+      const items = cleaned.split(/\s*,\s*/);
+      for (const item of items) {
+        const name = item.trim().replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
+        if (name && !seen.has(name.toLowerCase())) {
+          seen.add(name.toLowerCase());
+          names.push(name);
+        }
+      }
+    }
+  }
 
   // Remove bracketed content: (pronunciation), [...], etc.
   segment = segment.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
@@ -420,12 +467,16 @@ function extractNamesFromCapture(captured) {
     let name = raw.replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
     if (!name) continue;
 
-    // Strip leading "common name", "common names", "vernacular name" etc.
-    name = name.replace(/^(?:common|vernacular|local)\s+names?\s*/i, '').trim();
+    // Strip leading "common name", "common names", "vernacular name", "the name" etc.
+    name = name.replace(/^(?:common|vernacular|local|the)\s+names?\s*/i, '').trim();
     if (!name) continue;
 
     // Strip "also called", "also known as" from individual segments
     name = name.replace(/^(?:also|commonly|often|sometimes)\s+(?:called|known\s+as)\s+/i, '').trim();
+    if (!name) continue;
+
+    // Strip standalone "also" prefix from middle segments (e.g., "also Himalayan clematis")
+    name = name.replace(/^also\s+/i, '').trim();
     if (!name) continue;
 
     // Skip "syn. " prefixed names (taxonomic synonym notation, not common names)
@@ -471,6 +522,9 @@ function extractNamesFromCapture(captured) {
 
     // Skip names with numeric digits or standalone abbreviations
     if (/\d/.test(lower)) continue;
+
+    // Skip names containing CJK characters (Chinese, Japanese, Korean)
+    if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(normalized)) continue;
 
     // Skip generic food/plant terms that aren't meaningful common names
     if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?)$/i.test(normalized)) continue;

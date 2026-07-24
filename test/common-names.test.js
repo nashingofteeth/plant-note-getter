@@ -167,6 +167,36 @@ const TESTS = [
     extract: 'Alstroemeria aurea is a species of flowering plant in the family Alstroemeriaceae, native to Chile and Argentina, but naturalised in Australia, New Zealand and the United Kingdom. It is also widely cultivated as an ornamental.\n\n\n== Common names ==\nCommon names include yellow alstroemeria, though cultivars have been selected in a range of colours. The name Peruvian lily is often applied to this and other species of Alstroemeriaceae, despite the fact that most are not native to that country.',
     expected: ['yellow alstroemeria', 'Peruvian lily'],
   },
+  {
+    name: 'Leucanthemum (Pattern F — "Common names for X usually include" with parenthetical examples)',
+    extract: 'Leucanthemum is a genus of flowering plants in the aster family, Asteraceae. Species range naturally from Europe through the Caucasus, Turkey, Iran, Central Asia, and Siberia to the Russian Far East. Some species are known on other continents as introduced species, and some are cultivated as ornamental plants. The name Leucanthemum derives from the Greek words λευκός – leukos ("white") and ἄνθεμον – anthemon ("flower").  Common names for Leucanthemum species usually include the name daisy (e.g. ox-eye daisy, Shasta daisy), but "daisy" can also refer to numerous other genera in the Asteraceae family.',
+    expected: ['daisy', 'ox-eye daisy', 'Shasta daisy'],
+  },
+  {
+    name: 'Clematis montana (Pattern B — "also" prefix in middle segment)',
+    extract: 'Clematis montana, the mountain clematis, also Himalayan clematis or anemone clematis, is a flowering plant in the buttercup family Ranunculaceae.',
+    expected: ['mountain clematis', 'Himalayan clematis', 'anemone clematis'],
+  },
+  {
+    name: 'Arachis hypogaea (Pattern E — geographic qualifiers in parentheticals)',
+    extract: 'The peanut (Arachis hypogaea), also known as the groundnut, goober (US, via Kikongo), goober pea, pindar (US, via Kikongo) or monkey nut (UK), is a legume crop grown mainly for its edible seeds.',
+    expected: ['peanut', 'groundnut', 'goober', 'goober pea', 'pindar', 'monkey nut'],
+  },
+  {
+    name: 'Chamaecyparis obtusa (CJK characters filtered)',
+    extract: 'Chamaecyparis obtusa is a species of Chamaecyparis, native to central Japan. It is an important tree in Japanese forestry, called hinoki. Common names include Japanese cypress, hinoki cypress, hinoki, and 桧.',
+    expected: ['Japanese cypress', 'hinoki cypress', 'hinoki'],
+  },
+  {
+    name: 'Arctostaphylos uva-ursi (Pattern A fallback — name before descriptive parenthetical, Pattern F — "exist...such as")',
+    extract: 'Arctostaphylos uva-ursi is a plant species of the genus Arctostaphylos widely distributed across circumboreal regions of the subarctic Northern Hemisphere. Kinnikinnick (from the Unami language for smoking "mixture") is a common name in Canada and the United States. Growing up to 30 centimetres (12 inches) in height, the leaves are evergreen. The flowers are white to pink and the fruit is a red berry.\nOne of several related species referred to as bearberry, its specific epithet uva-ursi means "grape of the bear" in Latin, similar to the meaning of the generic epithet Arctostaphylos (Greek for "bear grapes").\n\n== Etymology ==\nThe genus name of Arctostaphylos uva-ursi comes from the Greek words arctos (meaning bear) and staphyle (meaning "bunch of grapes") in reference to the fruits which form grape-like clusters. In the wild, the fruits are commonly eaten by bears. The specific epithet, uva-ursi, comes from the Latin words uva (meaning grape) and ursus (bear), reflected by the bearberry nickname.\nThe common name, kinnikinnick, is an Algonquin word meaning "smoking mixture". Native Americans and early pioneers smoked the dried uva-ursi leaves and bark alone or mixed with other herbs, tobacco or dried dogwood bark in pipes. Numerous common names exist, depending on region, such as mealberry, sandberry, mountain-box, fox-plum, hog-crawberry, and barren myrtle.',
+    expected: ['Kinnikinnick', 'mealberry', 'sandberry', 'mountain-box', 'fox-plum', 'hog-crawberry', 'barren myrtle'],
+  },
+  {
+    name: 'Arisaema triphyllum (Pattern B + N — appositive + "referred to as")',
+    extract: 'Arisaema triphyllum, the Jack-in-the-pulpit, is a species of flowering plant in the arum family Araceae. It is a member of the Arisaema triphyllum complex, a group of four or five closely related taxa in eastern North America. The specific name triphyllum means "three-leaved", a characteristic feature of the species, which is also referred to as Indian turnip, bog onion, and brown dragon.',
+    expected: ['Jack-in-the-pulpit', 'Indian turnip', 'bog onion', 'brown dragon'],
+  },
 ];
 
 let passed = 0;
