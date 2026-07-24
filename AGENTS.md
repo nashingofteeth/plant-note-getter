@@ -2,6 +2,10 @@
 
 CLI tool: takes a scientific plant name, queries Wikidata/GBIF/Wikipedia, and writes an Obsidian note with a hierarchical tag, aliases, rank, and Wikipedia link.
 
+## Prompt convention
+
+If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus sylvestris") with no other instructions, treat it as the selection for the refinement guide ([`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md)) and proceed with the full pipeline: search Wikidata → get entity data → synonyms → GBIF/Wikipedia common names → build tag chain → create note file.
+
 ## Data flow
 
 ```
