@@ -107,11 +107,12 @@ function stripArticle(name) {
 function buildAliases(entity) {
   const aliases = [];
   if (entity.commonNames && entity.commonNames.length > 0) {
+    const sciLower = (entity.scientificName || '').toLowerCase();
     const seen = new Set();
     for (const name of entity.commonNames) {
       const normalized = stripArticle(name);
       const lower = normalized.toLowerCase();
-      if (!seen.has(lower)) {
+      if (!seen.has(lower) && lower !== sciLower) {
         seen.add(lower);
         aliases.push(normalized);
       }
