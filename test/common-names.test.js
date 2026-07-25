@@ -212,6 +212,31 @@ const TESTS = [
     extract: "Lilium regale, called the regal lily, royal lily, king's lily,or, in New Zealand, the Christmas lily, is a species of flowering plant in the lily family Liliaceae, with trumpet-shaped flowers.",
     expected: ['regal lily', 'royal lily', "king's lily", 'Christmas lily'],
   },
+  {
+    name: 'Pinus palustris (Pattern A fallback — scientific name in parenthetical not leaked)',
+    extract: 'The longleaf pine (Pinus palustris) is a pine species native to the Southeastern United States, found along the coastal plain from East Texas to southern Virginia, extending into northern and central Florida.',
+    expected: ['longleaf pine'],
+  },
+  {
+    name: 'Cornus controversa (Pattern A fallback — taxonomic annotation between ) and verb)',
+    extract: 'Cornus controversa (wedding cake tree), syn. Swida controversa, is a species of flowering plant in the dogwood family Cornaceae.',
+    expected: ['wedding cake tree'],
+  },
+  {
+    name: 'Picea engelmannii (Pattern F2 — "with the common names" lists names directly)',
+    extract: 'Picea engelmannii, with the common names Engelmann spruce, mountain spruce, and silver spruce, is a species of spruce native to western North America.',
+    expected: ['Engelmann spruce', 'mountain spruce', 'silver spruce'],
+  },
+  {
+    name: 'Elegia tectorum (Pattern E — "more commonly X" construction)',
+    extract: 'Elegia tectorum, previously Chondropetalum tectorum or Restio tectorum, more commonly Cape thatching reed, or dakriet (in Afrikaans), is a member of the restio family, Restionaceae.',
+    expected: ['Cape thatching reed', 'Chondropetalum tectorum', 'Restio tectorum', 'dakriet'],
+  },
+  {
+    name: 'Phedimus spurius ("formerly" prefix stripped from segments)',
+    extract: 'Phedimus spurius, formerly Sedum spurium, the Caucasian stonecrop or two-row stonecrop, is a species of flowering plant in the family Crassulaceae.',
+    expected: ['Caucasian stonecrop', 'Sedum spurium', 'two-row stonecrop'],
+  },
 ];
 
 let passed = 0;

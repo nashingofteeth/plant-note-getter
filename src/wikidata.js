@@ -335,7 +335,8 @@ const WIKI_PATTERNS = [
     const m = text.match(/^([A-Z][a-z]+ [a-z]+),?\s+\((?:[A-Z][a-z]+ [a-z]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
     if (m) return [m[0], m[1]];
     // Fallback: "CommonName (description) is" or "ScientificName (names) is"
-    const m2 = text.match(/^[^(]{1,200}\(([^)]+)\)\s*(?:is|are|was|were|has|have|refers)\b/i);
+    // Also handles taxonomic annotations between ) and verb: "Name (X), syn. Y, is"
+    const m2 = text.match(/^[^(]{1,200}\(([^)]+)\)(?:\s*,\s*(?:syn|cf|sensu|subsp|var)\b[^,]*,?\s*)?\s*(?:is|are|was|were|has|have|refers)\b/i);
     if (m2) {
       const firstSegment = m2[1].split(';')[0].trim();
       if (firstSegment.includes(':')) return null; // Skip pronunciation guides
@@ -344,8 +345,14 @@ const WIKI_PATTERNS = [
       // Try extracting names from inside the parenthetical first
       const fromInside = extractNamesFromCapture(m2[1]);
       // Also try to extract the name BEFORE the parenthetical
-      const beforeParen = m2[0].replace(/\([^)]+\)\s*(?:is|are|was|were|has|have|refers)\b.*$/, '').trim();
-      const nameMatch = beforeParen.match(/([A-Z][a-z]+(?:\s+[a-z]+)*)$/);
+      const beforeParen = m2[0].replace(/\([^)]+\)(?:\s*,\s*(?:syn|cf|sensu|subsp|var)\b[^,]*,?\s*)?\s*(?:is|are|was|were|has|have|refers)\b.*$/, '').trim();
+      const nameMatch = beforeParen.match(/([a-zA-Z][\w-]*(?:\s+[a-z][\w-]*)*)$/);
+      // If the parenthetical itself is a single scientific name (Genus species), skip it
+      // and extract the name BEFORE the parenthetical instead (e.g., "longleaf pine" from "(Pinus palustris)")
+      if (m2[1].trim().match(/^[A-Z][a-z]+\s+[a-z]+$/) && fromInside.length > 0) {
+        if (nameMatch && !/^[A-Z][a-z]+\s+[a-z]+$/.test(nameMatch[1])) return [m2[0], nameMatch[1]];
+        return null;
+      }
       if (fromInside.length > 0 && nameMatch) {
         // Include single-word before-paren name (e.g., "Marimo") alongside inside-paren names.
         // Skip multi-word names to avoid leaking scientific names like "Quercus robur".
@@ -356,7 +363,8 @@ const WIKI_PATTERNS = [
       }
       if (fromInside.length > 0) return m2;
       // If nothing extracted from inside, extract the name BEFORE the parenthetical
-      if (nameMatch) return [m2[0], nameMatch[1]];
+      // Skip if it looks like a scientific name (Genus species) — not a common name
+      if (nameMatch && !/^[A-Z][a-z]+\s+[a-z]+$/.test(nameMatch[1])) return [m2[0], nameMatch[1]];
     }
     return m2 || null;
   },
@@ -392,7 +400,7 @@ const WIKI_PATTERNS = [
   // L: "where it is called X" at end of sentence (e.g., "where it is called tsuwabuki (石蕗).")
   (text) => text.match(/where\s+it\s+is\s+called\s+(.+?)\.(?:\s+[A-Z]|\s*$)/i),
 
-  // E: "also/often/sometimes/commonly called"
+  // E: "also/often/sometimes/commonly called" / "more commonly X"
   // Match "called X, is/are..." or "called X. It is..." (period before next sentence)
   (text) => {
     // Try comma-verb first (primary case)
@@ -400,13 +408,19 @@ const WIKI_PATTERNS = [
     if (m1) return m1;
     // Fallback: period followed by "It/They" (e.g., "commonly called X. It includes...")
     const m2 = text.match(/(?:also|often|sometimes|commonly)\s+called\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were|has|have|includes)\b/i);
-    return m2 || null;
+    if (m2) return m2;
+    // Fallback: "more commonly X, is/are..." (e.g., "more commonly Cape thatching reed, or dakriet, is...")
+    const m3 = text.match(/more\s+commonly\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i);
+    return m3 || null;
   },
 
   // F: "Common names include/are" / "Other common names include/are" / "Common names exist...such as"
   // Match to the first sentence-ending period outside parentheses
   // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
   (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+.+?\s+)?(?:include|are|exist),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
+
+  // F2: "with the common names X, Y, and Z, is..." (names listed directly, no keyword)
+  (text) => text.match(/with\s+the\s+common\s+names\s+([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // G: "English/vernacular names variously applied/include"
   (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
@@ -437,6 +451,8 @@ function extractNamesFromCapture(captured) {
 
   // Strip introductory prefixes like "commonly known as", "also known as", "also called", "commonly named"
   segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called|named)\s+/i, '');
+  // Strip "formerly" / "previously" prefixes (taxonomic history, not common names)
+  segment = segment.replace(/^(?:formerly|previously)\s+/i, '');
 
   // Extract names from parentheticals with comma-separated lists before stripping them
   // e.g., "(e.g. ox-eye daisy, Shasta daisy)" -> extract "ox-eye daisy", "Shasta daisy"
@@ -494,8 +510,8 @@ function extractNamesFromCapture(captured) {
     name = name.replace(/^(?:common|vernacular|local|the)\s+names?\s*/i, '').trim();
     if (!name) continue;
 
-    // Strip "also called", "also known as" from individual segments
-    name = name.replace(/^(?:also|commonly|often|sometimes)\s+(?:called|known\s+as)\s+/i, '').trim();
+    // Strip "also called", "also known as", "formerly", "previously" from individual segments
+    name = name.replace(/^(?:also|commonly|often|sometimes|formerly|previously)\s+(?:(?:called|known\s+as)\s+)?/i, '').trim();
     if (!name) continue;
 
     // Strip standalone "also" prefix from middle segments (e.g., "also Himalayan clematis")
