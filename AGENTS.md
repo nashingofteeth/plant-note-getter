@@ -72,9 +72,16 @@ Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchW
 6. **Filler phrases** — filter out `among many regional names`, `among others` etc.
 7. **Real-time verification** — when adding a new test case, fetch the actual Wikipedia API extract and verify the text matches one of the 8 patterns. Some intros are too complex for any pattern (e.g., Ginkgo biloba's multi-clause construction).
 
+### Known extraction limitations (TODOs)
+
+- [ ] **Binomial names from "previously/formerly" context** — When Pattern C captures "previously Genus species or Genus species, ...", the prefix is stripped but the resulting binomials (e.g., `Chondropetalum tectorum`, `Sedum spurium`) pass all filters. Cannot add a global binomial filter without breaking `Cladophora ball` (a legitimate common name in the same format). Species affected: Elegia tectorum, Phedimus spurius.
+- [ ] **Possessive vs non-possessive variants** — Wikipedia may use "David's viburnum" while the note has "David viburnum". Not a bug — both are valid. No normalization is applied.
+- [ ] **Names not in article intro** — Some common names (e.g., "she-balsam" for Abies fraseri, "common horse-chestnut" for Aesculus hippocastanum) appear in later sections, not the intro. The pipeline only extracts from the full article, but patterns only fire on the first matching construction.
+- [ ] **Non-standard article formats** — Articles without pattern-matching intros (pronunciation-heavy like Pecan, redirect titles like Longleaf_pine, list-heavy like Convolvulus arvensis) produce few or no extractions. These are expected coverage gaps.
+
 ## Tests
 
 - `npm test` runs both test files.
-- `test/common-names.test.js` — 14 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wikidata.js`.
+- `test/common-names.test.js` — 47 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wikidata.js`.
 - `test/hierarchy.test.js` — 5 tests for tag generation using mocked ancestor chains (no live Wikidata).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first.
