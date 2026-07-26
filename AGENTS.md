@@ -46,7 +46,7 @@ app.js → wikidata.js (search, entity data, synonyms, GBIF names, Wikipedia nam
 
 ```
 Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchWikipediaCommonNames
-(merged in app.js in this order — earlier sources win dedup priority)
+(merged in app.js in this order — Wikipedia casing wins for duplicates)
 ```
 
 ### WIKI_PATTERNS: 8 regexes for Wikipedia intro constructions

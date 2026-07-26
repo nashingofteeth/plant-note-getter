@@ -133,12 +133,18 @@ async function main() {
 
     if (entity.wikipediaTitle) {
       const wikiNames = await fetchWikipediaCommonNames(entity.wikipediaTitle);
-      const seenLower = new Set((entity.commonNames || []).map(n => stripArticle(n).toLowerCase()));
+      const wikiSeen = new Set();
       for (const name of wikiNames) {
         const normalized = stripArticle(name).replace(/\.+$/, '').trim();
         const lower = normalized.toLowerCase();
-        if (!seenLower.has(lower)) {
-          seenLower.add(lower);
+        if (wikiSeen.has(lower)) continue;
+        wikiSeen.add(lower);
+        const existingIdx = (entity.commonNames || []).findIndex(n => stripArticle(n).toLowerCase() === lower);
+        if (existingIdx !== -1) {
+          if (entity.commonNames[existingIdx] !== normalized) {
+            entity.commonNames[existingIdx] = normalized;
+          }
+        } else {
           entity.commonNames.push(normalized);
         }
       }
