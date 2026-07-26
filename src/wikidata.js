@@ -466,6 +466,15 @@ const WIKI_PATTERNS = [
     }
     return null;
   },
+
+  // P: "Alternative names ... are X, Y, and Z"
+  // e.g., "Alternative names in parts of the United States are Confederate rose and Dixie rosemallow."
+  (text) => {
+    const m = text.match(/alternative\s+names\s+.*?\bare\s+([^.]+)\.(?:\s+(?:[A-Z]|=)|$)/i);
+    if (!m) return null;
+    if (!/[,]|\band\b|\bor\b/i.test(m[1])) return null;
+    return m;
+  },
 ];
 
 function extractNamesFromCapture(captured) {
