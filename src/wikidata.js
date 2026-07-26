@@ -395,7 +395,18 @@ const WIKI_PATTERNS = [
   (text) => text.match(/(?<!(?:previously|formerly|originally)\s+)(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
 
   // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
-  (text) => text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i),
+  // Lazy capture so abbreviation periods (e.g. "subsp.") don't break the match
+  // Reject match if preceded by an unmatched open paren (inside a parenthetical about another subject)
+  (text) => {
+    const m = text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+(.+?)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i);
+    if (!m) return null;
+    const matchStart = m.index;
+    const before = text.slice(0, matchStart);
+    const lastOpen = before.lastIndexOf('(');
+    const lastClose = before.lastIndexOf(')');
+    if (lastOpen > lastClose) return null;
+    return m;
+  },
 
   // L: "where it is called X" at end of sentence (e.g., "where it is called tsuwabuki (石蕗).")
   (text) => text.match(/where\s+it\s+is\s+called\s+(.+?)\.(?:\s+[A-Z]|\s*$)/i),
@@ -517,7 +528,7 @@ function extractNamesFromCapture(captured) {
   segment = segment.replace(/\s*,\s*,/g, ',').replace(/,\s*,/g, ',').trim();
 
   for (const raw of segment.split(/\s*[,;]\s*/)) {
-    let name = raw.replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
+    let name = raw.replace(/^["'\u201C\u201D\s()]+|["'\u201C\u201D\s.,;:()]+$/g, '').trim();
     if (!name) continue;
 
     // Strip leading "common name", "common names", "vernacular name", "the name" etc.
