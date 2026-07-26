@@ -27,6 +27,8 @@ To verify what the pipeline currently extracts for a species, call `fetchWikiped
 
 ## Process
 
+**Taxon selection**: Taxa must be chosen exclusively from notes already in `NOTE_ROOT` (the Obsidian vault). Pick existing plant notes — their filenames are scientific names with `.md` extension. This ensures refinement addresses actual on-disk notes rather than arbitrary names.
+
 ### 1. Resolve the taxon name
 
 The user provides a scientific name like `Quercus rubra`. Determine the Wikipedia page title:
