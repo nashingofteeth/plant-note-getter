@@ -784,5 +784,9 @@ module.exports = {
   fetchWikipediaCommonNames,
   extractNamesFromCapture,
   extractWikipediaCommonNames,
-  stripArticle
+  stripArticle,
+  WIKI_PATTERNS,
+  WIKIPEDIA_MEDIAWIKI_API,
+  rateLimit,
+  fetchJSON
 };

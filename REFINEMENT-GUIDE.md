@@ -183,6 +183,10 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 | `src/utils.js` | `sanitizeFilename()` — compute note path from name |
 | `src/config.js` | `NOTE_ROOT` — directory containing plant notes |
 
+### 7.5. Ask before adding exports
+
+If during refinement you need to import an internal variable or utility that isn't exported, ask the user for permission before adding it to `module.exports`. Do not add exports unilaterally.
+
 ### 8. Verification checklist
 
 After fixing, verify:
