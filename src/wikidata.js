@@ -332,7 +332,7 @@ const WIKI_PATTERNS = [
   // Capture the common name BEFORE the parenthetical, not inside it
   (text) => {
     // Primary: "Genus species (Genus species) is" — two-word scientific name in parenthetical
-    const m = text.match(/^([A-Z][a-z]+ [a-z]+),?\s+\((?:[A-Z][a-z]+ [a-z]+)\)\s+(?:is|are|was|were|has|have|refers)\b/i);
+    const m = text.match(/^([A-Z][a-z]+ [a-z]+),?\s+\((?:[A-Z][a-z]+ [a-z]+)\)\s+(?:is|are|was|were|has|have|refers)\b/);
     if (m) return [m[0], m[1]];
     // Fallback: "CommonName (description) is" or "ScientificName (names) is"
     // Also handles taxonomic annotations between ) and verb: "Name (X), syn. Y, is"
@@ -441,6 +441,20 @@ const WIKI_PATTERNS = [
 
   // N: "also/commonly referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
   (text) => text.match(/(?:also|commonly)\s+referred\s+to\s+as\s+([^.]+)\./i),
+
+  // O: ") AuthorName (common name) is/are/was/were"
+  // Catches "(short-stalked false bindweed) is" after taxonomic authority
+  // Does not duplicate Pattern A (which handles the first parenthetical at start of text)
+  (text) => {
+    const m = text.match(/\)\s+[A-Z][a-z]+\s+\(([a-z][a-z\s-]+)\)\s+(?:is|are|was|were)\b/);
+    if (m) {
+      const name = m[1].trim();
+      if (!name.includes(' ')) return null;
+      if (/[.&0-9]/.test(name)) return null;
+      return m;
+    }
+    return null;
+  },
 ];
 
 function extractNamesFromCapture(captured) {
