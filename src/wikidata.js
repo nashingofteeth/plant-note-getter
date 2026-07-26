@@ -437,7 +437,8 @@ const WIKI_PATTERNS = [
   (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
   // H: "known by the common name(s) X, Y, and Z" (singular or plural)
-  (text) => text.match(/known by the common names?\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+  // [^.]+? to stay within first sentence (abbreviation periods handled by filters)
+  (text) => text.match(/known by the common names?\s+([^.]+?)\.(?:\s+[A-Z]|$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
   // Constrain to current sentence — don't cross period or section header boundaries
@@ -579,8 +580,8 @@ function extractNamesFromCapture(captured) {
     // Skip label-value pairs (e.g. "simplified Chinese: 三角枫", "pinyin: sānjiǎofēng")
     if (/^[\w\s]+:/.test(normalized)) continue;
 
-    // Skip pure rank terms
-    if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(normalized)) continue;
+    // Skip pure rank terms and rank-prefixed names
+    if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i.test(normalized)) continue;
 
     const lower = normalized.toLowerCase();
 
@@ -588,7 +589,7 @@ function extractNamesFromCapture(captured) {
     if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
 
     // Skip filler starts and descriptive phrases
-    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less)\b/i.test(lower)) continue;
+    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later)\b/i.test(lower)) continue;
     if (/^(among\s+(?:many|other)|more\s+commonly)/i.test(lower)) continue;
 
     // Skip if it looks like a scientific name (e.g. "R. eglanteria")
@@ -604,6 +605,27 @@ function extractNamesFromCapture(captured) {
 
     // Skip generic food/plant terms that aren't meaningful common names
     if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?)$/i.test(normalized)) continue;
+
+    // Skip "native to X" geographic descriptions
+    if (/^native\s+to\s+/i.test(normalized)) continue;
+
+    // Skip "species of X" generic descriptors
+    if (/^species\s+of\s+/i.test(normalized)) continue;
+
+    // Skip "to [direction]" geographic fragments
+    if (/^to\s+(?:western|southern|northern|eastern|central)\b/i.test(normalized)) continue;
+
+    // Skip "leading to", "with no" descriptive fragments
+    if (/^(?:leading\s+to|with\s+no)\b/i.test(normalized)) continue;
+
+    // Skip names containing a period followed by space + capital (cross-sentence artifact)
+    if (/\.\s+[A-Z]/.test(normalized)) continue;
+
+    // Skip single capitalized words ending in taxonomic rank suffixes
+    if (/^[A-Z][a-z]+(?:aceae|idae|inae|oideae|ales|ophyta|opsida|eae)$/.test(normalized)) continue;
+
+    // Skip standalone country/continent names (leak from descriptive text)
+    if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas)$/i.test(normalized)) continue;
 
     if (!seen.has(lower)) {
       seen.add(lower);

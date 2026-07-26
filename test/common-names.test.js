@@ -252,6 +252,36 @@ const TESTS = [
     extract: 'Calystegia silvatica (large bindweed) is the largest species of bindweed and is a strong rampant climber. It is native to southern Europe but has been introduced to many other areas because it is an attractive garden plant. Calystegia silvatica subsp. fraterniflora (Mack. & Bush) Brummitt (short-stalked false bindweed) is native to North America.\nIt has large, arrow-shaped leaves and showy white trumpet-shaped flowers up to 9 centimeters in diameter. It is considered a weed in some areas where it has escaped cultivation and now grows wild. It spreads easily via hardy rhizomes. There are several subspecies.\n\n\n== Description ==\nLarge bindweed is a glabrous herbaceous perennial that twines in a counter-clockwise direction to a height of up to 5 m. The leaves are arranged alternately on the spiralling stem on petioles up to 15 cm. The leaves are dull green above and paler below, simple and sagittate (arrowhead shaped), up to 15 cm long and up to 9 cm wide.\nThe flowers are white, sometimes narrowly pink on the outside only, produced from late spring to the end of summer (between July and September in northern Europe). The buds are enclosed by large (4.8 cm long), ovate, green bracteoles pouched at the base; during anthesis they strongly overlap. The open flowers are trumpet-shaped and 6\u20139 cm diameter. After flowering, the fruit develops as an almost spherical capsule, which is hidden by the bracts. It is 1 cm in diameter, containing two to four large, dark brown or black seeds that are shaped like quartered oranges.\n\n\n== Identification ==\nThe best way to separate large bindweed from hedge bindweed (C. sepium) in flower is by the bracteoles, which subtend the flower and wholly or partially encompass the sepals. Large bindweed has short, wider bracteoles which overlap where they meet, whereas hedge bindweed has narrower, longer ones which leave a gap between them, allowing a glimpse of the sepals.\n\nVegetatively, large bindweed can be distinguished from hedge bindweed by the shape of the sinus - the gap between the lobes at the base of the leaves. The former has a U-shaped sinus, in contrast to the usually V-shaped one in the latter.\n\n\n== Taxonomy ==\nCommon names include "morning glory" (a name which is shared with hundreds of other species) and "giant bindweed".',
     expected: ['large bindweed', 'short-stalked false bindweed', 'morning glory', 'giant bindweed'],
   },
+  {
+    name: 'Dicentra formosa (Pattern E — "and native to Asia" geographic filter)',
+    extract: 'Dicentra formosa (western, wild or Pacific bleeding-heart) is a species of flowering plant in the poppy family, Papaveraceae. The popular related plant, Lamprocapnos spectabilis, also called "bleeding heart" and native to Asia, was formerly placed in the same genus.',
+    expected: ['western', 'wild', 'Pacific bleeding-heart', 'bleeding heart'],
+  },
+  {
+    name: 'Pattern K — "species of" and "native to" descriptive overflow filtered',
+    extract: 'Eucalyptus camaldulensis, commonly known as river red gum, a species of tree in the family Myrtaceae, native to Australia. It is grown in many parts of the world.',
+    expected: ['river red gum'],
+  },
+  {
+    name: 'Chamaenerion angustifolium (Pattern K — descriptive junk filtered, Ivan-Chai kept)',
+    extract: 'In Russia, fireweed is made into a tea known as Ivan-Chai (Ivan-Tea) or Koporsky tea (from the town of Koporye, where it has been produced since the 13th century). They use it as highly prized medicinal herb too. The popularity of fireweed tea perhaps stems from the similarity of its production to that of common black tea (Camellia sinensis), leading to a richly flavoured and deeply coloured herbal tea, with no caffeine. It is commercially sold in a blend with mint or thyme.',
+    expected: ['Ivan-Chai'],
+  },
+  {
+    name: 'Lyonothamnus (Pattern H — abbreviation period + rank-prefix filter)',
+    extract: 'Lyonothamnus floribundus, which is known by the common name Channel Island ironwood, and the subspecies L. f. ssp. aspleniifolius and L. f. ssp. floribundus.\n\n== Description ==',
+    expected: ['Channel Island ironwood'],
+  },
+  {
+    name: 'Eucalyptus marginata (Pattern K + D — family name "Myrtaceae" filtered)',
+    extract: 'Eucalyptus marginata, commonly known as jarrah, is a plant in the myrtle family, Myrtaceae and is endemic to the south-west of Western Australia. It is a tree with rough, fibrous bark.',
+    expected: ['jarrah'],
+  },
+  {
+    name: 'Crassula ovata (Pattern K — country name "Mozambique" filtered)',
+    extract: 'Crassula ovata, commonly known as jade plant, lucky plant, money plant or money tree, is a succulent plant with small pink or white flowers that is native to the KwaZulu-Natal and Eastern Cape provinces of South Africa, and Mozambique.',
+    expected: ['jade plant', 'lucky plant', 'money plant', 'money tree'],
+  },
 ];
 
 let passed = 0;

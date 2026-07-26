@@ -81,7 +81,8 @@ Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchW
 
 ## Tests
 
-- `npm test` runs both test files.
-- `test/common-names.test.js` — 47 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wikidata.js`.
+- `npm test` runs all test suite files.
+- `test/common-names.test.js` — 56 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wikidata.js`.
 - `test/hierarchy.test.js` — 5 tests for tag generation using mocked ancestor chains (no live Wikidata).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first.
+
