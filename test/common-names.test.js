@@ -230,12 +230,12 @@ const TESTS = [
   {
     name: 'Elegia tectorum (Pattern E — "more commonly X" construction)',
     extract: 'Elegia tectorum, previously Chondropetalum tectorum or Restio tectorum, more commonly Cape thatching reed, or dakriet (in Afrikaans), is a member of the restio family, Restionaceae.',
-    expected: ['Cape thatching reed', 'Chondropetalum tectorum', 'Restio tectorum', 'dakriet'],
+    expected: ['Cape thatching reed', 'dakriet'],
   },
   {
     name: 'Phedimus spurius ("formerly" prefix stripped from segments)',
     extract: 'Phedimus spurius, formerly Sedum spurium, the Caucasian stonecrop or two-row stonecrop, is a species of flowering plant in the family Crassulaceae.',
-    expected: ['Caucasian stonecrop', 'Sedum spurium', 'two-row stonecrop'],
+    expected: ['Caucasian stonecrop', 'two-row stonecrop'],
   },
   {
     name: 'Arrhenatherum elatius (Pattern K — intro with abbreviation period, habitat with other species in parens)',

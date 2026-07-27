@@ -49,18 +49,28 @@ Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchW
 (merged in app.js in this order — Wikipedia casing wins for duplicates)
 ```
 
-### WIKI_PATTERNS: 8 regexes for Wikipedia intro constructions
+### WIKI_PATTERNS: 17 regexes for Wikipedia intro constructions
 
 | Pattern | Matches | Example species |
 |---------|---------|----------------|
 | A | `(name1, name2, or name3)` parenthetical | Rosa rubiginosa |
+| A2 | `The common name (ScientificName)` | Quercus agrifolia |
 | B | `, the/a/an name1, name2, and name3, is` | Eschscholzia californica |
 | C | `, name1, is` (no article) | Oreomecon crocea |
 | D | `known as / commonly known as / generally known as` | Ulmus americana |
 | E | `also/often/sometimes called` | Lactuca serriola |
 | F | `Common names include/are` | Sambucus nigra |
+| F2 | `with the common names X, Y, and Z` | Picea engelmannii |
 | G | `English/vernacular names ... include` | Populus |
 | H | `known by the common names` | Malephora crocea |
+| I | `also/commonly known as X, and is` (later paragraphs) | Jasminum officinale |
+| J | `ScientificName or commonName is` | Abies balsamea |
+| K | `known as X. It/They is/are` | Abronia latifolia |
+| L | `where it is called X` | Farfugium japonicum |
+| M | `The name X is applied to` | Alstroemeria aurea |
+| N | `also/commonly referred to as X, Y, and Z.` | Arisaema triphyllum |
+| O | `) Author (common name) is` | Calystegia silvatica |
+| P | `Alternative names ... are X and Y` | Hibiscus mutabilis |
 
 ### Known pitfalls in extractNamesFromCapture
 
@@ -70,14 +80,14 @@ Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchW
 4. **Language qualifiers** — strip trailing ` in Greek`, ` in Latin` etc.
 5. **Label prefixes** — strip leading `common name`, `common names`, `vernacular name`
 6. **Filler phrases** — filter out `among many regional names`, `among others` etc.
-7. **Real-time verification** — when adding a new test case, fetch the actual Wikipedia API extract and verify the text matches one of the 8 patterns. Some intros are too complex for any pattern (e.g., Ginkgo biloba's multi-clause construction).
+7. **Real-time verification** — when adding a new test case, fetch the actual Wikipedia API extract and verify the text matches one of the patterns. Some intros are too complex for any pattern (e.g., Ginkgo biloba's multi-clause construction).
 
-### Known extraction limitations (TODOs)
+### Resolved extraction limitations
 
-- [ ] **Binomial names from "previously/formerly" context** — When Pattern C captures "previously Genus species or Genus species, ...", the prefix is stripped but the resulting binomials (e.g., `Chondropetalum tectorum`, `Sedum spurium`) pass all filters. Cannot add a global binomial filter without breaking `Cladophora ball` (a legitimate common name in the same format). Species affected: Elegia tectorum, Phedimus spurius.
-- [ ] **Possessive vs non-possessive variants** — Wikipedia may use "David's viburnum" while the note has "David viburnum". Not a bug — both are valid. No normalization is applied.
-- [ ] **Names not in article intro** — Some common names (e.g., "she-balsam" for Abies fraseri, "common horse-chestnut" for Aesculus hippocastanum) appear in later sections, not the intro. The pipeline only extracts from the full article, but patterns only fire on the first matching construction.
-- [ ] **Non-standard article formats** — Articles without pattern-matching intros (pronunciation-heavy like Pecan, redirect titles like Longleaf_pine, list-heavy like Convolvulus arvensis) produce few or no extractions. These are expected coverage gaps.
+- [x] **Binomial names from "previously/formerly" context** — `extractNamesFromCapture` now strips the entire formerly/previously portion (including former scientific names) up to transition phrases like "more commonly", "commonly/also called", or articles. Formerly affected: Elegia tectorum, Phedimus spurius.
+- [x] **Possessive vs non-possessive variants** — Dedup in `extractNamesFromCapture` and extraction functions normalizes by stripping `'s` before comparison, so "David's viburnum" and "David viburnum" are treated as the same name.
+- [x] **Names not in article intro** — `findAllPatternMatches` iteratively finds ALL matches for each pattern across the full article text, not just the first occurrence. Non-anchored patterns now capture names in later sections (e.g., "Common names include A..." sections).
+- [x] **Non-standard article formats** — Wikipedia API call now uses `redirects=` to follow redirect pages. Pronunciation artifacts (text containing `/`) are filtered out by `extractNamesFromCapture`. List-heavy articles remain a known coverage gap (not all formats have pattern support).
 
 ## Tests
 

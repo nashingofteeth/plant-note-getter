@@ -308,12 +308,13 @@ async function fetchGbifCommonNames(gbifId) {
     for (const name of parts) {
       const normalized = stripArticle(name);
       if (!normalized) continue;
-      const lower = normalized.toLowerCase();
-      if (nonEnglishNames.has(lower)) continue;
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        names.push(normalized);
-      }
+    const lower = normalized.toLowerCase();
+    const dedupKey = lower.replace(/'s\b/g, '');
+
+    if (!seen.has(dedupKey)) {
+      seen.add(dedupKey);
+      names.push(normalized);
+    }
     }
   }
 
@@ -484,10 +485,24 @@ function extractNamesFromCapture(captured) {
 
   let segment = captured;
 
-  // Strip introductory prefixes like "commonly known as", "also known as", "also called", "commonly named"
-  segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called|named)\s+/i, '');
-  // Strip "formerly" / "previously" prefixes (taxonomic history, not common names)
-  segment = segment.replace(/^(?:formerly|previously)\s+/i, '');
+  // Handle segments from "formerly/previously" context: remove the former names
+  // entirely up to transition phrases ("more commonly", "commonly/also called", article)
+  // so that former scientific name binomials don't leak into results as common names
+  const hadFormerlyPrefix = /^(?:formerly|previously)\s+/i.test(segment);
+  if (hadFormerlyPrefix) {
+    // Primary: strip up to a transition keyword separating former names from common names
+    segment = segment.replace(
+      /^(?:formerly|previously)\s+(?:(?:[^,]+)\s*,\s*)?(?:more\s+(?:commonly|often)|commonly\s+called|also\s+called|the|a|an)\s*/i, ''
+    );
+    // Fallback: if "formerly/previously" still present, there was no transition —
+    // remove everything (the entire capture is former names, no common names)
+    segment = segment.replace(/^(?:formerly|previously)\s+.*$/i, '');
+  } else {
+    // Strip other introductory prefixes like "commonly known as", "also known as", etc.
+    segment = segment.replace(/^(?:commonly\s+)?(?:also\s+)?(?:(?:known\s+(?:commonly\s+)?as)|(?:also\s+)?called|named)\s+/i, '');
+    // Strip "formerly" / "previously" prefixes (taxonomic history, not common names)
+    segment = segment.replace(/^(?:formerly|previously)\s+/i, '');
+  }
 
   // Extract names from parentheticals with comma-separated lists before stripping them
   // e.g., "(e.g. ox-eye daisy, Shasta daisy)" -> extract "ox-eye daisy", "Shasta daisy"
@@ -603,6 +618,9 @@ function extractNamesFromCapture(captured) {
     // Skip names containing CJK characters (Chinese, Japanese, Korean)
     if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(normalized)) continue;
 
+    // Skip names containing forward slashes (IPA pronunciation artifacts like "/pɪˈkæn/")
+    if (/\//.test(normalized)) continue;
+
     // Skip generic food/plant terms that aren't meaningful common names
     if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?)$/i.test(normalized)) continue;
 
@@ -635,11 +653,29 @@ function extractNamesFromCapture(captured) {
   return names;
 }
 
+function findAllPatternMatches(text, patternFn) {
+  const matches = [];
+  let searchPos = 0;
+  let iterations = 0;
+  const MAX_ITERATIONS = 5;
+  while (searchPos < text.length && iterations < MAX_ITERATIONS) {
+    const subtext = text.slice(searchPos);
+    const m = patternFn(subtext);
+    if (!m) break;
+    const matchLen = m[0].length;
+    if (matchLen === 0) break;
+    matches.push(m[1]);
+    searchPos += m.index + matchLen;
+    iterations++;
+  }
+  return matches;
+}
+
 async function fetchWikipediaCommonNames(wikipediaTitle) {
   if (!wikipediaTitle) return [];
 
   await rateLimit();
-  const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&explaintext=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
+  const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&explaintext=&redirects=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
   const data = await fetchJSON(url);
   const pages = data?.query?.pages;
   if (!pages) return [];
@@ -649,15 +685,16 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const names = [];
   const seen = new Set();
   for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {
-    const m = WIKI_PATTERNS[pi](extract);
-    if (!m) continue;
-    const captured = m[1];
-    const extracted = extractNamesFromCapture(captured);
-    for (const name of extracted) {
-      const lower = name.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        names.push(name);
+    const captures = findAllPatternMatches(extract, WIKI_PATTERNS[pi]);
+    for (const captured of captures) {
+      const extracted = extractNamesFromCapture(captured);
+      for (const name of extracted) {
+        const lower = name.toLowerCase();
+        const dedupKey = lower.replace(/'s\b/g, '');
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          names.push(name);
+        }
       }
     }
   }
@@ -781,15 +818,16 @@ function extractWikipediaCommonNames(text) {
   const names = [];
   const seen = new Set();
   for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {
-    const m = WIKI_PATTERNS[pi](text);
-    if (!m) continue;
-    const captured = m[1];
-    const extracted = extractNamesFromCapture(captured);
-    for (const name of extracted) {
-      const lower = name.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        names.push(name);
+    const captures = findAllPatternMatches(text, WIKI_PATTERNS[pi]);
+    for (const captured of captures) {
+      const extracted = extractNamesFromCapture(captured);
+      for (const name of extracted) {
+        const lower = name.toLowerCase();
+        const dedupKey = lower.replace(/'s\b/g, '');
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          names.push(name);
+        }
       }
     }
   }
