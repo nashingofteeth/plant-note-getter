@@ -57,6 +57,7 @@
   "conifer": "pinophyta",
   "genistoids": null,
   "aspleniales": "polypodiales",
+  "orchid": "orchidaceae",
   "_inject": {
     "pteridophyta": [
       "tracheophytes"
