@@ -282,6 +282,96 @@ const TESTS = [
     extract: 'Crassula ovata, commonly known as jade plant, lucky plant, money plant or money tree, is a succulent plant with small pink or white flowers that is native to the KwaZulu-Natal and Eastern Cape provinces of South Africa, and Mozambique.',
     expected: ['jade plant', 'lucky plant', 'money plant', 'money tree'],
   },
+  {
+    name: 'Betula pubescens (Pattern K — cross-sentence boundary fix, no geographic junk)',
+    extract: 'Betula pubescens (syn. Betula alba), commonly known as downy birch and also as moor birch, white birch, European white birch or hairy birch, is a species of deciduous tree, native and abundant throughout northern Europe and northern Asia, growing further north than any other broadleaf tree. It is closely related to, and often confused with, the silver birch (B. pendula), but grows in wetter places with heavier soils and poorer drainage; smaller trees can also be confused with the dwarf birch (B. nana).',
+    expected: ['downy birch', 'moor birch', 'white birch', 'European white birch', 'hairy birch'],
+  },
+  {
+    name: 'Cosmic Crisp (Pattern B — cross-sentence fix, no "cross between" or "apple")',
+    extract: 'Cosmic Crisp is an American apple with the cultivar designation WA 38, a cross between Honeycrisp and Enterprise apples. Breeding began in 1997 at Washington State University, and the apple was commercially released in 2019. The Cosmic Crisp has seen strong and growing sales since its launch.',
+    expected: [],
+  },
+  {
+    name: 'Yucca brevifolia (Pattern E — language qualifier "Spanish" filtered from parenthetical)',
+    extract: 'Yucca brevifolia (also known as the Joshua tree, yucca palm, tree yucca, and palm tree yucca) is a plant species belonging to the genus Yucca. It is tree-like in appearance, which is reflected in its common names.\n\nIt is also called izote de desierto (Spanish, "desert dagger"). It is also called hunuvat chiy\'a or humwichawa by the indigenous Cahuilla.',
+    expected: ['Joshua tree', 'yucca palm', 'tree yucca', 'palm tree yucca', 'izote de desierto'],
+  },
+  {
+    name: 'Pinus attenuata (Pattern C — scientific name in apposition rejected; Pattern E — parenthetical synonym rejected)',
+    extract: 'The knobcone pine, Pinus attenuata (also called Pinus tuberculata), is a tree that grows in mild climates on poor soils. It ranges from the mountains of southern Oregon to Baja California with the greatest concentration in northern California and the Oregon-California border.',
+    expected: [],
+  },
+  {
+    name: 'Pyrus pyrifolia (Pattern F — "known by many names" not "common names", no extraction)',
+    extract: 'Pyrus pyrifolia is a species of pear tree native to southern China and northern Indochina that has been introduced to Korea, Japan and other parts of the world. The tree\'s edible fruit is known by many names, including Asian pear, Persian pear, Japanese pear, Chinese pear, Korean pear, Taiwanese pear, apple pear, zodiac pear, three-halves pear, papple, naspati, and sand pear.',
+    expected: [],
+  },
+  {
+    name: 'Carduus pycnocephalus ("with common names including" prefix via Pattern C)',
+    extract: 'Carduus pycnocephalus, with common names including Italian thistle, Italian plumeless thistle, and Plymouth thistle, is a species of thistle.',
+    expected: ['Italian thistle', 'Italian plumeless thistle', 'Plymouth thistle'],
+  },
+  {
+    name: 'Nepenthes ampullaria (etymology parenthetical filtered — "meaning")',
+    extract: 'Nepenthes ampullaria (; Latin ampulla meaning "flask") is a very distinctive and widespread species of tropical pitcher plant, present in Borneo, the Maluku Islands, New Guinea, Peninsular Malaysia, Singapore, Sumatra, and Thailand.',
+    expected: [],
+  },
+  {
+    name: 'Valencia orange (cultivar list junk filtered — trade names not extracted)',
+    extract: 'Biondo Comune ("ordinary blond"): widely grown in the Mediterranean basin, especially in North Africa, Egypt, Greece (where it is called "koines"), Italy (where it is also known as "Liscio"), and Spain; it also is called "Beledi" and "Nostrale"; in Italy, this variety ripens in December, earlier than the competing Tarocco variety',
+    expected: [],
+  },
+  {
+    name: 'Digitalis (Pattern E — "commonly called X." capitalized word fallback)',
+    extract: 'Digitalis is a genus of about 20 species of herbaceous perennial plants, shrubs, and biennials, commonly called foxgloves.\nDigitalis is native to Europe, Western Asia, and northwestern Africa.',
+    expected: ['foxgloves'],
+  },
+  {
+    name: 'Juglans regia (Pattern H — "known by various common names")',
+    extract: 'Juglans regia, known by various common names including the common walnut, English walnut, or Persian walnut amongst other names, is a species of walnut.',
+    expected: ['common walnut', 'English walnut'],
+  },
+  {
+    name: 'Camellia sasanqua (Pattern C — "with common name" prefix strip)',
+    extract: 'Camellia sasanqua, with common name Sasanqua camellia or Christmas camellia, is a species of Camellia.',
+    expected: ['Sasanqua camellia', 'Christmas camellia'],
+  },
+  {
+    name: 'Galanthus (Pattern A — etymology parenthetical "from Ancient Greek" skipped)',
+    extract: 'Galanthus (from Ancient Greek γάλα, (gála, "milk") + ἄνθος (ánthos, "flower")), or snowdrop, is a small genus of bulbous perennial herbaceous plants.',
+    expected: ['snowdrop'],
+  },
+  {
+    name: 'Allium cepa (Pattern C — "from Latin" epithet stripped)',
+    extract: 'The onion (Allium cepa L., from Latin cepa), also known as the bulb onion or common onion, is a vegetable that is the most widely cultivated species of the genus Allium.',
+    expected: ['bulb onion', 'common onion'],
+  },
+  {
+    name: 'Platanus (Pattern A — pronunciation notation "PLAT-ən-əss" filtered)',
+    extract: 'Platanus ( PLAT-ən-əss) is a genus consisting of a small number of tree species.',
+    expected: [],
+  },
+  {
+    name: 'Sabal palmetto (Pattern K — botanical phrase "terminal bud" filtered)',
+    extract: 'The growing heart of the new fronds, also known as the terminal bud, gives the tree its "cabbage" name, since this is extracted as a food and tastes like other undifferentiated plant meristem tissue, such as the heart of a cabbage or artichoke.',
+    expected: [],
+  },
+  {
+    name: 'Hosta (parenthetical — "alpines" generic term filtered)',
+    extract: 'Hosta (also known as hostas, plantain lilies, and alpines) is a genus of plants commonly known as hostas.',
+    expected: ['Hosta', 'hostas', 'plantain lilies'],
+  },
+  {
+    name: 'Populus tremula (Pattern A — hybrid "×" notation filtered; Pattern D captures grey poplar)',
+    extract: 'Populus tremula (commonly called aspen, common aspen) is a species. Its hybrid with Populus alba, known as grey poplar, Populus × canescens, is widely found in Europe.',
+    expected: ['aspen', 'common aspen', 'grey poplar'],
+  },
+  {
+    name: 'Hevea brasiliensis (Pattern B — "most commonly" fragment filtered)',
+    extract: 'Hevea brasiliensis, the Pará rubber tree, sharinga tree, seringueira, or, most commonly, rubber tree or rubber plant, is a flowering plant belonging to the spurge family.',
+    expected: ['Pará rubber tree', 'sharinga tree', 'seringueira', 'rubber tree', 'rubber plant'],
+  },
 ];
 
 let passed = 0;

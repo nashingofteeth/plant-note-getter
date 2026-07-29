@@ -341,8 +341,12 @@ const WIKI_PATTERNS = [
     if (m2) {
       const firstSegment = m2[1].split(';')[0].trim();
       if (firstSegment.includes(':')) return null; // Skip pronunciation guides
+      // Skip pronunciation notation (e.g., "PLAT-ən-əss")
+      if (/^[A-Z-]{2,}[-–]/.test(firstSegment)) return null;
       // Skip "syn." notation (taxonomic synonym, not a common name)
       if (/^syn\.\s+/i.test(firstSegment)) return null;
+      // Skip etymology parentheticals (e.g., "(from Ancient Greek ...)")
+      if (/^from\s+(?:Ancient|Modern)?\s*(?:Greek|Latin)\b/i.test(firstSegment)) return null;
       // Try extracting names from inside the parenthetical first
       const fromInside = extractNamesFromCapture(m2[1]);
       // Also try to extract the name BEFORE the parenthetical
@@ -365,7 +369,12 @@ const WIKI_PATTERNS = [
       if (fromInside.length > 0) return m2;
       // If nothing extracted from inside, extract the name BEFORE the parenthetical
       // Skip if it looks like a scientific name (Genus species) — not a common name
-      if (nameMatch && !/^[A-Z][a-z]+\s+[a-z]+$/.test(nameMatch[1])) return [m2[0], nameMatch[1]];
+      // Also skip single-word capitalized names preceded by syn./cf. notation in parens
+      if (nameMatch && !/^[A-Z][a-z]+\s+[a-z]+$/.test(nameMatch[1])) {
+        // Skip if before-paren is single capitalized word and paren content is taxonomic
+        if (/^[A-Z][a-z]+$/.test(nameMatch[1]) && /[\s,]*syn\./i.test(m2[1])) return null;
+        return [m2[0], nameMatch[1]];
+      }
     }
     return m2 || null;
   },
@@ -383,12 +392,14 @@ const WIKI_PATTERNS = [
   // Handle both "names, is" and "names is" (no comma before verb)
   // Use negative lookbehind to reject relative clause fragments ending in
   // "which" or "that" (e.g., "the fruit of which is")
-  (text) => text.match(/^[^,]{1,100},\s+(?:the|a|an)\s+(.+?)(?<!\b(?:which|that))\s*,?\s+(?:is|are|was|were|has|have)\b/i),
+  // Use [^.;!?] to prevent crossing sentence boundaries
+  (text) => text.match(/^[^,]{1,100},\s+(?:the|a|an)\s+([^.;!?]+?)(?<!\b(?:which|that))\s*,?\s+(?:is|are|was|were|has|have)\b/i),
 
   // C: Appositive without article: "ScientificName, commonName, is/are..."
   // NOT preceded by "the", "a", or "an"
   // Lazy non-period capture to support comma-separated name lists
-  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)([^.]+?),\s+(?:is|are|was|were|has|have)\b/i),
+  // Use (?![A-Z][a-z]+\s+[a-z]+\s*\() to reject scientific names in apposition (e.g., "ScientificName, Pinus attenuata (syn...), is")
+  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)(?![A-Z][a-z]+\s+[a-z]+\s*\()([^.]{1,100}?),\s+(?:is|are|was|were|has|have)\b/i),
 
   // D: "known as" / "commonly known as" / "also known as"
   // Lazy capture, non-period chars to prevent crossing sentence boundaries
@@ -397,9 +408,10 @@ const WIKI_PATTERNS = [
 
   // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
   // Lazy capture so abbreviation periods (e.g. "subsp.") don't break the match
+  // Use ((?:(?!,\s+(?:is|are|was|were)\b).)+?) to stop at comma+verb boundary within X
   // Reject match if preceded by an unmatched open paren (inside a parenthetical about another subject)
   (text) => {
-    const m = text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+(.+?)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i);
+    const m = text.match(/(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+((?:(?!,\s+(?:is|are|was|were)\b).)+?)\.\s+(?:It|They)\s+(?:is|are|was|were)\b/i);
     if (!m) return null;
     const matchStart = m.index;
     const before = text.slice(0, matchStart);
@@ -417,29 +429,35 @@ const WIKI_PATTERNS = [
   (text) => {
     // Try comma-verb first (primary case)
     const m1 = text.match(/(?:also|often|sometimes|commonly)\s+called\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i);
-    if (m1) return m1;
+    if (m1 && !/\)\s*$/.test(m1[1])) return m1;
     // Fallback: period followed by "It/They" (e.g., "commonly called X. It includes...")
     const m2 = text.match(/(?:also|often|sometimes|commonly)\s+called\s+([^.]+)\.\s+(?:It|They)\s+(?:is|are|was|were|has|have|includes)\b/i);
     if (m2) return m2;
     // Fallback: "more commonly X, is/are..." (e.g., "more commonly Cape thatching reed, or dakriet, is...")
     const m3 = text.match(/more\s+commonly\s+(.+?),\s+(?:is|are|was|were|has|have)\b/i);
-    return m3 || null;
+    if (m3) return m3;
+    // Fallback: "commonly called X." followed by capitalized word (e.g., "...commonly called foxgloves.\nDigitalis is...")
+    // Only "commonly" to avoid matching "also called X by..." indigenous names
+    const m4 = text.match(/commonly\s+called\s+([^.]{1,60}?)\.(?:\s+[A-Z]|$)/i);
+    return m4 || null;
   },
 
   // F: "Common names include/are" / "Other common names include/are" / "Common names exist...such as"
   // Match to the first sentence-ending period outside parentheses
   // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
-  (text) => text.match(/(?:other\s+)?common\s+names\s+(?:for\s+.+?\s+)?(?:include|are|exist),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
+  // Also handles "common names, including" (comma before include)
+  (text) => text.match(/(?:other\s+)?common\s+names[\s,]+(?:for\s+[^,.;]+?\s+)?(?:\binclud(?:e|es|ed|ing)\b|are\b|exist\b),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // F2: "with the common names X, Y, and Z, is..." (names listed directly, no keyword)
   (text) => text.match(/with\s+the\s+common\s+names\s+([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // G: "English/vernacular names variously applied/include"
-  (text) => text.match(/(?:english|vernacular)\s+names\b[\s\S]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
+  (text) => text.match(/(?:english|vernacular)\s+names\b[^.;]*?include\s+(.+?)\.(?:\s+[A-Z]|$)/i),
 
-  // H: "known by the common name(s) X, Y, and Z" (singular or plural)
-  // [^.]+? to stay within first sentence (abbreviation periods handled by filters)
-  (text) => text.match(/known by the common names?\s+([^.]+?)\.(?:\s+[A-Z]|$)/i),
+  // H: "known by the/common name(s) X, Y, and Z" (singular or plural)
+  // Also handles "known by various common names" where "the" is replaced
+  // Capture limited to 120 chars to avoid consuming entire sentence
+  (text) => text.match(/known\s+by\s+(?:\w+\s+)?common\s+names?\s+([^.]{1,120}?)\.(?:\s+[A-Z]|$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
   // Constrain to current sentence — don't cross period or section header boundaries
@@ -450,7 +468,7 @@ const WIKI_PATTERNS = [
   },
 
   // M: "The name X is (often|sometimes|generally|widely) applied to..." — e.g., "The name Peruvian lily is often applied to..."
-  (text) => text.match(/\bThe\s+name\s+(.+?)\s+(?:is|are|was|were)\s+(?:(?:often|sometimes|generally|widely|also)\s+)?applied\s+to\b/i),
+  (text) => text.match(/\bThe\s+name\s+([^.;]{2,40}?)\s+(?:is|are|was|were)\s+(?:(?:often|sometimes|generally|widely|also)\s+)?applied\s+to\b/i),
 
   // N: "also/commonly referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
   (text) => text.match(/(?:also|commonly)\s+referred\s+to\s+as\s+([^.]+)\./i),
@@ -485,6 +503,15 @@ function extractNamesFromCapture(captured) {
 
   let segment = captured;
 
+  // Strip "with common name(s) including/of/are" prefix (Catches pattern C captures)
+  segment = segment.replace(/^with\s+(?:the\s+)?common\s+names?\s+(?:including|of|are)\s+/i, '');
+  // Strip "with the common name" directly (e.g., "with common name Sasanqua camellia")
+  segment = segment.replace(/^with\s+(?:the\s+)?common\s+name\s+/i, '');
+  // Also strip the same without "with"
+  segment = segment.replace(/^(?:common|vernacular|local)\s+names?\s+(?:including|of|are)\s+/i, '');
+  // Strip "common name" directly (e.g., "common name ice poppy" from pattern C without article)
+  segment = segment.replace(/^(?:common|vernacular|local)\s+name\s+/i, '');
+
   // Handle segments from "formerly/previously" context: remove the former names
   // entirely up to transition phrases ("more commonly", "commonly/also called", article)
   // so that former scientific name binomials don't leak into results as common names
@@ -513,8 +540,12 @@ function extractNamesFromCapture(captured) {
     if (/^(?:syn\.|simplified|traditional|pinyin|[Α-Ωα-ω]|[\u4e00-\u9fff]|\d)/i.test(inner)) continue;
     // Skip parentheticals that are clarifications (e.g., "not to be confused with")
     if (/not\s+to\s+be\s+confused/i.test(inner)) continue;
+    // Skip parentheticals containing quotation marks (glosses/translations like '"milk"', not name lists)
+    if (/["\u201C\u201D\u2018\u2019]/.test(inner)) continue;
     // Skip parentheticals that are geographic/language qualifiers (e.g., "US, via Kikongo")
     if (/\b(?:US|UK|via|from|in)\b/i.test(inner)) continue;
+    // Skip parentheticals that start with a language name (e.g., "Spanish, desert dagger")
+    if (/^(?:spanish|french|german|italian|portuguese|dutch|russian|chinese|japanese|korean|arabic|hindi|turkish|greek|latin|english|local|native)\b/i.test(inner)) continue;
     // Skip parentheticals that contain colons (pronunciation guides like "US: , UK: ")
     if (inner.includes(':')) continue;
     // Check if it contains comma-separated items (likely a list of names)
@@ -525,10 +556,25 @@ function extractNamesFromCapture(captured) {
       const items = cleaned.split(/\s*,\s*/);
       for (const item of items) {
         const name = item.trim().replace(/^["'\u201C\u201D\s]+|["'\u201C\u201D\s.,;:]+$/g, '').trim();
-        if (name && !seen.has(name.toLowerCase())) {
-          seen.add(name.toLowerCase());
-          names.push(name);
-        }
+        if (!name) continue;
+        const lower = name.toLowerCase();
+        if (seen.has(lower)) continue;
+        // Filter standalone country names
+        if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i.test(name)) continue;
+        // Filter phrases starting with connectors
+        if (/^(and|or)\s+\w+\s+\w+/i.test(lower)) continue;
+        // Filter stopwords
+        if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
+        // Filter filler/descriptive starters
+        if (/^(primarily|especially|particularly|usually|typically|including|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later)\b/i.test(lower)) continue;
+        // Filter rank terms
+        if (/^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(name)) continue;
+        // Filter CJK characters
+        if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(name)) continue;
+        // Filter numeric
+        if (/\d/.test(lower)) continue;
+        seen.add(lower);
+        names.push(name);
       }
     }
   }
@@ -549,6 +595,8 @@ function extractNamesFromCapture(captured) {
   // Replace "and", "or" (with or without adjacent commas) with commas
   // Use word boundaries to avoid matching inside words like "oregano" or "andromeda"
   segment = segment.replace(/,?\s+\b(?:and|or)\b\s*,?\s*/gi, ',');
+  // Split on taxonomic transition phrases to separate scientific names from common names
+  segment = segment.replace(/\s+(?:also|previously|formerly)\s+(?:called|known\s+as)\s+/gi, ',');
   // Clean up double commas and comma-whitespace
   segment = segment.replace(/\s*,\s*,/g, ',').replace(/,\s*,/g, ',').trim();
 
@@ -566,6 +614,28 @@ function extractNamesFromCapture(captured) {
 
     // Strip standalone "also" prefix from middle segments (e.g., "also Himalayan clematis")
     name = name.replace(/^also\s+/i, '').trim();
+    if (!name) continue;
+
+    // Strip "it also is called", "it is called", "it is known as" from middle segments
+    name = name.replace(/^it\s+(?:also\s+)?(?:is\s+)?(?:called|known\s+as)\s+/i, '').trim();
+    if (!name) continue;
+
+    // Strip "in Italy", "in this", "in that" geographic/locator fragments
+    name = name.replace(/^in\s+(?:[A-Z][a-z]+\s+)?(?:this|that|the|its|some)\s+/i, '').trim();
+    if (!name) continue;
+
+    // Strip "from Latin cepa", "from Ancient Greek gála" etymology prefixes (full phrase)
+    if (/^from\s+(?:(?:Ancient|Modern)\s+)?(?:Latin|Greek)\s+/i.test(name)) {
+      name = name.replace(/^from\s+(?:(?:Ancient|Modern)\s+)?(?:Latin|Greek)\s+\S+/i, '').trim();
+    }
+    if (!name) continue;
+
+    // Strip "where it is called" / "where it is known as" fragments
+    name = name.replace(/^where\s+it\s+(?:is\s+)?(?:known\s+as|called)\s+/i, '').trim();
+    if (!name) continue;
+
+    // Strip any remaining leading/trailing quotes after prefix removal
+    name = name.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
     if (!name) continue;
 
     // Skip "syn. " prefixed names (taxonomic synonym notation, not common names)
@@ -596,7 +666,7 @@ function extractNamesFromCapture(captured) {
     if (/^[\w\s]+:/.test(normalized)) continue;
 
     // Skip pure rank terms and rank-prefixed names
-    if (/^(species|subgenus|genus|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i.test(normalized)) continue;
+    if (/^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i.test(normalized)) continue;
 
     const lower = normalized.toLowerCase();
 
@@ -604,13 +674,16 @@ function extractNamesFromCapture(captured) {
     if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
 
     // Skip filler starts and descriptive phrases
-    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later)\b/i.test(lower)) continue;
+    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later|most)\b/i.test(lower)) continue;
     if (/^(among\s+(?:many|other)|more\s+commonly)/i.test(lower)) continue;
+    // Skip phrases starting with connectors (leak from split lists)
+    if (/^(and|or)\s+\w+\s+\w+/i.test(lower)) continue;
 
     // Skip if it looks like a scientific name (e.g. "R. eglanteria")
     if (/^[A-Z]\.\s+[a-z]+/.test(normalized)) continue;
     if (/^[A-Z][a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+/.test(normalized) && !normalized.includes('-')) continue;
     if (normalized.split(/\s+/).length >= 3 && /^[A-Z][a-z]*\./.test(normalized)) continue;
+
 
     // Skip names with numeric digits or standalone abbreviations
     if (/\d/.test(lower)) continue;
@@ -618,17 +691,45 @@ function extractNamesFromCapture(captured) {
     // Skip names containing CJK characters (Chinese, Japanese, Korean)
     if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(normalized)) continue;
 
+    // Skip names containing "+" symbol (fragment from "X + Y" constructions)
+    if (/\+\s*/.test(normalized)) continue;
+
     // Skip names containing forward slashes (IPA pronunciation artifacts like "/pɪˈkæn/")
     if (/\//.test(normalized)) continue;
 
+    // Skip names containing hybrid multiplication sign (scientific hybrid notation like "Populus × canescens")
+    if (/\u00d7/.test(normalized)) continue;
+
+    // Skip names containing " disease" or "disease" (disease names, not plant common names)
+    if (/\bdisease\b/i.test(normalized)) continue;
+
+    // Skip pronunciation notation (e.g., "PLAT-ən-əss") — case-sensitive, must start with ALL-CAPS
+    if (/^[A-Z-]{2,}[-–]/.test(normalized)) continue;
+
     // Skip generic food/plant terms that aren't meaningful common names
-    if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?)$/i.test(normalized)) continue;
+    if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?|apples?|alpine|alpines|bud|artichoke|terminal|ferns?)$/i.test(normalized)) continue;
 
     // Skip "native to X" geographic descriptions
     if (/^native\s+to\s+/i.test(normalized)) continue;
 
     // Skip "species of X" generic descriptors
     if (/^species\s+of\s+/i.test(normalized)) continue;
+
+    // Skip descriptive botanical phrases (e.g., "terminal bud", "apical meristem")
+    if (/^(terminal|apical|axillary|primary)\s+(bud|meristem|shoot|root)$/i.test(normalized)) continue;
+
+    // Skip segments starting with verb forms (sentence fragments leaking past comma+verb boundary)
+    if (/^(?:is|are|was|were)\s+/i.test(normalized)) continue;
+
+    // Skip "cross between" cultivar parentage descriptions
+    if (/^cross\s+between\b/i.test(normalized)) continue;
+
+    // Skip sentence fragments starting with demonstratives (e.g., "this variety ripens in December")
+    if (/^(?:this|that|these|those)\s+\w+\s+\w+/i.test(normalized)) continue;
+
+    // Skip descriptive geographic/distribution terms
+    if (/^(?:native|abundant|widespread|growing|ranging|found|occurs?|occurring|distributed|facing|collector)\b/i.test(normalized)) continue;
+    if (/^throughout\s+/i.test(normalized)) continue;
 
     // Skip "to [direction]" geographic fragments
     if (/^to\s+(?:western|southern|northern|eastern|central)\b/i.test(normalized)) continue;
@@ -642,8 +743,11 @@ function extractNamesFromCapture(captured) {
     // Skip single capitalized words ending in taxonomic rank suffixes
     if (/^[A-Z][a-z]+(?:aceae|idae|inae|oideae|ales|ophyta|opsida|eae)$/.test(normalized)) continue;
 
+    // Skip etymology descriptions (e.g., "Latin ampulla meaning flask")
+    if (/\bmeaning\s+/i.test(normalized)) continue;
+
     // Skip standalone country/continent names (leak from descriptive text)
-    if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas)$/i.test(normalized)) continue;
+    if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i.test(normalized)) continue;
 
     if (!seen.has(lower)) {
       seen.add(lower);
