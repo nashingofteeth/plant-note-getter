@@ -236,7 +236,12 @@ async function main() {
       if (Object.keys(updates).length > 0) {
         console.log('  Available updates:');
         for (const [k, v] of Object.entries(updates)) {
-          const display = Array.isArray(v) ? v.join(', ') : v;
+          let display = Array.isArray(v) ? v.join(', ') : v;
+          if (k === 'aliases' && Array.isArray(v) && result.frontMatter?.aliases) {
+            const existingLower = new Set(result.frontMatter.aliases.map(a => a.toLowerCase()));
+            const newAliases = v.filter(a => !existingLower.has(a.toLowerCase()));
+            display = newAliases.join(', ');
+          }
           console.log(`    ${k}: ${display}`);
         }
         if (autoApply) {
