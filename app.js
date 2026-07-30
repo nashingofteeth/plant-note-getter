@@ -132,11 +132,10 @@ async function main() {
     const synonymData = await collectSynonymData(entity, candidateEntities);
     entity.wikipediaUrl = synonymData.wikipediaUrl;
     entity.commonNames = synonymData.commonNames;
+    const entityWikidataAliases = [...(entity.aliases || [])];
     if (synonymData.synonymNames.length > 0) {
-      entity.aliases = [...(entity.aliases || []), ...synonymData.synonymNames];
+      entity.aliases = [...entityWikidataAliases, ...synonymData.synonymNames];
     }
-    const wikidataNames = [...entity.commonNames];
-
     let gbifNamesRaw = [];
     const gbifId = entity.gbifId;
     if (gbifId) {
@@ -172,15 +171,17 @@ async function main() {
       }
     }
 
+    const aliases = buildAliases(entity);
+
     printSection('Entity');
 
     console.log(`  Scientific name: ${entity.scientificName} (${entity.id})`);
     console.log(`  Rank: ${entity.rankLabel || 'unknown'}`);
-    console.log('  Common names:');
-    if (wikidataNames.length > 0) console.log(`    (Wikidata): ${wikidataNames.join(', ')}`);
+    console.log('  Aliases:');
+    if (entityWikidataAliases.length > 0) console.log(`    (Wikidata): ${entityWikidataAliases.join(', ')}`);
     if (gbifNamesRaw.length > 0) console.log(`    (GBIF): ${gbifNamesRaw.join(', ')}`);
     if (wikiNamesRaw.length > 0) console.log(`    (Wikipedia): ${wikiNamesRaw.join(', ')}`);
-    console.log(`    (Combined): ${entity.commonNames.join(', ')}`);
+    console.log(`    (Combined): ${aliases ? aliases.join(', ') : '(none)'}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
 
     printSection('Taxonomy');
@@ -192,7 +193,6 @@ async function main() {
     const labelMap = loadLabelMap(LABEL_MAP_PATH);
     const { segments, originals } = buildTagSegmentsWithOriginals(ancestors, entity.id, labelMap);
     let tag = segments.join('/');
-    const aliases = buildAliases(entity);
 
     console.log(`  Tag: ${tag}`);
 
