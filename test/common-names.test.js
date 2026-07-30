@@ -377,6 +377,11 @@ const TESTS = [
     extract: 'Hevea brasiliensis, the Pará rubber tree, sharinga tree, seringueira, or, most commonly, rubber tree or rubber plant, is a flowering plant belonging to the spurge family.',
     expected: ['Pará rubber tree', 'sharinga tree', 'seringueira', 'rubber tree', 'rubber plant'],
   },
+  {
+    name: 'Vanilla planifolia (unmatched paren from abbreviated binomial in Pattern F; single-letter filtered; Pattern N "often simply referred to as")',
+    extract: 'Vanilla planifolia is a species of vanilla orchid native to Mexico, Central America, Colombia, and Brazil. It is one of the primary sources for vanilla flavouring, due to its high vanillin content. Common names include flat-leaved vanilla and  West Indian vanilla (which is also used for the Pompona vanilla, V. pompona), though it is often simply referred to as vanilla. It was first scientifically named in 1808.',
+    expected: ['flat-leaved vanilla', 'West Indian vanilla', 'vanilla'],
+  },
 ];
 
 let passed = 0;

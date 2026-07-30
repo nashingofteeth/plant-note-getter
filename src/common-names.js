@@ -186,8 +186,9 @@ const WIKI_PATTERNS = [
   // M: "The name X is (often|sometimes|generally|widely) applied to..." — e.g., "The name Peruvian lily is often applied to..."
   (text) => text.match(/\bThe\s+name\s+([^.;]{2,40}?)\s+(?:is|are|was|were)\s+(?:(?:often|sometimes|generally|widely|also)\s+)?applied\s+to\b/i),
 
-  // N: "also/commonly referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
-  (text) => text.match(/(?:also|commonly)\s+referred\s+to\s+as\s+([^.]+)\./i),
+  // N: "also/commonly/often referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
+  // Also handles "often simply referred to as" (e.g., Vanilla planifolia)
+  (text) => text.match(/(?:also|commonly|often)\s+(?:simply\s+)?referred\s+to\s+as\s+([^.]+)\./i),
 
   // O: ") AuthorName (common name) is/are/was/were"
   // Catches "(short-stalked false bindweed) is" after taxonomic authority
@@ -291,6 +292,8 @@ function extractNamesFromCapture(captured) {
 
   // Remove bracketed content: (pronunciation), [...], etc.
   segment = segment.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
+  // Remove content from unmatched opening paren to end (e.g. truncated parenthetical)
+  segment = segment.replace(/\([^)]*$/, '');
   // Strip leading/trailing non-word chars
   segment = segment.trim().replace(/^[\s,;:.\-–—]+|[\s,;:.\-–—]+$/g, '');
 
@@ -388,6 +391,8 @@ function extractNamesFromCapture(captured) {
 
     // Skip if it looks like a scientific name (e.g. "R. eglanteria")
     if (isAbbreviatedBinomial(normalized)) continue;
+    // Skip single-letter names (artifacts from abbreviated binomials like "V.")
+    if (/^[A-Za-z]$/.test(normalized)) continue;
     if (/^[A-Z][a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+/.test(normalized) && !normalized.includes('-')) continue;
     if (normalized.split(/\s+/).length >= 3 && /^[A-Z][a-z]*\./.test(normalized)) continue;
 
