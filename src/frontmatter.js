@@ -1,4 +1,4 @@
-const { getCurrentDate, formatAlias } = require('./utils');
+const { getCurrentDate, formatAlias, PLANT_TAG_PREFIX } = require('./utils');
 const { buildTag, buildWikipediaUrl, buildAliases } = require('./taxonomy');
 
 function generateFrontMatter(entity, ancestors, labelMap) {
@@ -74,7 +74,7 @@ function hasPlantTag(frontMatter) {
   if (!frontMatter.tags || !Array.isArray(frontMatter.tags)) {
     return false;
   }
-  return frontMatter.tags.some(t => t.startsWith('life/eukaryota/plantae'));
+  return frontMatter.tags.some(t => t.startsWith(PLANT_TAG_PREFIX));
 }
 
 function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, labelMap = {}) {
@@ -84,7 +84,7 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
   const checks = [
     {
       key: 'tags',
-      isEmpty: (v) => !Array.isArray(v) || v.length === 0 || !v.some(t => t.startsWith('life/eukaryota/plantae')),
+      isEmpty: (v) => !Array.isArray(v) || v.length === 0 || !v.some(t => t.startsWith(PLANT_TAG_PREFIX)),
       hasNew: true,
       newValue: () => [buildTag(ancestors || [], entity?.id, labelMap)]
     },

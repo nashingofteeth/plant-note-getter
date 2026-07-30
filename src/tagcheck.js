@@ -3,7 +3,7 @@ const path = require('path');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./config');
 const { parseFrontMatter, hasPlantTag } = require('./frontmatter');
 const { buildTagSegmentsWithOriginals } = require('./taxonomy');
-const { loadLabelMap } = require('./utils');
+const { loadLabelMap, PLANT_TAG_PREFIX, TAXON_Q_IDS } = require('./utils');
 const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
 
 function getPlantNotesWithTags() {
@@ -17,7 +17,7 @@ function getPlantNotesWithTags() {
       const fm = parseFrontMatter(content);
       if (fm && hasPlantTag(fm)) {
         for (const t of fm.tags) {
-          if (t.startsWith('life/eukaryota/plantae')) {
+          if (t.startsWith(PLANT_TAG_PREFIX)) {
             tags.push(t);
           }
         }
@@ -198,7 +198,7 @@ async function resolveTagForNote(noteName) {
     const content = fs.readFileSync(filepath, 'utf-8');
     const fm = parseFrontMatter(content);
     if (fm && hasPlantTag(fm)) {
-      const tag = fm.tags.find(t => t.startsWith('life/eukaryota/plantae'));
+      const tag = fm.tags.find(t => t.startsWith(PLANT_TAG_PREFIX));
       if (tag) return { tag };
     }
   } catch (e) {
@@ -215,7 +215,7 @@ async function resolveTagForNote(noteName) {
   if (!entity) {
     return { error: `Could not fetch Wikidata data for '${noteName}'` };
   }
-  const isValidTaxon = entity.instanceOf.some(id => ['Q16521', 'Q7136226'].includes(id));
+  const isValidTaxon = entity.instanceOf.some(id => TAXON_Q_IDS.includes(id));
   if (!isValidTaxon) {
     return { error: `'${noteName}' is not a taxon on Wikidata` };
   }

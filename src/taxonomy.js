@@ -1,4 +1,4 @@
-const { stripArticle, isAbbreviatedBinomial } = require('./utils');
+const { stripArticle, isAbbreviatedBinomial, PLANT_TAG_BASE } = require('./utils');
 
 const SKIP_RANKS = new Set([
   'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
@@ -14,7 +14,7 @@ const SKIP_RANKS = new Set([
 
 function buildTagSegments(ancestors, ownId, labelMap) {
   const injections = labelMap._inject || {};
-  const segments = ['life', 'eukaryota', 'plantae'];
+  const segments = [...PLANT_TAG_BASE];
 
   for (const a of ancestors) {
     if (a.id === ownId) continue;
@@ -57,7 +57,7 @@ function buildTag(ancestors, ownId, labelMap) {
 
 function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
   const injections = labelMap._inject || {};
-  const segments = ['life', 'eukaryota', 'plantae'];
+  const segments = [...PLANT_TAG_BASE];
   const originals = ['', '', ''];
 
   for (const a of ancestors) {

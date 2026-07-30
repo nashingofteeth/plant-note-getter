@@ -1,6 +1,12 @@
 const { fetchJSON, rateLimit, GBIF_API, WIKIPEDIA_MEDIAWIKI_API } = require('./api-client');
 const { stripArticle, isAbbreviatedBinomial } = require('./utils');
 
+const CJK_RE = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
+const STOPWORDS_RE = /^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i;
+const COUNTRY_NAMES_RE = /^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i;
+const FILLER_STARTERS_RE = /^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later|most)\b/i;
+const RANK_TERMS_RE = /^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i;
+
 async function fetchGbifCommonNames(gbifId) {
   if (!gbifId) return [];
 
@@ -246,8 +252,8 @@ function extractNamesFromCapture(captured) {
   const parentheticalMatches = segment.match(/\([^)]+\)/g) || [];
   for (const paren of parentheticalMatches) {
     const inner = paren.slice(1, -1); // Remove parentheses
-    // Skip parentheticals that are just pronunciation, translations, or syn. notations
-    if (/^(?:syn\.|simplified|traditional|pinyin|[Α-Ωα-ω]|[\u4e00-\u9fff]|\d)/i.test(inner)) continue;
+        if (/^(?:syn\.|simplified|traditional|pinyin|[Α-Ωα-ω]|\d)/i.test(inner)) continue;
+        if (CJK_RE.test(inner)) continue;
     // Skip parentheticals that are clarifications (e.g., "not to be confused with")
     if (/not\s+to\s+be\s+confused/i.test(inner)) continue;
     // Skip parentheticals containing quotation marks (glosses/translations like '"milk"', not name lists)
@@ -269,18 +275,12 @@ function extractNamesFromCapture(captured) {
         if (!name) continue;
         const lower = name.toLowerCase();
         if (seen.has(lower)) continue;
-        // Filter standalone country names
-        if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i.test(name)) continue;
-        // Filter phrases starting with connectors
+        if (COUNTRY_NAMES_RE.test(name)) continue;
         if (/^(and|or)\s+\w+\s+\w+/i.test(lower)) continue;
-        // Filter stopwords
-        if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
-        // Filter filler/descriptive starters
-        if (/^(primarily|especially|particularly|usually|typically|including|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later)\b/i.test(lower)) continue;
-        // Filter rank terms
-        if (/^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)$/i.test(name)) continue;
-        // Filter CJK characters
-        if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(name)) continue;
+        if (STOPWORDS_RE.test(lower)) continue;
+        if (FILLER_STARTERS_RE.test(lower)) continue;
+        if (RANK_TERMS_RE.test(name)) continue;
+        if (CJK_RE.test(name)) continue;
         // Filter numeric
         if (/\d/.test(lower)) continue;
         seen.add(lower);
@@ -375,16 +375,13 @@ function extractNamesFromCapture(captured) {
     // Skip label-value pairs (e.g. "simplified Chinese: 三角枫", "pinyin: sānjiǎofēng")
     if (/^[\w\s]+:/.test(normalized)) continue;
 
-    // Skip pure rank terms and rank-prefixed names
-    if (/^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i.test(normalized)) continue;
+    if (RANK_TERMS_RE.test(normalized)) continue;
 
     const lower = normalized.toLowerCase();
 
-    // Skip stopwords
-    if (/^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i.test(lower)) continue;
+    if (STOPWORDS_RE.test(lower)) continue;
 
-    // Skip filler starts and descriptive phrases
-    if (/^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later|most)\b/i.test(lower)) continue;
+    if (FILLER_STARTERS_RE.test(lower)) continue;
     if (/^(among\s+(?:many|other)|more\s+commonly)/i.test(lower)) continue;
     // Skip phrases starting with connectors (leak from split lists)
     if (/^(and|or)\s+\w+\s+\w+/i.test(lower)) continue;
@@ -398,8 +395,7 @@ function extractNamesFromCapture(captured) {
     // Skip names with numeric digits or standalone abbreviations
     if (/\d/.test(lower)) continue;
 
-    // Skip names containing CJK characters (Chinese, Japanese, Korean)
-    if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(normalized)) continue;
+    if (CJK_RE.test(normalized)) continue;
 
     // Skip names containing "+" symbol (fragment from "X + Y" constructions)
     if (/\+\s*/.test(normalized)) continue;
@@ -456,8 +452,7 @@ function extractNamesFromCapture(captured) {
     // Skip etymology descriptions (e.g., "Latin ampulla meaning flask")
     if (/\bmeaning\s+/i.test(normalized)) continue;
 
-    // Skip standalone country/continent names (leak from descriptive text)
-    if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i.test(normalized)) continue;
+    if (COUNTRY_NAMES_RE.test(normalized)) continue;
 
     // Skip descriptive appositives ending in "name" (e.g., "rare English regional name")
     if (/\bname\s*$/i.test(normalized)) continue;
@@ -499,120 +494,14 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const extract = Object.values(pages)[0]?.extract;
   if (!extract) return [];
 
-  const names = [];
-  const seen = new Set();
-  for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {
-    const captures = findAllPatternMatches(extract, WIKI_PATTERNS[pi]);
-    for (const captured of captures) {
-      const extracted = extractNamesFromCapture(captured);
-      for (const name of extracted) {
-        const lower = name.toLowerCase();
-        const dedupKey = lower.replace(/'s\b/g, '');
-        if (!seen.has(dedupKey)) {
-          seen.add(dedupKey);
-          names.push(name);
-        }
-      }
-    }
-  }
-
-  return names;
-}
-
-const RANK_LABELS = {
-  Q36732: 'kingdom',
-  Q24017465: 'division',
-  Q30097924: 'class',
-  Q36602: 'order',
-  Q35409: 'family',
-  Q34740: 'genus',
-  Q7432: 'species',
-  Q19858692: 'superkingdom',
-  Q14592334: 'phylum',
-  Q105019: 'subspecies',
-  Q3238261: 'subgenus',
-  Q7486537: 'subfamily',
-  Q5866644: 'suborder',
-  Q11390: 'subdivision',
-  Q148346: 'subclass',
-  Q3238165: 'subtribe',
-  Q171394: 'infraclass',
-  Q315130: 'infraorder',
-  Q501274: 'infrakingdom',
-  Q7136226: 'clade',
-  Q1145090: 'variety',
-  Q1748487: 'form',
-  Q160240: 'section',
-  Q207370: 'series',
-  Q35410: 'tribe',
-  Q205302: 'subtribe',
-  Q227936: 'tribe',
-  Q164280: 'subfamily',
-  Q37517: 'order',
-  Q334460: 'class',
-  Q2869638: 'superfamily',
-  Q3344711: 'infraorder',
-  Q146481: 'domain',
-  Q22666877: 'superdomain',
-  Q2997417: 'no rank',
-  Q1425109: 'no rank'
-};
-
-function isSynonymOf(primaryEntity, candidateEntity) {
-  if (!primaryEntity || !candidateEntity) return false;
-  if ((primaryEntity.taxonSynonymIds || []).includes(candidateEntity.id)) return true;
-  if ((primaryEntity.replacedSynonymOfIds || []).includes(candidateEntity.id)) return true;
-  if ((candidateEntity.synonymOfIds || []).includes(primaryEntity.id)) return true;
-  if ((candidateEntity.replacedSynonymIds || []).includes(primaryEntity.id)) return true;
-
-  const primaryName = (primaryEntity.scientificName || primaryEntity.label || '').toLowerCase();
-  if (candidateEntity.wikipediaTitle && candidateEntity.wikipediaTitle.replace(/_/g, ' ').toLowerCase() === primaryName) return true;
-
-  return false;
-}
-
-async function collectSynonymData(primaryEntity, candidateEntities) {
-  const mergedCommonNames = [...(primaryEntity.commonNames || [])];
-  const seen = new Set(mergedCommonNames.map(n => n.toLowerCase()));
-  const existingAliasLower = new Set((primaryEntity.aliases || []).map(a => a.toLowerCase()));
-  const synonymNames = [];
-  let wikipediaUrl = primaryEntity.wikipediaUrl;
-
-  if (!candidateEntities?.length) {
-    return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
-  }
-
-  for (const candidate of candidateEntities) {
-    if (candidate.id === primaryEntity.id) continue;
-    if (!isSynonymOf(primaryEntity, candidate)) continue;
-
-    for (const name of (candidate.commonNames || [])) {
-      const normalized = stripArticle(name);
-      const lower = normalized.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        mergedCommonNames.push(normalized);
-      }
-    }
-
-    const synName = candidate.scientificName || candidate.label;
-    if (synName) {
-      const lower = synName.toLowerCase();
-      if (!seen.has(lower) && !existingAliasLower.has(lower) && lower !== (primaryEntity.scientificName || '').toLowerCase()) {
-        synonymNames.push(synName);
-        existingAliasLower.add(lower);
-      }
-    }
-
-    if (!wikipediaUrl && candidate.wikipediaUrl) {
-      wikipediaUrl = candidate.wikipediaUrl;
-    }
-  }
-
-  return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
+  return collectNamesFromText(extract);
 }
 
 function extractWikipediaCommonNames(text) {
+  return collectNamesFromText(text);
+}
+
+function collectNamesFromText(text) {
   const names = [];
   const seen = new Set();
   for (let pi = 0; pi < WIKI_PATTERNS.length; pi++) {

@@ -48,6 +48,14 @@ function isAbbreviatedBinomial(name) {
   return ABBREVIATED_BINOMIAL.test(name);
 }
 
+const TAXON_Q_IDS = ['Q16521', 'Q7136226'];
+const PLANT_TAG_BASE = ['life', 'eukaryota', 'plantae'];
+const PLANT_TAG_PREFIX = PLANT_TAG_BASE.join('/');
+
+function cleanName(name) {
+  return stripArticle(name).replace(/\.+$/, '').trim();
+}
+
 module.exports = {
   getCurrentDate,
   sanitizeFilename,
@@ -56,5 +64,9 @@ module.exports = {
   loadLabelMap,
   formatAlias,
   stripArticle,
-  isAbbreviatedBinomial
+  isAbbreviatedBinomial,
+  TAXON_Q_IDS,
+  PLANT_TAG_PREFIX,
+  PLANT_TAG_BASE,
+  cleanName
 };

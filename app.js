@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
-const { sanitizeFilename, loadLabelMap, stripArticle } = require('./src/utils');
+const { sanitizeFilename, loadLabelMap, stripArticle, TAXON_Q_IDS, cleanName } = require('./src/utils');
 const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./src/wikidata');
 const { fetchGbifCommonNames, fetchWikipediaCommonNames } = require('./src/common-names');
 const { buildTagSegmentsWithOriginals, buildAliases } = require('./src/taxonomy');
@@ -90,7 +90,7 @@ async function main() {
       for (const r of results) {
         const entity = await getEntityData(r.id);
         entityCache.set(r.id, entity);
-        if (entity && entity.instanceOf.some(id => ['Q16521', 'Q7136226'].includes(id))) {
+        if (entity && entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
           taxonResults.push({ ...r, rankLabel: entity.rankLabel });
         }
       }
@@ -122,7 +122,7 @@ async function main() {
       process.exit(1);
     }
 
-    const isValidTaxon = entity.instanceOf.some(id => ['Q16521', 'Q7136226'].includes(id));
+    const isValidTaxon = entity.instanceOf.some(id => TAXON_Q_IDS.includes(id));
     if (!isValidTaxon) {
       console.error(`Error: '${input}' is not a taxon or clade on Wikidata`);
       process.exit(1);
@@ -142,7 +142,7 @@ async function main() {
       gbifNamesRaw = await fetchGbifCommonNames(gbifId);
       const seenLower = new Set((entity.commonNames || []).map(n => stripArticle(n).toLowerCase()));
       for (const name of gbifNamesRaw) {
-        const normalized = stripArticle(name).replace(/\.+$/, '').trim();
+        const normalized = cleanName(name);
         const lower = normalized.toLowerCase();
         if (!seenLower.has(lower)) {
           seenLower.add(lower);
@@ -156,7 +156,7 @@ async function main() {
       wikiNamesRaw = await fetchWikipediaCommonNames(entity.wikipediaTitle);
       const wikiSeen = new Set();
       for (const name of wikiNamesRaw) {
-        const normalized = stripArticle(name).replace(/\.+$/, '').trim();
+        const normalized = cleanName(name);
         const lower = normalized.toLowerCase();
         if (wikiSeen.has(lower)) continue;
         wikiSeen.add(lower);

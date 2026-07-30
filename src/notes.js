@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, UPDATES_FILE_PATH } = require('./config');
-const { sanitizeFilename, logUpdates, loadLabelMap } = require('./utils');
+const { sanitizeFilename, logUpdates, loadLabelMap, TAXON_Q_IDS } = require('./utils');
 const { parseFrontMatter, generateFrontMatter, hasPlantTag, analyzeMissingProperties, updateFrontMatter } = require('./frontmatter');
 const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./wikidata');
 const { buildTag } = require('./taxonomy');
@@ -104,7 +104,7 @@ async function populateMissingProperties(applyChanges = false) {
       }
 
       const entity = await getEntityData(results[0].id);
-      if (!entity || !entity.instanceOf.some(id => ['Q16521', 'Q7136226'].includes(id))) {
+      if (!entity || !entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
         console.log(`   Not a taxon or clade\n`);
         plannedUpdates.push({ filename: note.filename, filepath: note.filepath, error: 'Not a taxon or clade' });
         continue;
