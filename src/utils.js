@@ -34,6 +34,10 @@ function loadLabelMap(labelMapPath) {
   }
 }
 
+function stripArticle(name) {
+  return name.replace(/^(the|a|an|and|or|just|simply)\s+/i, '').trim();
+}
+
 function formatAlias(alias) {
   return alias.includes(':') ? `"${alias}"` : alias;
 }
@@ -44,5 +48,6 @@ module.exports = {
   isEmptyValue,
   logUpdates,
   loadLabelMap,
-  formatAlias
+  formatAlias,
+  stripArticle
 };

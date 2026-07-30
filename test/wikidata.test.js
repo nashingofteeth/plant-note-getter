@@ -1,5 +1,7 @@
 const assert = require('node:assert');
-const { isSynonymOf, stripArticle, extractNamesFromCapture } = require('../src/wikidata');
+const { isSynonymOf } = require('../src/wikidata');
+const { stripArticle } = require('../src/utils');
+const { extractNamesFromCapture } = require('../src/common-names');
 
 let passed = 0;
 let failed = 0;

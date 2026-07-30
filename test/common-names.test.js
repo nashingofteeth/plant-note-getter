@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { extractWikipediaCommonNames } = require('../src/wikidata');
+const { extractWikipediaCommonNames } = require('../src/common-names');
 
 const TESTS = [
   {

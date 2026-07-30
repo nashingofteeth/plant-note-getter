@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { sanitizeFilename, formatAlias, getCurrentDate, isEmptyValue } = require('../src/utils');
+const { sanitizeFilename, formatAlias, getCurrentDate, isEmptyValue, stripArticle } = require('../src/utils');
 
 let passed = 0;
 let failed = 0;
@@ -64,6 +64,31 @@ test('isEmptyValue: non-empty values are not empty', () => {
   assert.strictEqual(isEmptyValue('hello'), false);
   assert.strictEqual(isEmptyValue(['a']), false);
   assert.strictEqual(isEmptyValue({ a: 1 }), false);
+});
+
+// ─── stripArticle ────────────────────────────────────────────────────────────
+
+test('stripArticle: strips leading articles and filler words', () => {
+  assert.strictEqual(stripArticle('the oak'), 'oak');
+  assert.strictEqual(stripArticle('a shrub'), 'shrub');
+  assert.strictEqual(stripArticle('an herb'), 'herb');
+  assert.strictEqual(stripArticle('and more'), 'more');
+  assert.strictEqual(stripArticle('or something'), 'something');
+  assert.strictEqual(stripArticle('just oak'), 'oak');
+  assert.strictEqual(stripArticle('simply oak'), 'oak');
+});
+
+test('stripArticle: case insensitive', () => {
+  assert.strictEqual(stripArticle('The Oak'), 'Oak');
+  assert.strictEqual(stripArticle('THE OAK'), 'OAK');
+});
+
+test('stripArticle: no article to strip returns unchanged', () => {
+  assert.strictEqual(stripArticle('oak tree'), 'oak tree');
+});
+
+test('stripArticle: empty string', () => {
+  assert.strictEqual(stripArticle(''), '');
 });
 
 console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);

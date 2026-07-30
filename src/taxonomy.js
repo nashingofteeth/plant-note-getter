@@ -1,3 +1,5 @@
+const { stripArticle } = require('./utils');
+
 const SKIP_RANKS = new Set([
   'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
   'subfamily', 'subtribe', 'subgenus', 'subspecies',
@@ -98,10 +100,6 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
 
 function buildWikipediaUrl(entity) {
   return entity.wikipediaUrl || null;
-}
-
-function stripArticle(name) {
-  return name.replace(/^(the|a|an|and|or|just|simply)\s+/i, '').trim();
 }
 
 function buildAliases(entity) {

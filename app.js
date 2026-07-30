@@ -2,8 +2,9 @@
 
 const fs = require('fs');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
-const { sanitizeFilename, loadLabelMap } = require('./src/utils');
-const { searchTaxon, getEntityData, getParentChain, collectSynonymData, fetchGbifCommonNames, fetchWikipediaCommonNames, stripArticle } = require('./src/wikidata');
+const { sanitizeFilename, loadLabelMap, stripArticle } = require('./src/utils');
+const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./src/wikidata');
+const { fetchGbifCommonNames, fetchWikipediaCommonNames } = require('./src/common-names');
 const { buildTagSegmentsWithOriginals, buildAliases } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
