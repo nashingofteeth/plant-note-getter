@@ -72,9 +72,6 @@ async function getEntityData(id) {
 
   const rankId = claims.P105?.[0]?.mainsnak?.datavalue?.value?.id;
   let rankLabel = RANK_LABELS[rankId] || null;
-  if (!rankLabel && rankId) {
-    rankLabel = rankId;
-  }
 
   const parentIds = (claims.P171 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
 
@@ -90,10 +87,13 @@ async function getEntityData(id) {
     for (const claim of claims.P1843) {
       const val = claim.mainsnak?.datavalue?.value;
       if (val?.language === 'en' || val?.language === 'en-ca' || val?.language === 'en-gb') {
+        // Split on both commas and periods used as separators
         const parts = val.text.replace(/\.+$/, '').split(/\s*,\s*/);
         for (const part of parts) {
-          const trimmed = part.trim().replace(/\.+$/, '');
-          if (trimmed) commonNames.push(trimmed);
+          for (const sub of part.split(/\.\s+/)) {
+            const trimmed = sub.trim().replace(/\.+$/, '');
+            if (trimmed) commonNames.push(trimmed);
+          }
         }
       }
     }
@@ -273,9 +273,6 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
   const existingAliasLower = new Set((primaryEntity.aliases || []).map(a => a.toLowerCase()));
   const synonymNames = [];
   let wikipediaUrl = primaryEntity.wikipediaUrl;
-  let synonymCount = 0;
-  let newCommonCount = 0;
-  let wikiFromSynonym = false;
 
   if (!candidateEntities?.length) {
     return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
@@ -285,15 +282,12 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
     if (candidate.id === primaryEntity.id) continue;
     if (!isSynonymOf(primaryEntity, candidate)) continue;
 
-    synonymCount++;
-
     for (const name of (candidate.commonNames || [])) {
       const normalized = stripArticle(name);
       const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
         mergedCommonNames.push(normalized);
-        newCommonCount++;
       }
     }
 
@@ -308,16 +302,7 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
 
     if (!wikipediaUrl && candidate.wikipediaUrl) {
       wikipediaUrl = candidate.wikipediaUrl;
-      wikiFromSynonym = true;
     }
-  }
-
-  if (synonymCount > 0) {
-    const parts = [];
-    if (wikiFromSynonym) parts.push('wikipedia');
-    if (newCommonCount > 0) parts.push(`${newCommonCount} common name(s)`);
-    if (synonymNames.length > 0) parts.push(`${synonymNames.length} synonym name(s)`);
-    console.log(`  [synonyms] ${synonymCount} verified synonym(s) contributed: ${parts.join(', ')}`);
   }
 
   return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };

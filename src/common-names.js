@@ -34,10 +34,6 @@ async function fetchGbifCommonNames(gbifId) {
     }
   }
 
-  if (names.length > 0) {
-    console.log(`  [gbif] common names: ${names.join(', ')}`);
-  }
-
   return names;
 }
 
@@ -517,10 +513,6 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
     }
   }
 
-  if (names.length > 0) {
-    console.log(`  [wikipedia] common names: ${names.join(', ')}`);
-  }
-
   return names;
 }
 
@@ -582,9 +574,6 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
   const existingAliasLower = new Set((primaryEntity.aliases || []).map(a => a.toLowerCase()));
   const synonymNames = [];
   let wikipediaUrl = primaryEntity.wikipediaUrl;
-  let synonymCount = 0;
-  let newCommonCount = 0;
-  let wikiFromSynonym = false;
 
   if (!candidateEntities?.length) {
     return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
@@ -594,15 +583,12 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
     if (candidate.id === primaryEntity.id) continue;
     if (!isSynonymOf(primaryEntity, candidate)) continue;
 
-    synonymCount++;
-
     for (const name of (candidate.commonNames || [])) {
       const normalized = stripArticle(name);
       const lower = normalized.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
         mergedCommonNames.push(normalized);
-        newCommonCount++;
       }
     }
 
@@ -617,16 +603,7 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
 
     if (!wikipediaUrl && candidate.wikipediaUrl) {
       wikipediaUrl = candidate.wikipediaUrl;
-      wikiFromSynonym = true;
     }
-  }
-
-  if (synonymCount > 0) {
-    const parts = [];
-    if (wikiFromSynonym) parts.push('wikipedia');
-    if (newCommonCount > 0) parts.push(`${newCommonCount} common name(s)`);
-    if (synonymNames.length > 0) parts.push(`${synonymNames.length} synonym name(s)`);
-    console.log(`  [synonyms] ${synonymCount} verified synonym(s) contributed: ${parts.join(', ')}`);
   }
 
   return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };

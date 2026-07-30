@@ -62,8 +62,7 @@ function analyzeHierarchy(tag) {
 }
 
 function printHierarchyRows(rows, firstOnlyChild, segments, tag, noteName) {
-  console.log(`\nChecking hierarchy for: ${noteName}`);
-  console.log(`Tag: ${tag}\n`);
+  console.log(`\nChecking hierarchy for: ${noteName}\n`);
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
