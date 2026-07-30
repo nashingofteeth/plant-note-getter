@@ -42,6 +42,12 @@ function formatAlias(alias) {
   return alias.includes(':') ? `"${alias}"` : alias;
 }
 
+const ABBREVIATED_BINOMIAL = /^[A-Z]\.\s+[a-z]+/;
+
+function isAbbreviatedBinomial(name) {
+  return ABBREVIATED_BINOMIAL.test(name);
+}
+
 module.exports = {
   getCurrentDate,
   sanitizeFilename,
@@ -49,5 +55,6 @@ module.exports = {
   logUpdates,
   loadLabelMap,
   formatAlias,
-  stripArticle
+  stripArticle,
+  isAbbreviatedBinomial
 };

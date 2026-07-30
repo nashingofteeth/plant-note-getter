@@ -1,4 +1,4 @@
-const { stripArticle } = require('./utils');
+const { stripArticle, isAbbreviatedBinomial } = require('./utils');
 
 const SKIP_RANKS = new Set([
   'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
@@ -109,6 +109,7 @@ function buildAliases(entity) {
     const seen = new Set();
     for (const name of entity.commonNames) {
       const normalized = stripArticle(name);
+      if (isAbbreviatedBinomial(normalized)) continue;
       const lower = normalized.toLowerCase();
       if (!seen.has(lower) && lower !== sciLower) {
         seen.add(lower);
@@ -123,6 +124,7 @@ function buildAliases(entity) {
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
+        if (isAbbreviatedBinomial(trimmed)) continue;
         if (!lowerAliases.includes(trimmed.toLowerCase()) && trimmed.toLowerCase() !== entity.scientificName.toLowerCase()) {
           lowerAliases.push(trimmed.toLowerCase());
           aliases.push(trimmed);

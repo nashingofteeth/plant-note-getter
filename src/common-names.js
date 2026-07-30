@@ -1,5 +1,5 @@
 const { fetchJSON, rateLimit, GBIF_API, WIKIPEDIA_MEDIAWIKI_API } = require('./api-client');
-const { stripArticle } = require('./utils');
+const { stripArticle, isAbbreviatedBinomial } = require('./utils');
 
 async function fetchGbifCommonNames(gbifId) {
   if (!gbifId) return [];
@@ -156,7 +156,7 @@ const WIKI_PATTERNS = [
   // Match to the first sentence-ending period outside parentheses
   // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
   // Also handles "common names, including" (comma before include)
-  (text) => text.match(/(?:other\s+)?common\s+names[\s,]+(?:for\s+[^,.;]+?\s+)?(?:\binclud(?:e|es|ed|ing)\b|are\b|exist\b),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
+  (text) => text.match(/(?:(?:other\s+)?common\s+names|other\s+names)[\s,]+(?:for\s+[^,.;]+?\s+)?(?:\binclud(?:e|es|ed|ing)\b|are\b|exist\b),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // F2: "with the common names X, Y, and Z, is..." (names listed directly, no keyword)
   (text) => text.match(/with\s+the\s+common\s+names\s+([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
@@ -390,7 +390,7 @@ function extractNamesFromCapture(captured) {
     if (/^(and|or)\s+\w+\s+\w+/i.test(lower)) continue;
 
     // Skip if it looks like a scientific name (e.g. "R. eglanteria")
-    if (/^[A-Z]\.\s+[a-z]+/.test(normalized)) continue;
+    if (isAbbreviatedBinomial(normalized)) continue;
     if (/^[A-Z][a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+/.test(normalized) && !normalized.includes('-')) continue;
     if (normalized.split(/\s+/).length >= 3 && /^[A-Z][a-z]*\./.test(normalized)) continue;
 
@@ -458,6 +458,9 @@ function extractNamesFromCapture(captured) {
 
     // Skip standalone country/continent names (leak from descriptive text)
     if (/^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i.test(normalized)) continue;
+
+    // Skip descriptive appositives ending in "name" (e.g., "rare English regional name")
+    if (/\bname\s*$/i.test(normalized)) continue;
 
     if (!seen.has(lower)) {
       seen.add(lower);
