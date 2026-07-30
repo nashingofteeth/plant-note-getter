@@ -78,13 +78,15 @@ node app.js --check "Lysimachia borealis"
 
 ```
 src/
+├── api-client.js   — HTTP transport, rate limiting, API URL constants
+├── common-names.js — Common name extraction from GBIF and Wikipedia
 ├── config.js       — Env loading and path config
 ├── frontmatter.js  — YAML front matter generation and parsing
 ├── notes.js        — Note file I/O, vault scanning, populate mode
 ├── tagcheck.js     — Tag hierarchy analysis and interactive pruning
 ├── taxonomy.js     — Tag hierarchy builder, rank filtering
-├── utils.js        — Helpers (sanitize, date, label map loading)
-└── wikidata.js     — Wikidata API client (search, entity data, SPARQL)
+├── utils.js        — Helpers (sanitize, date, label map loading, stripArticle)
+└── wikidata.js     — Wikidata search, entity data, SPARQL parent chain, synonym data
 app.js              — CLI entry point
 label-map.json      — Wikidata label → tag segment mappings
 ```

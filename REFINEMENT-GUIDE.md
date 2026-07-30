@@ -7,7 +7,7 @@ The user provides a taxon name (or a list of taxon names). Process that single n
 ## Data Flow
 
 ```
-app.js → wikidata.js (fetchWikipediaCommonNames → WIKI_PATTERNS → extractNamesFromCapture)
+app.js → wikidata.js → common-names.js (fetchWikipediaCommonNames → WIKI_PATTERNS → extractNamesFromCapture)
        → tagcheck.js → frontmatter.js → notes.js
 ```
 
@@ -72,7 +72,7 @@ These are the ground truth for what the pipeline **did** extract. Any name in `a
 ### 3. Run extraction and compare
 
 ```js
-const { fetchWikipediaCommonNames } = require('./src/wikidata');
+const { fetchWikipediaCommonNames } = require('./src/common-names');
 const extracted = await fetchWikipediaCommonNames(wikipediaTitle);
 ```
 
@@ -96,7 +96,7 @@ Flag suspicious extracted results containing:
 **a. Reproduce in isolation**
 
 ```js
-const { extractWikipediaCommonNames } = require('./src/wikidata');
+const { extractWikipediaCommonNames } = require('./src/common-names');
 const text = '...actual Wikipedia extract...';
 console.log(extractWikipediaCommonNames(text));
 ```
@@ -106,7 +106,7 @@ console.log(extractWikipediaCommonNames(text));
 Test each pattern manually:
 
 ```js
-const WIKI_PATTERNS = [ /* paste from src/wikidata.js */ ];
+const WIKI_PATTERNS = [ /* paste from src/common-names.js */ ];
 const text = '...';
 for (let i = 0; i < WIKI_PATTERNS.length; i++) {
   const m = WIKI_PATTERNS[i](text);
@@ -177,9 +177,9 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 
 | File | Role |
 |------|------|
-| `src/wikidata.js` | `WIKI_PATTERNS` array — search for `const WIKI_PATTERNS` |
-| `src/wikidata.js` | `extractNamesFromCapture()` — cleanup and filtering |
-| `src/wikidata.js` | `fetchWikipediaCommonNames()` — orchestrator |
+| `src/common-names.js` | `WIKI_PATTERNS` array — search for `const WIKI_PATTERNS` |
+| `src/common-names.js` | `extractNamesFromCapture()` — cleanup and filtering |
+| `src/common-names.js` | `fetchWikipediaCommonNames()` — orchestrator |
 | `test/common-names.test.js` | Test cases (hardcoded extracts, no API calls) |
 | `src/frontmatter.js` | `parseFrontMatter()` — read existing note's YAML |
 | `src/utils.js` | `sanitizeFilename()` — compute note path from name |

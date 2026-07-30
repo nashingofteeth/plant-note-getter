@@ -9,7 +9,8 @@ If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus
 ## Data flow
 
 ```
-app.js → wikidata.js (search, entity data, synonyms, GBIF names, Wikipedia names, parent chain)
+app.js → wikidata.js (search, entity data, synonyms, parent chain)
+       → common-names.js (GBIF names, Wikipedia names)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -21,15 +22,17 @@ app.js → wikidata.js (search, entity data, synonyms, GBIF names, Wikipedia nam
 | File | Role |
 |------|------|
 | `app.js` | CLI entry, orchestrates pipeline, supports `--populate` and `--check` modes |
-| `src/wikidata.js` | All external API calls (Wikidata, GBIF, Wikipedia), common name extraction |
+| `src/wikidata.js` | Wikidata search, entity data, SPARQL parent chain, synonym data |
+| `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
+| `src/common-names.js` | Common name extraction from GBIF and Wikipedia (WIKI_PATTERNS, extractNamesFromCapture) |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
 | `src/notes.js` | Filesystem operations: read/write notes, bulk populate |
 | `src/config.js` | Paths from `.env`: NOTE_ROOT, LABEL_MAP_PATH |
-| `src/utils.js` | Shared helpers (filename sanitize, date, label-map loading) |
+| `src/utils.js` | Shared helpers (filename sanitize, date, label-map loading, stripArticle) |
 | `label-map.json` | Single source of truth for tag remaps and hierarchy injections |
-| `test/common-names.test.js` | 14 regression tests, no API calls, runs via `npm test` |
+| `test/common-names.test.js` | 74 regression tests, no API calls, runs via `npm test` |
 | `test/hierarchy.test.js` | 5 tests for tag generation with mocked ancestor chains |
 
 ## Tag hierarchy via label-map.json
@@ -40,12 +43,12 @@ app.js → wikidata.js (search, entity data, synonyms, GBIF names, Wikipedia nam
 2. **Injects missing nodes** via `_inject` (e.g., `"gymnospermae": ["tracheophytes", "spermatophytes"]` adds before the node)
 3. `buildTagSegments` (src/taxonomy.js): starts with `['life', 'eukaryota', 'plantae']`, then for each ancestor (highest to lowest rank): skip if `null` mapping/excluded rank/Q-code, map via `labelMap`, inject any `_inject` entries, append segment (deduped with `.includes()` against all segments, not just last).
 
-## Common name extraction (src/wikidata.js)
+## Common name extraction (src/common-names.js)
 
 ### Pipeline
 
 ```
-Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchWikipediaCommonNames
+Wikidata P1843 claims → wikidata.js (collectSynonymData) → common-names.js (fetchGbifCommonNames → fetchWikipediaCommonNames)
 (merged in app.js in this order — Wikipedia casing wins for duplicates)
 ```
 
@@ -92,7 +95,7 @@ Wikidata P1843 claims → collectSynonymData → fetchGbifCommonNames → fetchW
 ## Tests
 
 - `npm test` runs all test suite files.
-- `test/common-names.test.js` — 56 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wikidata.js`.
+- `test/common-names.test.js` — 74 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/common-names.js`.
 - `test/hierarchy.test.js` — 5 tests for tag generation using mocked ancestor chains (no live Wikidata).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first.
 
