@@ -4,7 +4,7 @@ const { stripArticle, isAbbreviatedBinomial, normalizeNameKey } = require('./uti
 const CJK_RE = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
 const STOPWORDS_RE = /^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i;
 const COUNTRY_NAMES_RE = /^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopia|Tanzania|Australia|Eurasia|Americas|Spain|Italy|Morocco|Greece|Korea|Japan|China|India|Turkey|Mexico|Canada|France|Germany|Poland|Sweden|Norway|Brazil|Chile|Peru|Egypt|Kenya|Nigeria|Thailand|Vietnam|Indonesia|Philippines|Malaysia|Russia)$/i;
-const FILLER_STARTERS_RE = /^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later|most)\b/i;
+const FILLER_STARTERS_RE = /^(primarily|especially|particularly|specifically|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|around|less|deeply|richly|highly|later|most)\b/i;
 const RANK_TERMS_RE = /^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i;
 
 // Parse a single GBIF vernacular-name string into zero or more common names.
@@ -199,7 +199,9 @@ const WIKI_PATTERNS = [
 
   // N: "also/commonly/often referred to as X, Y, and Z." — period-terminated (e.g., "which is also referred to as Indian turnip, bog onion, and brown dragon.")
   // Also handles "often simply referred to as" (e.g., Vanilla planifolia)
-  (text) => text.match(/(?:also|commonly|often)\s+(?:simply\s+)?referred\s+to\s+as\s+([^.]+)\./i),
+  // Negative lookahead rejects quoted phrases (lumber-industry jargon like `"hem fir"`,
+  // taxonomy hybrids like `"Abies grandis x concolor"`) — legit common-name lists are unquoted
+  (text) => text.match(/(?:also|commonly|often)\s+(?:simply\s+)?referred\s+to\s+as\s+((?!["\u201C\u201D\u2018\u2019])[^.]+)\./i),
 
   // O: ") AuthorName (common name) is/are/was/were"
   // Catches "(short-stalked false bindweed) is" after taxonomic authority
@@ -377,6 +379,8 @@ function extractNamesFromCapture(captured) {
     // Strip leading "as" (from "known as" constructions)  
     let normalized = name.replace(/^as\s+/i, '').trim();
     normalized = stripArticle(normalized);
+    // Strip stray double-quote characters (quoted lumber/industry terms like `"white fir" lumber`)
+    normalized = normalized.replace(/["\u201C\u201D]/g, '').trim();
 
     // Strip trailing language qualifiers like "in Greek", "in Latin"
     normalized = normalized.replace(/\s+in\s+(?:greek|latin|french|spanish|italian|german|portuguese|dutch|turkish|russian|polish|czech|swedish|danish|norwegian|finnish|hungarian|romanian|ukrainian|bulgarian|croatian|serbian|slovak|slovenian|lithuanian|latvian|estonian|icelandic|irish|welsh|gaelic|basque|catalan|arabic|hebrew|persian|hindi|urdu|bengali|tamil|telugu|kannada|malayalam|chinese|japanese|korean|vietnamese|thai|burmese|khmer|indonesian|malay|tagalog|swahili|zulu|hausa|yoruba|amharic|georgian|armenian|azerbaijani|kazakh|nepali|sinhala|tibetan|mongolian|english|native)\s*$/i, '').trim();

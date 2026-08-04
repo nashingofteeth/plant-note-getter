@@ -382,6 +382,11 @@ const TESTS = [
     extract: 'Vanilla planifolia is a species of vanilla orchid native to Mexico, Central America, Colombia, and Brazil. It is one of the primary sources for vanilla flavouring, due to its high vanillin content. Common names include flat-leaved vanilla and  West Indian vanilla (which is also used for the Pompona vanilla, V. pompona), though it is often simply referred to as vanilla. It was first scientifically named in 1808.',
     expected: ['flat-leaved vanilla', 'West Indian vanilla', 'vanilla'],
   },
+  {
+    name: 'Abies grandis (Pattern N — quoted lumber-jargon "referred to as" rejected)',
+    extract: 'Abies grandis (grand fir, giant fir, lowland white fir, great silver fir, western white fir, Vancouver fir, or Oregon fir) is a fir native to northwestern North America.\nIn the North American logging industry, the grand fir is often referred to as "hem fir", with hem fir being a number of species with interchangeable types of wood (specifically the California red fir, noble fir, Pacific silver fir, white fir, and western hemlock). Grand fir is often shipped along with these other species. It can also referred to as "white fir" lumber, an umbrella term also referring to Abies amabilis (Pacific silver fir), Abies concolor (White fir), and Abies magnifica (Red fir).\nThe intergrades are often referred to as "Abies grandis x concolor", a variety which itself intergrades into Abies concolor lowiana farther south, around the California state line.',
+    expected: ['grand fir', 'giant fir', 'lowland white fir', 'great silver fir', 'western white fir', 'Vancouver fir', 'Oregon fir'],
+  },
 ];
 
 const GBIF_TESTS = [
