@@ -7,6 +7,23 @@ const COUNTRY_NAMES_RE = /^(Mozambique|Myanmar|Zimbabwe|Botswana|Namibia|Ethiopi
 const FILLER_STARTERS_RE = /^(primarily|especially|particularly|usually|typically|including|such\s+as|e\.g\.|i\.e\.|sometimes|called|known|commonly|among|which|where|when|less|deeply|richly|highly|later|most)\b/i;
 const RANK_TERMS_RE = /^(species|subgenus|genus|subfamily|family|order|class|phylum|kingdom|variety|subspecies|hybrid|cultivar|form|type)(\s|$)/i;
 
+// Parse a single GBIF vernacular-name string into zero or more common names.
+//
+// GBIF records can bundle several names (e.g. "Elegant Or Garden Zinnia" or
+// "Youth and old age"). By design we NEVER split on "or"/"and" — doing so
+// produced fragment junk ("Elegant", "Youth", "old age"). Kept whole, the
+// compound record is deduped against the separate single-name records that GBIF
+// also returns. Bracketed annotations (e.g. "[TAXREF]") are stripped.
+function parseGbifVernacularName(raw) {
+  if (!raw) return [];
+  const clean = raw.replace(/\s*\[.*?\]\s*/g, ' ').trim();
+  return clean
+    .split(/\s*,\s*/)
+    .filter(Boolean)
+    .map(stripArticle)
+    .filter(Boolean);
+}
+
 async function fetchGbifCommonNames(gbifId) {
   if (!gbifId) return [];
 
@@ -25,18 +42,12 @@ async function fetchGbifCommonNames(gbifId) {
   for (const r of data.results || []) {
     if (r.language !== 'eng') continue;
     if (!r.vernacularName) continue;
-    const clean = r.vernacularName.replace(/\s*\[.*?\]\s*/g, ' ').replace(/,?\s+(?:or|and)\s+/gi, ', ').trim();
-    const parts = clean.split(/\s*,\s*/).filter(Boolean);
-    for (const name of parts) {
-      const normalized = stripArticle(name);
-      if (!normalized) continue;
-    const lower = normalized.toLowerCase();
-    const dedupKey = lower.replace(/'s\b/g, '');
-
-    if (!seen.has(dedupKey)) {
-      seen.add(dedupKey);
-      names.push(normalized);
-    }
+    for (const normalized of parseGbifVernacularName(r.vernacularName)) {
+      const dedupKey = normalized.toLowerCase().replace(/'s\b/g, '');
+      if (!seen.has(dedupKey)) {
+        seen.add(dedupKey);
+        names.push(normalized);
+      }
     }
   }
 
@@ -528,6 +539,7 @@ function collectNamesFromText(text) {
 
 module.exports = {
   fetchGbifCommonNames,
+  parseGbifVernacularName,
   fetchWikipediaCommonNames,
   extractNamesFromCapture,
   extractWikipediaCommonNames,

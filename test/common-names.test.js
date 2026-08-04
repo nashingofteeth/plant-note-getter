@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { extractWikipediaCommonNames } = require('../src/common-names');
+const { extractWikipediaCommonNames, parseGbifVernacularName } = require('../src/common-names');
 
 const TESTS = [
   {
@@ -384,8 +384,68 @@ const TESTS = [
   },
 ];
 
+const GBIF_TESTS = [
+  {
+    name: 'Zinnia elegans: simple single name',
+    raw: 'Common Zinnia',
+    expected: ['Common Zinnia'],
+  },
+  {
+    name: 'Zinnia elegans: compound "or" name never split into fragments',
+    raw: 'Elegant Or Garden Zinnia',
+    expected: ['Elegant Or Garden Zinnia'],
+  },
+  {
+    name: 'Zinnia elegans: compound "and" name never split into fragments',
+    raw: 'Youth and old age',
+    expected: ['Youth and old age'],
+  },
+  {
+    name: 'Zinnia elegans: bracketed source annotation stripped',
+    raw: 'Youth-and-age [TAXREF]',
+    expected: ['Youth-and-age'],
+  },
+  {
+    name: 'comma-separated bundle splits on commas only',
+    raw: 'youth-and-age, youth-and-old-age',
+    expected: ['youth-and-age', 'youth-and-old-age'],
+  },
+  {
+    name: 'leading article stripped',
+    raw: 'The common zinnia',
+    expected: ['common zinnia'],
+  },
+  {
+    name: 'empty and null inputs return empty array',
+    raw: '',
+    expected: [],
+  },
+  {
+    name: 'null input returns empty array',
+    raw: null,
+    expected: [],
+  },
+];
+
 let passed = 0;
 let failed = 0;
+
+for (const { name, raw, expected } of GBIF_TESTS) {
+  try {
+    const actual = parseGbifVernacularName(raw);
+    assert.deepStrictEqual(
+      actual.sort(),
+      expected.slice().sort(),
+      `Mismatch for "${name}"\n  actual:   ${JSON.stringify(actual)}\n  expected: ${JSON.stringify(expected)}`
+    );
+    console.log(`  PASS  ${name}`);
+    passed++;
+  } catch (e) {
+    console.log(`  FAIL  ${name}`);
+    console.log(`        ${e.message}`);
+    failed++;
+  }
+}
 
 for (const { name, extract, expected } of TESTS) {
   try {
@@ -404,5 +464,5 @@ for (const { name, extract, expected } of TESTS) {
   }
 }
 
-console.log(`\n${passed} passed, ${failed} failed out of ${TESTS.length} tests`);
+console.log(`\n${passed} passed, ${failed} failed out of ${TESTS.length + GBIF_TESTS.length} tests`);
 process.exit(failed > 0 ? 1 : 0);

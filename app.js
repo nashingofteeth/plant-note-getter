@@ -140,7 +140,9 @@ async function main() {
     const gbifId = entity.gbifId;
     if (gbifId) {
       gbifNamesRaw = await fetchGbifCommonNames(gbifId);
-      const seenLower = new Set((entity.commonNames || []).map(n => stripArticle(n).toLowerCase()));
+      const seenLower = new Set(
+        [...(entity.commonNames || []), ...(entity.aliases || [])].map(n => cleanName(n).toLowerCase())
+      );
       for (const name of gbifNamesRaw) {
         const normalized = cleanName(name);
         const lower = normalized.toLowerCase();
