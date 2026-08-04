@@ -10,11 +10,7 @@ A CLI tool that generates [Obsidian](https://obsidian.md/) markdown notes for pl
 - **`--populate` mode** — Scans an existing vault for plant-tagged notes and backfills missing front matter properties from Wikidata.
 - **`--check` mode** — Analyzes tag hierarchies in existing notes to detect sparse branches or unrecognized clades, with interactive suggestions for `label-map.json` updates.
 - **`--apply` flag** — Skips dry-run prompts and writes/updates notes directly.
-- **Automatic alias collection** — Gathers scientific synonyms, common names, and vernacular names from Wikidata.
-
-## Requirements
-
-- Node.js 12+
+- **Automatic alias collection** — Merges common names from Wikidata, GBIF, and Wikipedia into note aliases.
 
 ## Install
 
@@ -72,21 +68,4 @@ node app.js --check "Lysimachia borealis"
 | Command | Description |
 |---------|-------------|
 | `npm start` | Run `node app.js` |
-| `npm test` | Run test suite (`common-names.test.js` + `hierarchy.test.js`) |
-
-## Project structure
-
-```
-src/
-├── api-client.js   — HTTP transport, rate limiting, API URL constants
-├── common-names.js — Common name extraction from GBIF and Wikipedia
-├── config.js       — Env loading and path config
-├── frontmatter.js  — YAML front matter generation and parsing
-├── notes.js        — Note file I/O, vault scanning, populate mode
-├── tagcheck.js     — Tag hierarchy analysis and interactive pruning
-├── taxonomy.js     — Tag hierarchy builder, rank filtering
-├── utils.js        — Helpers (sanitize, date, label map loading, stripArticle)
-└── wikidata.js     — Wikidata search, entity data, SPARQL parent chain, synonym data
-app.js              — CLI entry point
-label-map.json      — Wikidata label → tag segment mappings
-```
+| `npm test` | Run full test suite |

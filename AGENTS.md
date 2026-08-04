@@ -34,9 +34,9 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/config.js` | Paths from `.env`: NOTE_ROOT, LABEL_MAP_PATH |
 | `src/utils.js` | Shared helpers (filename sanitize, date, label-map loading, stripArticle, normalizeNameKey) |
 | `label-map.json` | Single source of truth for tag remaps and hierarchy injections |
-| `test/common-names.test.js` | 84 regression tests, no API calls, runs via `npm test` |
-| `test/hierarchy.test.js` | 5 tests for tag generation with mocked ancestor chains |
-| `test/names.test.js` | 14 tests for `collectCommonNames` merge order/dedup/provenance, stubbed fetches, no API calls |
+| `test/common-names.test.js` | Regression tests, no API calls, runs via `npm test` |
+| `test/hierarchy.test.js` | Tag generation tests with mocked ancestor chains |
+| `test/names.test.js` | `collectCommonNames` merge order/dedup/provenance, stubbed fetches, no API calls |
 
 ## Tag hierarchy via label-map.json
 
@@ -55,7 +55,7 @@ Wikidata P1843 claims → wikidata.js (collectSynonymData) → names.js (collect
 (merged in this order — Wikipedia casing wins for duplicates; dedup via normalizeNameKey)
 ```
 
-### WIKI_PATTERNS: 17 regexes for Wikipedia intro constructions
+### WIKI_PATTERNS: regexes for Wikipedia intro constructions
 
 | Pattern | Matches | Example species |
 |---------|---------|----------------|
@@ -98,8 +98,8 @@ Wikidata P1843 claims → wikidata.js (collectSynonymData) → names.js (collect
 ## Tests
 
 - `npm test` runs all test suite files.
-- `test/common-names.test.js` — 84 tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/common-names.js`.
-- `test/hierarchy.test.js` — 5 tests for tag generation using mocked ancestor chains (no live Wikidata).
-- `test/names.test.js` — 14 tests for `collectCommonNames` merge order/dedup/provenance (stubbed fetches, no API calls).
+- `test/common-names.test.js` — regression tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/common-names.js`.
+- `test/hierarchy.test.js` — tag generation tests with mocked ancestor chains (no live Wikidata).
+- `test/names.test.js` — `collectCommonNames` merge order/dedup/provenance (stubbed fetches, no API calls).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first. When modifying `collectCommonNames` in `src/names.js`, run names tests first.
 

@@ -54,7 +54,7 @@ Use a descriptive `User-Agent` header per [Wikimedia API etiquette](https://www.
 
 ### 2b. Read the existing note from NOTE_ROOT
 
-Plant notes live directly in `NOTE_ROOT` (set in `.env`, typically `~/wikihew/`) as `.md` files. There are no subdirectories for plant species.
+Plant notes live directly in `NOTE_ROOT` (set in `.env`) as `.md` files. There are no subdirectories for plant species.
 
 **Finding plant notes**: Filter by tag. Plant notes have a tag starting with `life/eukaryota/plantae`. Use `hasPlantTag()` from `src/frontmatter.js` or check manually:
 
