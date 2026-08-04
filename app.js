@@ -3,8 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
-const { sanitizeFilename, loadLabelMap, TAXON_Q_IDS, normalizeNameKey } = require('./src/utils');
-const { searchTaxon, getEntityData, getParentChain } = require('./src/wikidata');
+const { sanitizeFilename, loadLabelMap, normalizeNameKey } = require('./src/utils');
+const { resolveTaxon, getParentChain } = require('./src/wikidata');
 const { collectCommonNames } = require('./src/names');
 const { buildTagSegmentsWithOriginals } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
@@ -75,60 +75,8 @@ async function main() {
   console.log(`  Searching for: ${input}`);
 
   try {
-    const results = await searchTaxon(input);
+    const { entity, candidateEntities } = await resolveTaxon(input);
 
-    if (results.length === 0) {
-      console.error(`Error: '${input}' not found on Wikidata`);
-      process.exit(1);
-    }
-
-    let selected = results[0];
-    const entityCache = new Map();
-
-    if (results.length > 1) {
-      const taxonResults = [];
-      for (const r of results) {
-        const entity = await getEntityData(r.id);
-        entityCache.set(r.id, entity);
-        if (entity && entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
-          taxonResults.push({ ...r, rankLabel: entity.rankLabel });
-        }
-      }
-
-      if (taxonResults.length === 0) {
-        console.error(`Error: '${input}' found but no taxon results`);
-        process.exit(1);
-      }
-
-      if (taxonResults.length === 1) {
-        selected = taxonResults[0];
-        console.log(`  Using: ${selected.label} (${selected.rankLabel || 'taxon'})`);
-      } else {
-        console.log(`  ${taxonResults.length} taxa found:\n`);
-        taxonResults.forEach((r, i) => {
-          const rankStr = r.rankLabel ? ` (${r.rankLabel})` : '';
-          console.log(`  ${i + 1}. ${r.label}${rankStr} — ${r.description || 'no description'}`);
-        });
-        console.log(`\n  Using first result: ${taxonResults[0].label}`);
-        selected = taxonResults[0];
-      }
-    } else {
-      console.log(`  Found: ${selected.label}`);
-    }
-
-    const entity = entityCache.get(selected.id) || await getEntityData(selected.id);
-    if (!entity) {
-      console.error(`Error: Could not fetch data for ${selected.id}`);
-      process.exit(1);
-    }
-
-    const isValidTaxon = entity.instanceOf.some(id => TAXON_Q_IDS.includes(id));
-    if (!isValidTaxon) {
-      console.error(`Error: '${input}' is not a taxon or clade on Wikidata`);
-      process.exit(1);
-    }
-
-    const candidateEntities = [...entityCache.values()].filter(e => e && e.id !== selected.id);
     const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
 
     printSection('Entity');

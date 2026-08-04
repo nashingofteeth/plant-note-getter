@@ -1,17 +1,6 @@
 const { PLANT_TAG_BASE } = require('./utils');
 const { buildAliases } = require('./names');
-
-const SKIP_RANKS = new Set([
-  'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
-  'subfamily', 'subtribe', 'subgenus', 'subspecies',
-  'superdomain', 'superkingdom', 'superdivision', 'superphylum', 'superclass',
-  'infrakingdom', 'infraphylum', 'infraclass', 'infraorder',
-  'domain', 'section', 'series', 'variety', 'form', 'forma',
-  'strain', 'population', 'subvariety', 'subform',
-  'nothoform', 'nothospecies', 'nothosubspecies',
-  'tribe', 'subtribe', 'cohort', 'subcohort', 'infraspecies',
-  'pathogroup', 'serogroup', 'serotype', 'biovar', 'chemovar'
-]);
+const { SKIP_RANKS } = require('./ranks');
 
 function buildTagSegments(ancestors, ownId, labelMap) {
   const injections = labelMap._inject || {};
@@ -99,14 +88,9 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
   return { segments, originals };
 }
 
-function buildWikipediaUrl(entity) {
-  return entity.wikipediaUrl || null;
-}
-
 module.exports = {
   buildTag,
   buildTagSegments,
   buildTagSegmentsWithOriginals,
-  buildWikipediaUrl,
   buildAliases
 };

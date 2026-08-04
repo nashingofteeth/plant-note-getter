@@ -1,5 +1,6 @@
 const { fetchJSON, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API } = require('./api-client');
-const { stripArticle, normalizeNameKey } = require('./utils');
+const { stripArticle, normalizeNameKey, TAXON_Q_IDS } = require('./utils');
+const { RANK_LABELS, RANK_PREFERENCE } = require('./ranks');
 
 async function searchTaxon(name) {
   await rateLimit();
@@ -46,6 +47,60 @@ async function searchTaxon(name) {
   }
 
   return [];
+}
+
+async function resolveTaxon(input) {
+  const results = await searchTaxon(input);
+
+  if (results.length === 0) {
+    throw new Error(`'${input}' not found on Wikidata`);
+  }
+
+  let selected = results[0];
+  const entityCache = new Map();
+
+  if (results.length > 1) {
+    const taxonResults = [];
+    for (const r of results) {
+      const entity = await getEntityData(r.id);
+      entityCache.set(r.id, entity);
+      if (entity && entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
+        taxonResults.push({ ...r, rankLabel: entity.rankLabel });
+      }
+    }
+
+    if (taxonResults.length === 0) {
+      throw new Error(`'${input}' found but no taxon results`);
+    }
+
+    if (taxonResults.length === 1) {
+      selected = taxonResults[0];
+      console.log(`  Using: ${selected.label} (${selected.rankLabel || 'taxon'})`);
+    } else {
+      console.log(`  ${taxonResults.length} taxa found:\n`);
+      taxonResults.forEach((r, i) => {
+        const rankStr = r.rankLabel ? ` (${r.rankLabel})` : '';
+        console.log(`  ${i + 1}. ${r.label}${rankStr} — ${r.description || 'no description'}`);
+      });
+      console.log(`\n  Using first result: ${taxonResults[0].label}`);
+      selected = taxonResults[0];
+    }
+  } else {
+    console.log(`  Found: ${selected.label}`);
+  }
+
+  const entity = entityCache.get(selected.id) || await getEntityData(selected.id);
+  if (!entity) {
+    throw new Error(`Could not fetch data for ${selected.id}`);
+  }
+
+  if (!entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
+    throw new Error(`'${input}' is not a taxon or clade on Wikidata`);
+  }
+
+  const candidateEntities = [...entityCache.values()].filter(e => e && e.id !== selected.id);
+
+  return { selected, entity, candidateEntities };
 }
 
 function getLabel(labels) {
@@ -140,11 +195,6 @@ async function getEntityData(id) {
   };
 }
 
-const RANK_PREFERENCE = [
-  'kingdom', 'phylum', 'division', 'class', 'order', 'family', 'genus', 'species',
-  'superkingdom', 'superphylum', 'superclass', 'superorder', 'superfamily'
-];
-
 function pickBestParent(parentIds, ancestorMap) {
   const valid = parentIds.filter(pid => ancestorMap.has(pid));
   if (valid.length === 0) return parentIds[0] || null;
@@ -215,45 +265,6 @@ async function getParentChain(id) {
   return chain;
 }
 
-const RANK_LABELS = {
-  Q36732: 'kingdom',
-  Q24017465: 'division',
-  Q30097924: 'class',
-  Q36602: 'order',
-  Q35409: 'family',
-  Q34740: 'genus',
-  Q7432: 'species',
-  Q19858692: 'superkingdom',
-  Q14592334: 'phylum',
-  Q105019: 'subspecies',
-  Q3238261: 'subgenus',
-  Q7486537: 'subfamily',
-  Q5866644: 'suborder',
-  Q11390: 'subdivision',
-  Q148346: 'subclass',
-  Q3238165: 'subtribe',
-  Q171394: 'infraclass',
-  Q315130: 'infraorder',
-  Q501274: 'infrakingdom',
-  Q7136226: 'clade',
-  Q1145090: 'variety',
-  Q1748487: 'form',
-  Q160240: 'section',
-  Q207370: 'series',
-  Q35410: 'tribe',
-  Q205302: 'subtribe',
-  Q227936: 'tribe',
-  Q164280: 'subfamily',
-  Q37517: 'order',
-  Q334460: 'class',
-  Q2869638: 'superfamily',
-  Q3344711: 'infraorder',
-  Q146481: 'domain',
-  Q22666877: 'superdomain',
-  Q2997417: 'no rank',
-  Q1425109: 'no rank'
-};
-
 function isSynonymOf(primaryEntity, candidateEntity) {
   if (!primaryEntity || !candidateEntity) return false;
   if ((primaryEntity.taxonSynonymIds || []).includes(candidateEntity.id)) return true;
@@ -310,6 +321,7 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
 
 module.exports = {
   searchTaxon,
+  resolveTaxon,
   getEntityData,
   getParentChain,
   isSynonymOf,

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, UPDATES_FILE_PATH } = require('./config');
-const { sanitizeFilename, logUpdates, loadLabelMap, TAXON_Q_IDS } = require('./utils');
+const { logUpdates, loadLabelMap, TAXON_Q_IDS } = require('./utils');
 const { parseFrontMatter, generateFrontMatter, hasPlantTag, analyzeMissingProperties, updateFrontMatter } = require('./frontmatter');
 const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
 const { collectCommonNames } = require('./names');
@@ -87,12 +87,8 @@ async function populateMissingProperties(applyChanges = false) {
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
     const { missing } = analyzeMissingProperties(note.frontMatter);
-    const existingAliases = note.frontMatter.aliases;
-    const anyMissing = missing.length > 0 || !existingAliases || existingAliases.length > 0;
-    if (!anyMissing) continue;
-
-    const scientificName = note.filename.replace(/\.md$/, '');
     const reasons = missing.length > 0 ? missing : ['aliases'];
+    const scientificName = note.filename.replace(/\.md$/, '');
     console.log(`${i + 1}. ${note.filename}`);
     console.log(`   Checking: ${reasons.join(', ')}`);
 
@@ -121,11 +117,9 @@ async function populateMissingProperties(applyChanges = false) {
       await collectCommonNames(entity, candidateEntities);
 
       const ancestors = await getParentChain(entity.id);
-      const { updates } = analyzeMissingProperties(note.frontMatter, entity, ancestors, labelMap);
-      const neededProps = new Set(missing);
-      if (existingAliases && existingAliases.length > 0) neededProps.add('aliases');
+      const { missing: detectedProps, updates } = analyzeMissingProperties(note.frontMatter, entity, ancestors, labelMap);
       const filtered = {};
-      for (const prop of neededProps) {
+      for (const prop of detectedProps) {
         if (updates[prop] !== undefined) filtered[prop] = updates[prop];
       }
 

@@ -5,6 +5,7 @@ const { parseFrontMatter, hasPlantTag } = require('./frontmatter');
 const { buildTagSegmentsWithOriginals } = require('./taxonomy');
 const { loadLabelMap, PLANT_TAG_PREFIX, TAXON_Q_IDS } = require('./utils');
 const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
+const { askYesNo } = require('./prompt');
 
 function getPlantNotesWithTags() {
   const files = fs.readdirSync(NOTE_ROOT);
@@ -29,18 +30,6 @@ function getPlantNotesWithTags() {
 
 function countPrefix(allTags, prefix) {
   return allTags.filter(t => t === prefix || t.startsWith(prefix + '/')).length;
-}
-
-const readline = require('readline');
-
-function askYesNo(query) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => {
-    rl.question(query, answer => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes');
-    });
-  });
 }
 
 function analyzeHierarchy(tag) {

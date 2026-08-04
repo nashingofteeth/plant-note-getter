@@ -1,10 +1,10 @@
 const { getCurrentDate, formatAlias, PLANT_TAG_PREFIX, normalizeNameKey } = require('./utils');
-const { buildTag, buildWikipediaUrl, buildAliases } = require('./taxonomy');
+const { buildTag, buildAliases } = require('./taxonomy');
 
 function generateFrontMatter(entity, ancestors, labelMap) {
   const tag = buildTag(ancestors, entity.id, labelMap);
   const aliases = buildAliases(entity);
-  const wikipediaUrl = buildWikipediaUrl(entity);
+  const wikipediaUrl = entity.wikipediaUrl || null;
   const currentDate = getCurrentDate();
 
   let fm = '---\n';

@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { buildAliases, buildWikipediaUrl, buildTagSegmentsWithOriginals, buildTag } = require('../src/taxonomy');
+const { buildAliases, buildTagSegmentsWithOriginals, buildTag } = require('../src/taxonomy');
 const labelMap = require('../label-map.json');
 
 let passed = 0;
@@ -100,14 +100,6 @@ test('buildAliases: comma-separated alias with empty parts skips empties', () =>
     scientificName: 'X'
   };
   assert.deepStrictEqual(buildAliases(entity), ['apple', 'banana']);
-});
-
-// ─── buildWikipediaUrl ──────────────────────────────────────────────────────
-
-test('buildWikipediaUrl: returns url or null', () => {
-  assert.strictEqual(buildWikipediaUrl({ wikipediaUrl: 'https://example.com' }), 'https://example.com');
-  assert.strictEqual(buildWikipediaUrl({}), null);
-  assert.strictEqual(buildWikipediaUrl({ wikipediaUrl: null }), null);
 });
 
 // ─── buildTagSegmentsWithOriginals ──────────────────────────────────────────
