@@ -1,5 +1,5 @@
 const { fetchJSON, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API } = require('./api-client');
-const { stripArticle } = require('./utils');
+const { stripArticle, normalizeNameKey } = require('./utils');
 
 async function searchTaxon(name) {
   await rateLimit();
@@ -269,8 +269,8 @@ function isSynonymOf(primaryEntity, candidateEntity) {
 
 async function collectSynonymData(primaryEntity, candidateEntities) {
   const mergedCommonNames = [...(primaryEntity.commonNames || [])];
-  const seen = new Set(mergedCommonNames.map(n => n.toLowerCase()));
-  const existingAliasLower = new Set((primaryEntity.aliases || []).map(a => a.toLowerCase()));
+  const seen = new Set(mergedCommonNames.map(n => normalizeNameKey(n)));
+  const existingAliasKeys = new Set((primaryEntity.aliases || []).map(a => normalizeNameKey(a)));
   const synonymNames = [];
   let wikipediaUrl = primaryEntity.wikipediaUrl;
 
@@ -284,19 +284,19 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
 
     for (const name of (candidate.commonNames || [])) {
       const normalized = stripArticle(name);
-      const lower = normalized.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
+      const key = normalizeNameKey(normalized);
+      if (!seen.has(key)) {
+        seen.add(key);
         mergedCommonNames.push(normalized);
       }
     }
 
     const synName = candidate.scientificName || candidate.label;
     if (synName) {
-      const lower = synName.toLowerCase();
-      if (!seen.has(lower) && !existingAliasLower.has(lower) && lower !== (primaryEntity.scientificName || '').toLowerCase()) {
+      const key = normalizeNameKey(synName);
+      if (!seen.has(key) && !existingAliasKeys.has(key) && key !== normalizeNameKey(primaryEntity.scientificName || '')) {
         synonymNames.push(synName);
-        existingAliasLower.add(lower);
+        existingAliasKeys.add(key);
       }
     }
 

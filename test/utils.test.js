@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { sanitizeFilename, formatAlias, getCurrentDate, isEmptyValue, stripArticle } = require('../src/utils');
+const { sanitizeFilename, formatAlias, getCurrentDate, isEmptyValue, stripArticle, normalizeNameKey, cleanName } = require('../src/utils');
 
 let passed = 0;
 let failed = 0;
@@ -89,6 +89,46 @@ test('stripArticle: no article to strip returns unchanged', () => {
 
 test('stripArticle: empty string', () => {
   assert.strictEqual(stripArticle(''), '');
+});
+
+// ─── normalizeNameKey ───────────────────────────────────────────────────────
+
+test('normalizeNameKey: lowercases and strips leading articles', () => {
+  assert.strictEqual(normalizeNameKey('The Oak'), 'oak');
+  assert.strictEqual(normalizeNameKey('A Shrub'), 'shrub');
+});
+
+test('normalizeNameKey: strips possessive "s so variants dedup together', () => {
+  assert.strictEqual(normalizeNameKey("David's viburnum"), 'david viburnum');
+  assert.strictEqual(normalizeNameKey('David viburnum'), 'david viburnum');
+});
+
+test('normalizeNameKey: does not strip "s from non-possessive words', () => {
+  // "viburnums" (plural) must NOT collapse to "viburnum"
+  assert.notStrictEqual(normalizeNameKey('viburnums'), 'viburnum');
+});
+
+test('normalizeNameKey: possessive marker requires word boundary', () => {
+  // "ts" inside a word is untouched
+  assert.strictEqual(normalizeNameKey('sweetbriars'), 'sweetbriars');
+  // genuine possessive at word end is stripped
+  assert.strictEqual(normalizeNameKey('David\'s'), 'david');
+});
+
+test('normalizeNameKey: preserves casing differences only for comparison', () => {
+  assert.strictEqual(normalizeNameKey('RED OAK'), 'red oak');
+  assert.strictEqual(normalizeNameKey('red oak'), 'red oak');
+});
+
+// ─── cleanName ──────────────────────────────────────────────────────────────
+
+test('cleanName: strips article and trailing periods', () => {
+  assert.strictEqual(cleanName('the oak.'), 'oak');
+  assert.strictEqual(cleanName('oak tree...'), 'oak tree');
+});
+
+test('cleanName: leaves other names unchanged', () => {
+  assert.strictEqual(cleanName('Red Oak'), 'Red Oak');
 });
 
 console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);

@@ -1,4 +1,5 @@
-const { stripArticle, isAbbreviatedBinomial, PLANT_TAG_BASE } = require('./utils');
+const { PLANT_TAG_BASE } = require('./utils');
+const { buildAliases } = require('./names');
 
 const SKIP_RANKS = new Set([
   'subkingdom', 'subphylum', 'subdivision', 'subclass', 'suborder',
@@ -100,39 +101,6 @@ function buildTagSegmentsWithOriginals(ancestors, ownId, labelMap) {
 
 function buildWikipediaUrl(entity) {
   return entity.wikipediaUrl || null;
-}
-
-function buildAliases(entity) {
-  const aliases = [];
-  if (entity.commonNames && entity.commonNames.length > 0) {
-    const sciLower = (entity.scientificName || '').toLowerCase();
-    const seen = new Set();
-    for (const name of entity.commonNames) {
-      const normalized = stripArticle(name);
-      if (isAbbreviatedBinomial(normalized)) continue;
-      const lower = normalized.toLowerCase();
-      if (!seen.has(lower) && lower !== sciLower) {
-        seen.add(lower);
-        aliases.push(normalized);
-      }
-    }
-  }
-  if (entity.aliases && entity.aliases.length > 0) {
-    const lowerAliases = aliases.map(a => a.toLowerCase());
-    for (const alias of entity.aliases) {
-      const parts = alias.split(/\s*,\s*/);
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (!trimmed) continue;
-        if (isAbbreviatedBinomial(trimmed)) continue;
-        if (!lowerAliases.includes(trimmed.toLowerCase()) && trimmed.toLowerCase() !== entity.scientificName.toLowerCase()) {
-          lowerAliases.push(trimmed.toLowerCase());
-          aliases.push(trimmed);
-        }
-      }
-    }
-  }
-  return aliases.length > 0 ? aliases : null;
 }
 
 module.exports = {

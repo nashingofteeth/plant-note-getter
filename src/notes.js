@@ -3,7 +3,8 @@ const path = require('path');
 const { NOTE_ROOT, UPDATES_FILE_PATH } = require('./config');
 const { sanitizeFilename, logUpdates, loadLabelMap, TAXON_Q_IDS } = require('./utils');
 const { parseFrontMatter, generateFrontMatter, hasPlantTag, analyzeMissingProperties, updateFrontMatter } = require('./frontmatter');
-const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./wikidata');
+const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
+const { collectCommonNames } = require('./names');
 const { buildTag } = require('./taxonomy');
 
 function getPlantNotes(noteRoot) {
@@ -110,19 +111,14 @@ async function populateMissingProperties(applyChanges = false) {
         continue;
       }
 
+      const candidateEntities = [];
       if (results.length > 1) {
-        const candidateEntities = [];
         for (const r of results.slice(1)) {
           const c = await getEntityData(r.id);
           if (c) candidateEntities.push(c);
         }
-        const synonymData = await collectSynonymData(entity, candidateEntities);
-        entity.wikipediaUrl = synonymData.wikipediaUrl;
-        entity.commonNames = synonymData.commonNames;
-        if (synonymData.synonymNames.length > 0) {
-          entity.aliases = [...(entity.aliases || []), ...synonymData.synonymNames];
-        }
       }
+      await collectCommonNames(entity, candidateEntities);
 
       const ancestors = await getParentChain(entity.id);
       const { updates } = analyzeMissingProperties(note.frontMatter, entity, ancestors, labelMap);

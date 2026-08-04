@@ -3,10 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
-const { sanitizeFilename, loadLabelMap, stripArticle, TAXON_Q_IDS, cleanName } = require('./src/utils');
-const { searchTaxon, getEntityData, getParentChain, collectSynonymData } = require('./src/wikidata');
-const { fetchGbifCommonNames, fetchWikipediaCommonNames } = require('./src/common-names');
-const { buildTagSegmentsWithOriginals, buildAliases } = require('./src/taxonomy');
+const { sanitizeFilename, loadLabelMap, TAXON_Q_IDS, normalizeNameKey } = require('./src/utils');
+const { searchTaxon, getEntityData, getParentChain } = require('./src/wikidata');
+const { collectCommonNames } = require('./src/names');
+const { buildTagSegmentsWithOriginals } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
 const { checkAndPruneTag, printHierarchy, resolveTagForNote } = require('./src/tagcheck');
@@ -129,60 +129,17 @@ async function main() {
     }
 
     const candidateEntities = [...entityCache.values()].filter(e => e && e.id !== selected.id);
-    const synonymData = await collectSynonymData(entity, candidateEntities);
-    entity.wikipediaUrl = synonymData.wikipediaUrl;
-    entity.commonNames = synonymData.commonNames;
-    const entityWikidataAliases = [...(entity.aliases || [])];
-    if (synonymData.synonymNames.length > 0) {
-      entity.aliases = [...entityWikidataAliases, ...synonymData.synonymNames];
-    }
-    let gbifNamesRaw = [];
-    const gbifId = entity.gbifId;
-    if (gbifId) {
-      gbifNamesRaw = await fetchGbifCommonNames(gbifId);
-      const seenLower = new Set(
-        [...(entity.commonNames || []), ...(entity.aliases || [])].map(n => cleanName(n).toLowerCase())
-      );
-      for (const name of gbifNamesRaw) {
-        const normalized = cleanName(name);
-        const lower = normalized.toLowerCase();
-        if (!seenLower.has(lower)) {
-          seenLower.add(lower);
-          entity.commonNames.push(normalized);
-        }
-      }
-    }
-
-    let wikiNamesRaw = [];
-    if (entity.wikipediaTitle) {
-      wikiNamesRaw = await fetchWikipediaCommonNames(entity.wikipediaTitle);
-      const wikiSeen = new Set();
-      for (const name of wikiNamesRaw) {
-        const normalized = cleanName(name);
-        const lower = normalized.toLowerCase();
-        if (wikiSeen.has(lower)) continue;
-        wikiSeen.add(lower);
-        const existingIdx = (entity.commonNames || []).findIndex(n => stripArticle(n).toLowerCase() === lower);
-        if (existingIdx !== -1) {
-          if (entity.commonNames[existingIdx] !== normalized) {
-            entity.commonNames[existingIdx] = normalized;
-          }
-        } else {
-          entity.commonNames.push(normalized);
-        }
-      }
-    }
-
-    const aliases = buildAliases(entity);
+    const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
 
     printSection('Entity');
 
     console.log(`  Scientific name: ${entity.scientificName} (${entity.id})`);
     console.log(`  Rank: ${entity.rankLabel || 'unknown'}`);
     console.log('  Aliases:');
-    if (entityWikidataAliases.length > 0) console.log(`    (Wikidata): ${entityWikidataAliases.join(', ')}`);
-    if (gbifNamesRaw.length > 0) console.log(`    (GBIF): ${gbifNamesRaw.join(', ')}`);
-    if (wikiNamesRaw.length > 0) console.log(`    (Wikipedia): ${wikiNamesRaw.join(', ')}`);
+    if (bySource.wikidata.length > 0) console.log(`    (Wikidata common names): ${bySource.wikidata.join(', ')}`);
+    if (bySource.wikidataAliases.length > 0) console.log(`    (Wikidata aliases): ${bySource.wikidataAliases.join(', ')}`);
+    if (bySource.gbif && bySource.gbif.length > 0) console.log(`    (GBIF): ${bySource.gbif.join(', ')}`);
+    if (bySource.wikipedia && bySource.wikipedia.length > 0) console.log(`    (Wikipedia): ${bySource.wikipedia.join(', ')}`);
     console.log(`    (Combined): ${aliases ? aliases.join(', ') : '(none)'}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
 
@@ -240,8 +197,8 @@ async function main() {
         for (const [k, v] of Object.entries(updates)) {
           let display = Array.isArray(v) ? v.join(', ') : v;
           if (k === 'aliases' && Array.isArray(v) && result.frontMatter?.aliases) {
-            const existingLower = new Set(result.frontMatter.aliases.map(a => a.toLowerCase()));
-            const newAliases = v.filter(a => !existingLower.has(a.toLowerCase()));
+            const existingKeys = new Set(result.frontMatter.aliases.map(a => normalizeNameKey(a)));
+            const newAliases = v.filter(a => !existingKeys.has(normalizeNameKey(a)));
             display = newAliases.join(', ');
           }
           console.log(`    ${k}: ${display}`);

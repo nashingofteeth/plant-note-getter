@@ -1,4 +1,4 @@
-const { getCurrentDate, formatAlias, PLANT_TAG_PREFIX } = require('./utils');
+const { getCurrentDate, formatAlias, PLANT_TAG_PREFIX, normalizeNameKey } = require('./utils');
 const { buildTag, buildWikipediaUrl, buildAliases } = require('./taxonomy');
 
 function generateFrontMatter(entity, ancestors, labelMap) {
@@ -116,12 +116,13 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
   const existingAliases = (frontMatter.aliases) || [];
 
   if (newAliases.length > 0) {
-    const seen = new Set(existingAliases.map(a => a.toLowerCase()));
+    const seen = new Set(existingAliases.map(a => normalizeNameKey(a)));
     const merged = [...existingAliases];
     for (const alias of newAliases) {
-      if (!seen.has(alias.toLowerCase())) {
+      const key = normalizeNameKey(alias);
+      if (!seen.has(key)) {
         merged.push(alias);
-        seen.add(alias.toLowerCase());
+        seen.add(key);
       }
     }
     if (merged.length > existingAliases.length) {

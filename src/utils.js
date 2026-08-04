@@ -56,6 +56,10 @@ function cleanName(name) {
   return stripArticle(name).replace(/\.+$/, '').trim();
 }
 
+function normalizeNameKey(name) {
+  return stripArticle(name).toLowerCase().replace(/'s\b/g, '');
+}
+
 module.exports = {
   getCurrentDate,
   sanitizeFilename,
@@ -68,5 +72,6 @@ module.exports = {
   TAXON_Q_IDS,
   PLANT_TAG_PREFIX,
   PLANT_TAG_BASE,
-  cleanName
+  cleanName,
+  normalizeNameKey
 };

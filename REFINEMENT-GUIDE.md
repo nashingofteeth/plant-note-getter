@@ -7,8 +7,13 @@ The user provides a taxon name (or a list of taxon names). Process that single n
 ## Data Flow
 
 ```
-app.js → wikidata.js → common-names.js (fetchWikipediaCommonNames → WIKI_PATTERNS → extractNamesFromCapture)
-       → tagcheck.js → frontmatter.js → notes.js
+app.js → wikidata.js (search, entity data, synonyms, parent chain)
+       → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
+       → common-names.js (GBIF names, Wikipedia names)
+       → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
+       → tagcheck.js (hierarchy consistency against existing notes)
+       → frontmatter.js (generateFrontMatter: YAML front matter string)
+       → notes.js (createNoteFile: write .md to NOTE_ROOT)
 ```
 
 The extraction pipeline:
@@ -180,7 +185,10 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 | `src/common-names.js` | `WIKI_PATTERNS` array — search for `const WIKI_PATTERNS` |
 | `src/common-names.js` | `extractNamesFromCapture()` — cleanup and filtering |
 | `src/common-names.js` | `fetchWikipediaCommonNames()` — orchestrator |
+| `src/names.js` | `collectCommonNames()` — merges all name sources, returns `{ names, bySource }` |
+| `src/names.js` | `buildAliases()` — final alias list for frontmatter |
 | `test/common-names.test.js` | Test cases (hardcoded extracts, no API calls) |
+| `test/names.test.js` | `collectCommonNames` merge order/dedup/provenance (stubbed fetches) |
 | `src/frontmatter.js` | `parseFrontMatter()` — read existing note's YAML |
 | `src/utils.js` | `sanitizeFilename()` — compute note path from name |
 | `src/config.js` | `NOTE_ROOT` — directory containing plant notes |

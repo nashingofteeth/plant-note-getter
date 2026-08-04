@@ -1,5 +1,5 @@
 const { fetchJSON, rateLimit, GBIF_API, WIKIPEDIA_MEDIAWIKI_API } = require('./api-client');
-const { stripArticle, isAbbreviatedBinomial } = require('./utils');
+const { stripArticle, isAbbreviatedBinomial, normalizeNameKey } = require('./utils');
 
 const CJK_RE = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
 const STOPWORDS_RE = /^(or|and|the|in|of|for|a|an|is|are|was|were|with|by|on|at|its|their|this|that|these|those)$/i;
@@ -43,7 +43,7 @@ async function fetchGbifCommonNames(gbifId) {
     if (r.language !== 'eng') continue;
     if (!r.vernacularName) continue;
     for (const normalized of parseGbifVernacularName(r.vernacularName)) {
-      const dedupKey = normalized.toLowerCase().replace(/'s\b/g, '');
+      const dedupKey = normalizeNameKey(normalized);
       if (!seen.has(dedupKey)) {
         seen.add(dedupKey);
         names.push(normalized);
@@ -525,8 +525,7 @@ function collectNamesFromText(text) {
     for (const captured of captures) {
       const extracted = extractNamesFromCapture(captured);
       for (const name of extracted) {
-        const lower = name.toLowerCase();
-        const dedupKey = lower.replace(/'s\b/g, '');
+        const dedupKey = normalizeNameKey(name);
         if (!seen.has(dedupKey)) {
           seen.add(dedupKey);
           names.push(name);
