@@ -173,7 +173,7 @@ const WIKI_PATTERNS = [
   // Match to the first sentence-ending period outside parentheses
   // Also handles "Numerous common names exist, depending on region, such as X, Y, and Z."
   // Also handles "common names, including" (comma before include)
-  (text) => text.match(/(?:(?:other\s+)?common\s+names|other\s+names)[\s,]+(?:for\s+[^,.;]+?\s+)?(?:\binclud(?:e|es|ed|ing)\b|are\b|exist\b),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
+  (text) => text.match(/(?:(?:other\s+)?common\s+names|other\s+names)[\s,]+(?:for\s+[^,.;]+?\s+)?(?:\binclud(?:e|es|ed|ing)\b|are\b|exist\b|such\s+as\b),?\s*(?:depending\s+on\s+\w+,?\s*)?(?:such\s+as\s+)?([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
 
   // F2: "with the common names X, Y, and Z, is..." (names listed directly, no keyword)
   (text) => text.match(/with\s+the\s+common\s+names\s+([^.]*(?:\([^)]*\)[^.]*)*)\.(?:\s+(?:[A-Z]|=)|$)/i),
@@ -278,6 +278,16 @@ function extractNamesFromCapture(captured) {
     if (/^(?:spanish|french|german|italian|portuguese|dutch|russian|chinese|japanese|korean|arabic|hindi|turkish|greek|latin|english|local|native)\b/i.test(inner)) continue;
     // Skip parentheticals that contain colons (pronunciation guides like "US: , UK: ")
     if (inner.includes(':')) continue;
+    // Extract alternative spelling from "(also spelled X)" / "(also spelt X)" parentheticals
+    const alsoSpelled = inner.match(/^also\s+spell(?:ed|t)\s+(.+)$/i);
+    if (alsoSpelled) {
+      const spelling = alsoSpelled[1].trim().replace(/\.+$/, '');
+      if (spelling && !seen.has(spelling.toLowerCase()) && !CJK_RE.test(spelling) && !/\d/.test(spelling)) {
+        seen.add(spelling.toLowerCase());
+        names.push(spelling);
+      }
+      continue;
+    }
     // Check if it contains comma-separated items (likely a list of names)
     if (inner.includes(',')) {
       // Strip "e.g." or "i.e." prefixes

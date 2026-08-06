@@ -387,6 +387,11 @@ const TESTS = [
     extract: 'Abies grandis (grand fir, giant fir, lowland white fir, great silver fir, western white fir, Vancouver fir, or Oregon fir) is a fir native to northwestern North America.\nIn the North American logging industry, the grand fir is often referred to as "hem fir", with hem fir being a number of species with interchangeable types of wood (specifically the California red fir, noble fir, Pacific silver fir, white fir, and western hemlock). Grand fir is often shipped along with these other species. It can also referred to as "white fir" lumber, an umbrella term also referring to Abies amabilis (Pacific silver fir), Abies concolor (White fir), and Abies magnifica (Red fir).\nThe intergrades are often referred to as "Abies grandis x concolor", a variety which itself intergrades into Abies concolor lowiana farther south, around the California state line.',
     expected: ['grand fir', 'giant fir', 'lowland white fir', 'great silver fir', 'western white fir', 'Vancouver fir', 'Oregon fir'],
   },
+  {
+    name: 'Chamaemelum nobile (Pattern F — "with various common names, such as"; Pattern D + "(also spelled X)" parenthetical)',
+    extract: "Chamaemelum nobile, commonly known as chamomile (also spelled camomile), is a low perennial plant found in dry fields and around gardens and cultivated grounds in Europe, North America, and South America. Its synonym is Anthemis nobilis, with various common names, such as Roman chamomile, English chamomile, garden chamomile, ground apple, low chamomile, mother's daisy or whig plant.",
+    expected: ['chamomile', 'camomile', 'Roman chamomile', 'English chamomile', 'garden chamomile', 'ground apple', 'low chamomile', "mother's daisy", 'whig plant'],
+  },
 ];
 
 const GBIF_TESTS = [
