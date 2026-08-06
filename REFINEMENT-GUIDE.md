@@ -4,6 +4,17 @@
 
 The user provides a taxon name (or a list of taxon names). Process that single note through the Wikipedia common name extraction pipeline, verify the output against the note's on-disk frontmatter, and fix any gaps or false positives. Each fix adds a regression test.
 
+### Primary objective: extract ALL common names from the Wikipedia article
+
+The Wikipedia article is a first-class name source (merged last in `collectCommonNames`, so its casing wins). The goal is **complete extraction** — capture every common name the article states for the taxon, even when those names are already present in the note via Wikidata/GBIF, and especially when they are **not** in the note yet. Treat the article text as the ground truth for what the pipeline *should* return, not the note's `aliases`.
+
+This means `aliases` is **not** the target to match. Workflows that only diff the pipeline output against the existing note are incomplete — they miss legitimate common names the note never had:
+
+- Read the Wikipedia extract in full (intro and `== Common names ==` sections) and enumerate the common names stated in it by hand.
+- Compare that hand-built list against `fetchWikipediaCommonNames(title)` output. Every name you can find in the article that the pipeline misses is a pattern gap to fix — regardless of whether it appears in the note's `aliases`.
+- Names already in `aliases` are a useful cross-check for false positives and regressions, but a low extraction count (e.g., 1 name from an article that lists 9) is a strong signal the extraction is incomplete, not that the note is already fine.
+- If the extracted count is suspiciously small relative to the article's named names, re-read the article text and hunt for unhandled constructions before concluding "nothing to fix."
+
 ## Data Flow
 
 ```
@@ -86,8 +97,10 @@ The pipeline extracts from the full article, including `== Common names ==` sect
 | Situation | Meaning |
 |-----------|---------|
 | Name in `aliases` but not in `extracted` | Pipeline missed it — likely a pattern gap |
-| Name in `extracted` but not in `aliases` | May be newly discovered, or a false positive |
+| Name in `extracted` but not in `aliases` | Expected and desirable — a newly discovered name from the article. Verify it's a legitimate name (not junk), then let it flow into the note on update. |
 | Extracted names contain junk (geographic terms, prefixes, scientific names leaking) | Filter gap |
+
+Note: since the goal is complete extraction, "name in `extracted` but not in `aliases`" is the **normal, expected outcome** after a successful fix — it means you found names the note was missing. Don't treat new names as suspicious just because they aren't in the note yet.
 
 Flag suspicious extracted results containing:
 - Geographic terms used as names: `found in`, `native to`, `subcontinent`, `asia`, `europe`, `boreal`, `temperate`, `tropical`, `regions`, `northern`, `southern`
