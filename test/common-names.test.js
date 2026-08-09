@@ -394,6 +394,11 @@ const TESTS = [
     expected: ['chamomile', 'camomile', 'Roman chamomile', 'English chamomile', 'garden chamomile', 'ground apple', 'low chamomile', "mother's daisy", 'whig plant'],
   },
   {
+    name: 'Hoya carnosa (Pattern N fallback — anatomical term "spurs" rejected, bare "referred to as" single lowercase word not a common name)',
+    extract: 'Hoya carnosa, the porcelain flower or wax plant, is a species of flowering plant in the family Apocynaceae, native to East Asia.\nThe inflorescence is made up of numerous flowers, hanging or more upright, which are grouped in an umbel.\nLike most species of Hoya, H. carnosa flowers grow from specialised perennial peduncles; sometimes these structures are referred to as spurs. These appear from the axils of the leaves and stem; flowers may not be produced when the spurs first appear, but in time buds emerge from their tips.',
+    expected: ['porcelain flower', 'wax plant'],
+  },
+  {
     name: 'Ziziphus jujuba (Pattern N fallback — bare "referred to as", e.g., "are referred to as black jujubes")',
     extract: 'Smoked jujubes are consumed in Vietnam and are referred to as black jujubes. A drink can be made by crushing the pulp in water.',
     expected: ['black jujubes'],

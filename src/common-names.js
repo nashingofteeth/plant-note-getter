@@ -208,7 +208,11 @@ const WIKI_PATTERNS = [
     // Fallback: bare "referred to as X. It/They is/are" or "referred to as X." before a capitalized word
     // e.g., "Smoked jujubes ... are referred to as black jujubes. A drink..." — capture in next sentence
     const m2 = text.match(/(?:is|are|was|were)\s+referred\s+to\s+as\s+((?!["\u201C\u201D\u2018\u2019])[^.]{2,60}?)\.(?:\s+[A-Z]|$)/i);
-    if (m2 && !/(?:the|a|an|its|their|which|that)\s+$/.test(m2[1])) return m2;
+    // Reject single all-lowercase word captures: bare "referred to as X." with a one-word,
+    // uncapitalized capture is an anatomical/descriptive term (e.g., "...are referred to
+    // as spurs." describing peduncles), not a common name. Legit captures are multi-word
+    // or capitalized (e.g., "...are referred to as black jujubes.").
+    if (m2 && !/(?:the|a|an|its|their|which|that)\s+$/.test(m2[1]) && !/^[a-z]+$/.test(m2[1].trim())) return m2;
     return null;
   },
 
