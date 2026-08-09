@@ -2,7 +2,7 @@
 
 ## Goal
 
-The user provides a taxon name (or a list of taxon names). Process that single note through the Wikipedia common name extraction pipeline, verify the output against the note's on-disk frontmatter, and fix any gaps or false positives. Each fix adds a regression test.
+The user provides a taxon name (or a list of taxon names). Process that single note through the Wikipedia common name extraction pipeline, verify the output against the note's on-disk frontmatter, and fix any gaps or false positives. Each fix is driven by a regression test written first (red), then the fix makes it pass (green).
 
 ### Primary objective: extract ALL common names from the Wikipedia article
 
@@ -141,20 +141,9 @@ Common root causes:
 - Lazy `.+?` matching too far before hitting the terminator
 - Filter in `extractNamesFromCapture` missing a category (e.g., geographic terms)
 
-**d. Fix the regex or filter**
+**d. Add the regression test first (red)**
 
-- Prefer minimal regex changes that fix the specific case
-- Use `[^.;]` or `[^.;]+?` to prevent crossing sentence boundaries
-- Use `\b` word boundaries on connectors like `and`, `or`
-- Add filters in `extractNamesFromCapture` for new categories of junk
-
-**e. Verify the fix on the original species**
-
-Before adding the test, re-run `fetchWikipediaCommonNames` on the actual Wikipedia title that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
-
-**f. Add a test case**
-
-Add to `TESTS` array in `test/common-names.test.js`:
+Write the test *before* fixing, so it drives the fix — but only after you've hand-enumerated the expected names from the full article (step 2a/2b of the process), so the assertion is ground truth, not a guess. Add to `TESTS` array in `test/common-names.test.js`:
 
 ```js
 {
@@ -164,7 +153,19 @@ Add to `TESTS` array in `test/common-names.test.js`:
 },
 ```
 
-Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a regression anchor.
+Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a regression anchor. Run the suite; the new test should fail against the current pipeline. The failure shows you the current (wrong) behavior, and the diff between `expected` and the actual output is what you're fixing.
+
+**e. Fix the regex or filter**
+
+- Prefer minimal regex changes that fix the specific case
+- Use `[^.;]` or `[^.;]+?` to prevent crossing sentence boundaries
+- Use `\b` word boundaries on connectors like `and`, `or`
+- Add filters in `extractNamesFromCapture` for new categories of junk
+- Re-run the suite; the new test should now pass (green).
+
+**f. Verify the fix on the original species**
+
+After the test is green, re-run `fetchWikipediaCommonNames` on the actual Wikipedia title that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present — the live fetch can surface names from article passages the hardcoded extract doesn't cover. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
 
 **g. Run full test suite**
 
@@ -172,7 +173,7 @@ Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a re
 npm test
 ```
 
-All existing tests must still pass. If a fix breaks another case, the fix is wrong.
+All existing tests must still pass. If a fix breaks another case, the fix is wrong. If the live verification in step f reveals additional gaps, extend the test's `extract`/`expected` and re-run the fix loop instead of making the fix pass silently.
 
 ### 5. Common pitfalls
 
