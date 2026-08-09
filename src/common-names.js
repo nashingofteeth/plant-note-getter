@@ -201,7 +201,16 @@ const WIKI_PATTERNS = [
   // Also handles "often simply referred to as" (e.g., Vanilla planifolia)
   // Negative lookahead rejects quoted phrases (lumber-industry jargon like `"hem fir"`,
   // taxonomy hybrids like `"Abies grandis x concolor"`) — legit common-name lists are unquoted
-  (text) => text.match(/(?:also|commonly|often)\s+(?:simply\s+)?referred\s+to\s+as\s+((?!["\u201C\u201D\u2018\u2019])[^.]+)\./i),
+  (text) => {
+    // Primary: "also/commonly/often (simply) referred to as X."
+    const m1 = text.match(/(?:also|commonly|often)\s+(?:simply\s+)?referred\s+to\s+as\s+((?!["\u201C\u201D\u2018\u2019])[^.]+)\./i);
+    if (m1) return m1;
+    // Fallback: bare "referred to as X. It/They is/are" or "referred to as X." before a capitalized word
+    // e.g., "Smoked jujubes ... are referred to as black jujubes. A drink..." — capture in next sentence
+    const m2 = text.match(/(?:is|are|was|were)\s+referred\s+to\s+as\s+((?!["\u201C\u201D\u2018\u2019])[^.]{2,60}?)\.(?:\s+[A-Z]|$)/i);
+    if (m2 && !/(?:the|a|an|its|their|which|that)\s+$/.test(m2[1])) return m2;
+    return null;
+  },
 
   // O: ") AuthorName (common name) is/are/was/were"
   // Catches "(short-stalked false bindweed) is" after taxonomic authority
@@ -443,7 +452,7 @@ function extractNamesFromCapture(captured) {
     if (/^[A-Z-]{2,}[-–]/.test(normalized)) continue;
 
     // Skip generic food/plant terms that aren't meaningful common names
-    if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?|apples?|alpine|alpines|bud|artichoke|terminal|ferns?)$/i.test(normalized)) continue;
+    if (/^(nuts?|seeds?|fruit|leaves|flowers?|bark|wood|roots?|oil|tree|shrub|herb|plant|weeds?|berries?|apples?|alpine|alpines|bud|artichoke|terminal|ferns?|pickles?|jam|preserves?|snacks?|tea|wine|syrup|juice|vinegar)$/i.test(normalized)) continue;
 
     // Skip "native to X" geographic descriptions
     if (/^native\s+to\s+/i.test(normalized)) continue;

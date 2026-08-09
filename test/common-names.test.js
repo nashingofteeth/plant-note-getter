@@ -392,6 +392,16 @@ const TESTS = [
     extract: "Chamaemelum nobile, commonly known as chamomile (also spelled camomile), is a low perennial plant found in dry fields and around gardens and cultivated grounds in Europe, North America, and South America. Its synonym is Anthemis nobilis, with various common names, such as Roman chamomile, English chamomile, garden chamomile, ground apple, low chamomile, mother's daisy or whig plant.",
     expected: ['chamomile', 'camomile', 'Roman chamomile', 'English chamomile', 'garden chamomile', 'ground apple', 'low chamomile', "mother's daisy", 'whig plant'],
   },
+  {
+    name: 'Ziziphus jujuba (Pattern N fallback — bare "referred to as", e.g., "are referred to as black jujubes")',
+    extract: 'Smoked jujubes are consumed in Vietnam and are referred to as black jujubes. A drink can be made by crushing the pulp in water.',
+    expected: ['black jujubes'],
+  },
+  {
+    name: 'Ziziphus jujuba (food gloss "pickle" filtered out; keeps Bogori and Bogori aachar)',
+    extract: 'They are used for making pickles (কুলের আচার) in west Bengal and Bangladesh. In Assam it is known as "Bogori" and the pickle, Bogori aachar (বগৰি আচাৰ), is famous.',
+    expected: ['Bogori', 'Bogori aachar'],
+  },
 ];
 
 const GBIF_TESTS = [
