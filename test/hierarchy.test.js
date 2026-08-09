@@ -2,6 +2,7 @@
 // Only relevant ancestors are included — skipped ranks (subdivision, subfamily,
 // tribe, section, superdomain, etc.) are omitted for conciseness.
 
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { buildTag } = require('../src/taxonomy');
 const labelMap = require('../label-map.json');
@@ -87,21 +88,9 @@ const TESTS = [
   },
 ];
 
-let passed = 0;
-let failed = 0;
-
 for (const { name, ancestors, ownId, expected } of TESTS) {
-  try {
+  test(name, () => {
     const actual = buildTag(ancestors, ownId, labelMap);
     assert.strictEqual(actual, expected, `Mismatch for "${name}"\n  actual:   ${actual}\n  expected: ${expected}`);
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
+  });
 }
-
-console.log(`\n${passed} passed, ${failed} failed out of ${TESTS.length} tests`);
-process.exit(failed > 0 ? 1 : 0);

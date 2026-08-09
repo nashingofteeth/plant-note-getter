@@ -1,29 +1,5 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
-
-let passed = 0;
-let failed = 0;
-
-const TESTS = [];
-
-function test(name, fn) {
-  TESTS.push({ name, fn });
-}
-
-async function run() {
-  for (const t of TESTS) {
-    try {
-      await t.fn();
-      console.log(`  PASS  ${t.name}`);
-      passed++;
-    } catch (e) {
-      console.log(`  FAIL  ${t.name}`);
-      console.log(`        ${e.message}`);
-      failed++;
-    }
-  }
-  console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-  process.exit(failed > 0 ? 1 : 0);
-}
 
 // Stub the API functions BEFORE names.js loads, so its destructured refs
 // point at the stubs (deterministic, no API calls).
@@ -237,5 +213,3 @@ test('collectCommonNames: populate and interactive paths use same function (pari
   assert.deepStrictEqual(first.bySource, second.bySource);
   resetStubs();
 });
-
-run();

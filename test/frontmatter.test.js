@@ -1,21 +1,7 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { parseFrontMatter, analyzeMissingProperties, updateFrontMatter, hasPlantTag, generateFrontMatter } = require('../src/frontmatter');
 const labelMap = require('../label-map.json');
-
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
-}
 
 // ─── parseFrontMatter ───────────────────────────────────────────────────────
 
@@ -291,6 +277,3 @@ test('generateFrontMatter: produces parseable round-trip', () => {
   assert.strictEqual(parsed.rank, 'species');
   assert.strictEqual(parsed.wikipedia, 'https://en.wikipedia.org/wiki/Quercus_rubra');
 });
-
-console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-process.exit(failed > 0 ? 1 : 0);

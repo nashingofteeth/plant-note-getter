@@ -1,22 +1,8 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { isSynonymOf } = require('../src/wikidata');
 const { stripArticle } = require('../src/utils');
 const { extractNamesFromCapture } = require('../src/common-names');
-
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
-}
 
 // ─── stripArticle ───────────────────────────────────────────────────────────
 
@@ -220,6 +206,3 @@ test('extractNamesFromCapture: filler lead-ins filtered but real names kept', ()
     ['oak']
   );
 });
-
-console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-process.exit(failed > 0 ? 1 : 0);

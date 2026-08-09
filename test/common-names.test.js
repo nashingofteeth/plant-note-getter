@@ -1,3 +1,4 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { extractWikipediaCommonNames, parseGbifVernacularName } = require('../src/common-names');
 
@@ -447,42 +448,24 @@ const GBIF_TESTS = [
   },
 ];
 
-let passed = 0;
-let failed = 0;
-
 for (const { name, raw, expected } of GBIF_TESTS) {
-  try {
+  test(`parseGbifVernacularName: ${name}`, () => {
     const actual = parseGbifVernacularName(raw);
     assert.deepStrictEqual(
       actual.sort(),
       expected.slice().sort(),
       `Mismatch for "${name}"\n  actual:   ${JSON.stringify(actual)}\n  expected: ${JSON.stringify(expected)}`
     );
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
+  });
 }
 
 for (const { name, extract, expected } of TESTS) {
-  try {
+  test(`extractWikipediaCommonNames: ${name}`, () => {
     const actual = extractWikipediaCommonNames(extract);
     assert.deepStrictEqual(
       actual.sort(),
       expected.slice().sort(),
       `Mismatch for "${name}"\n  actual:   ${JSON.stringify(actual)}\n  expected: ${JSON.stringify(expected)}`
     );
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
+  });
 }
-
-console.log(`\n${passed} passed, ${failed} failed out of ${TESTS.length + GBIF_TESTS.length} tests`);
-process.exit(failed > 0 ? 1 : 0);

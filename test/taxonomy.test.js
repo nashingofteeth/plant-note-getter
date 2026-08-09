@@ -1,21 +1,7 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { buildAliases, buildTagSegmentsWithOriginals, buildTag } = require('../src/taxonomy');
 const labelMap = require('../label-map.json');
-
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
-}
 
 // ─── buildAliases ───────────────────────────────────────────────────────────
 
@@ -262,6 +248,3 @@ test('buildTag: oak produces expected full tag', () => {
   const tag = buildTag(ancestors, 'Q147525', labelMap);
   assert.strictEqual(tag, 'life/eukaryota/plantae/tracheophytes/spermatophytes/angiosperms/eudicots/rosids/fagales/fagaceae/quercus');
 });
-
-console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-process.exit(failed > 0 ? 1 : 0);

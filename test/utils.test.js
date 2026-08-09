@@ -1,20 +1,6 @@
+const { test } = require('node:test');
 const assert = require('node:assert');
 const { sanitizeFilename, formatAlias, getCurrentDate, isEmptyValue, stripArticle, normalizeNameKey, cleanName } = require('../src/utils');
-
-let passed = 0;
-let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  PASS  ${name}`);
-    passed++;
-  } catch (e) {
-    console.log(`  FAIL  ${name}`);
-    console.log(`        ${e.message}`);
-    failed++;
-  }
-}
 
 // ─── sanitizeFilename ───────────────────────────────────────────────────────
 
@@ -130,6 +116,3 @@ test('cleanName: strips article and trailing periods', () => {
 test('cleanName: leaves other names unchanged', () => {
   assert.strictEqual(cleanName('Red Oak'), 'Red Oak');
 });
-
-console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-process.exit(failed > 0 ? 1 : 0);
