@@ -10,6 +10,7 @@ const { buildTagSegmentsWithOriginals } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
 const { createNoteFile, populateMissingProperties } = require('./src/notes');
 const { checkAndPruneTag, printHierarchy, resolveTagForNote } = require('./src/tagcheck');
+const { askYesNo } = require('./src/prompt');
 
 function printSection(title) {
   const line = '\u2500'.repeat(3) + ' ' + title + ' ' + '\u2500'.repeat(Math.max(1, 60 - title.length - 4));
@@ -153,6 +154,10 @@ async function main() {
         }
         if (autoApply) {
           console.log('\n  --apply flag detected, updating...');
+          const updatedContent = updateFrontMatter(result.content, updates);
+          fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
+          console.log('  Updated successfully.');
+        } else if (await askYesNo('\n  Apply available updates? [y/N] ')) {
           const updatedContent = updateFrontMatter(result.content, updates);
           fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
           console.log('  Updated successfully.');

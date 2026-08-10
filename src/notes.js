@@ -6,6 +6,7 @@ const { parseFrontMatter, generateFrontMatter, hasPlantTag, analyzeMissingProper
 const { searchTaxon, getEntityData, getParentChain } = require('./wikidata');
 const { collectCommonNames } = require('./names');
 const { buildTag } = require('./taxonomy');
+const { askYesNo } = require('./prompt');
 
 function getPlantNotes(noteRoot) {
   const files = fs.readdirSync(noteRoot);
@@ -38,42 +39,7 @@ function createNoteFile(filename, content) {
 
 async function populateMissingProperties(applyChanges = false) {
   if (applyChanges) {
-    const planned = loadPlannedUpdates();
-    if (planned) {
-      console.log('Applying changes from previous dry-run...\n');
-      let updated = 0, errors = 0;
-      for (let i = 0; i < planned.length; i++) {
-        const item = planned[i];
-        console.log(`${i + 1}. ${item.filename}`);
-        if (item.error) {
-          console.log(`   Skipped: ${item.error}\n`);
-          errors++;
-          continue;
-        }
-        if (!item.updates || Object.keys(item.updates).length === 0) {
-          console.log(`   No updates available\n`);
-          continue;
-        }
-        try {
-          const content = fs.readFileSync(item.filepath, 'utf-8');
-          const updatedContent = updateFrontMatter(content, item.updates);
-          fs.writeFileSync(item.filepath, updatedContent, 'utf-8');
-          console.log(`   Updates applied:`);
-          logUpdates(item.updates, '     ');
-          console.log(`   Updated\n`);
-          updated++;
-        } catch (e) {
-          console.log(`   Error: ${e.message}\n`);
-          errors++;
-        }
-      }
-      console.log(`Done! Updated ${updated} of ${planned.length} notes.`);
-      if (errors > 0) console.log(`Errors: ${errors}`);
-      deletePlannedUpdates();
-      console.log('Cleared temporary updates file.');
-      return;
-    }
-    console.log('No planned updates found. Run without --apply first.\n');
+    await applyPlannedUpdates();
     return;
   }
 
@@ -139,7 +105,55 @@ async function populateMissingProperties(applyChanges = false) {
   }
 
   savePlannedUpdates(plannedUpdates.filter(item => !item.error));
-  console.log(`Planned updates saved. Run with --apply to apply changes.`);
+  const pending = plannedUpdates.filter(item => !item.error && item.updates && Object.keys(item.updates).length > 0).length;
+  if (pending > 0) {
+    const doApply = await askYesNo(`\nApply changes to ${pending} note${pending > 1 ? 's' : ''} now? [y/N] `);
+    if (doApply) {
+      await applyPlannedUpdates();
+      return;
+    }
+  }
+  console.log('Planned updates saved. Run with --apply to apply changes.');
+}
+
+async function applyPlannedUpdates() {
+  const planned = loadPlannedUpdates();
+  if (!planned) {
+    console.log('No planned updates found. Run without --apply first.\n');
+    return 0;
+  }
+  console.log('Applying changes...\n');
+  let updated = 0, errors = 0;
+  for (let i = 0; i < planned.length; i++) {
+    const item = planned[i];
+    console.log(`${i + 1}. ${item.filename}`);
+    if (item.error) {
+      console.log(`   Skipped: ${item.error}\n`);
+      errors++;
+      continue;
+    }
+    if (!item.updates || Object.keys(item.updates).length === 0) {
+      console.log(`   No updates available\n`);
+      continue;
+    }
+    try {
+      const content = fs.readFileSync(item.filepath, 'utf-8');
+      const updatedContent = updateFrontMatter(content, item.updates);
+      fs.writeFileSync(item.filepath, updatedContent, 'utf-8');
+      console.log(`   Updates applied:`);
+      logUpdates(item.updates, '     ');
+      console.log(`   Updated\n`);
+      updated++;
+    } catch (e) {
+      console.log(`   Error: ${e.message}\n`);
+      errors++;
+    }
+  }
+  console.log(`Done! Updated ${updated} of ${planned.length} notes.`);
+  if (errors > 0) console.log(`Errors: ${errors}`);
+  deletePlannedUpdates();
+  console.log('Cleared temporary updates file.');
+  return updated;
 }
 
 function savePlannedUpdates(updates) {
@@ -163,6 +177,7 @@ module.exports = {
   createNoteFile,
   getPlantNotes,
   populateMissingProperties,
+  applyPlannedUpdates,
   savePlannedUpdates,
   loadPlannedUpdates,
   deletePlannedUpdates
