@@ -473,6 +473,11 @@ const TESTS = [
     extract: 'Ruscus aculeatus, known as butcher\'s-broom, is a low evergreen dioecious Eurasian shrub, with flat shoots known as cladodes that give the appearance of stiff, spine-tipped leaves. Small greenish flowers appear in spring, and are borne singly in the centre of the cladodes. The female flowers are followed by a red berry, and the seeds are bird-distributed, but the plant also spreads vegetatively by means of rhizomes. It is native to Eurasia and some northern parts of Africa.',
     expected: ["butcher's-broom"],
   },
+  {
+    name: 'Maackia amurensis (Pattern F "common names are from..." provenance junk filtered)',
+    extract: 'Maackia amurensis, commonly known as the Amur maackia, is a species of tree in the family Fabaceae that can grow 15 metres (49 ft) tall. The species epithet and common names are from the Amur River region, where the tree originated; it occurs in northeastern China, Korea, and Russia.',
+    expected: ['Amur maackia'],
+  },
 ];
 
 const GBIF_TESTS = [

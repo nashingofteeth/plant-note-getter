@@ -553,6 +553,12 @@ function extractNamesFromCapture(captured) {
     // Skip "native to X" geographic descriptions
     if (/^native\s+to\s+/i.test(normalized)) continue;
 
+    // Skip "from the X" provenance descriptions
+    if (/^from\s+(?:the\s+)?[A-Z]/i.test(normalized)) continue;
+
+    // Skip "it occurs/is/grows/found in X" descriptive fragments
+    if (/^it\s+(?:occurs?|is|grows?|are|found|distributed)\b/i.test(normalized)) continue;
+
     // Skip "species of X" generic descriptors
     if (/^species\s+of\s+/i.test(normalized)) continue;
 
