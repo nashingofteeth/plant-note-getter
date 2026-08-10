@@ -12,7 +12,7 @@ If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus
 app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
        → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
-       → wiki-extract.js (pure text extraction: WIKI_PATTERNS, extractNamesFromCapture, parseGbifVernacularName)
+       → wiki-extract.js (pure text extraction, no API)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -28,7 +28,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
 | `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaCommonNames` |
-| `src/wiki-extract.js` | Pure text extraction: WIKI_PATTERNS, extractNamesFromCapture, parseGbifVernacularName, extractWikipediaCommonNames |
+| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). Extraction logic is a blank stub pending ground-up reconstruction. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
@@ -57,45 +57,24 @@ Wikidata P1843 claims → wikidata.js (collectSynonymData) → names.js (collect
 (merged in this order — Wikipedia casing wins for duplicates; dedup via normalizeNameKey)
 ```
 
-### WIKI_PATTERNS: regexes for Wikipedia intro constructions
+### Reconstruction task for a future agent
 
-| Pattern | Matches | Example species |
-|---------|---------|----------------|
-| A | `(name1, name2, or name3)` parenthetical | Rosa rubiginosa |
-| A2 | `The common name (ScientificName)` | Quercus agrifolia |
-| B | `, the/a/an name1, name2, and name3, is` | Eschscholzia californica |
-| C | `, name1, is` (no article) | Oreomecon crocea |
-| D | `known as / commonly known as / generally known as` | Ulmus americana |
-| E | `also/often/sometimes called` | Lactuca serriola |
-| F | `Common names include/are` | Sambucus nigra |
-| F2 | `with the common names X, Y, and Z` | Picea engelmannii |
-| G | `English/vernacular names ... include` | Populus |
-| H | `known by the common names` | Malephora crocea |
-| I | `also/commonly known as X, and is` (later paragraphs) | Jasminum officinale |
-| J | `ScientificName or commonName is` | Abies balsamea |
-| K | `known as X. It/They is/are` | Abronia latifolia |
-| L | `where it is called X` | Farfugium japonicum |
-| M | `The name X is applied to` | Alstroemeria aurea |
-| N | `also/commonly referred to as X, Y, and Z.` | Arisaema triphyllum |
-| O | `) Author (common name) is` | Calystegia silvatica |
-| P | `Alternative names ... are X and Y` | Hibiscus mutabilis |
+The Wikipedia common-name extraction implementation in `src/wiki-extract.js`
+was removed in full and is currently blank stubs: `extractWikipediaCommonNames`
+(text → list of the taxon's common names stated in the article) and
+`extractNamesFromCapture` (passage → clean name list). Rebuild them from the
+ground up.
 
-### Known pitfalls in extractNamesFromCapture
-
-1. **Connector splitting** — `\b(?:and|or)\b` needs word boundaries; without them "oregano" matches "or"
-2. **Missing `.replace()` second arg** — `.replace(/re/, '')` not `.replace(/re/)` (the latter uses `"undefined"` as replacement text)
-3. **Trailing punctuation** — Wikidata P1843 can store `"cliff maids."` with period; strip at all entry points
-4. **Language qualifiers** — strip trailing ` in Greek`, ` in Latin` etc.
-5. **Label prefixes** — strip leading `common name`, `common names`, `vernacular name`
-6. **Filler phrases** — filter out `among many regional names`, `among others` etc.
-7. **Real-time verification** — when adding a new test case, fetch the actual Wikipedia API extract and verify the text matches one of the patterns. Some intros are too complex for any pattern (e.g., Ginkgo biloba's multi-clause construction).
-
-### Resolved extraction limitations
-
-- [x] **Binomial names from "previously/formerly" context** — `extractNamesFromCapture` now strips the entire formerly/previously portion (including former scientific names) up to transition phrases like "more commonly", "commonly/also called", or articles. Formerly affected: Elegia tectorum, Phedimus spurius.
-- [x] **Possessive vs non-possessive variants** — Dedup in `extractNamesFromCapture` and extraction functions normalizes by stripping `'s` before comparison, so "David's viburnum" and "David viburnum" are treated as the same name.
-- [x] **Names not in article intro** — `findAllPatternMatches` iteratively finds ALL matches for each pattern across the full article text, not just the first occurrence. Non-anchored patterns now capture names in later sections (e.g., "Common names include A..." sections).
-- [x] **Non-standard article formats** — Wikipedia API call now uses `redirects=` to follow redirect pages. Pronunciation artifacts (text containing `/`) are filtered out by `extractNamesFromCapture`. List-heavy articles remain a known coverage gap (not all formats have pattern support).
+- The behavioural spec is the assertions in `test/common-names.test.js` and
+  `test/wikidata.test.js` (hardcoded extracts, no API calls). The failing cases
+  are the target; keep all existing cases passing too.
+- Prefer general, structural solutions that generalise across many natural
+  language constructions over one-off special cases.
+- Keep the functions pure (no API/fs/process I/O). `parseGbifVernacularName`
+  remains functional and must not change. `src/common-names-fetch.js`
+  (`fetchWikipediaCommonNames`) already delegates here.
+- A fuller worked methodology lives in [`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md).
+- Verify with `npm test` after any change.
 
 ## Tests
 

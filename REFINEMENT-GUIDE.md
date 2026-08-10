@@ -11,7 +11,7 @@ The Wikipedia article is a first-class name source (merged last in `collectCommo
 This means `aliases` is **not** the target to match. Workflows that only diff the pipeline output against the existing note are incomplete — they miss legitimate common names the note never had:
 
 - Read the Wikipedia extract in full (intro and `== Common names ==` sections) and enumerate the common names stated in it by hand.
-- Compare that hand-built list against `fetchWikipediaCommonNames(title)` output. Every name you can find in the article that the pipeline misses is a pattern gap to fix — regardless of whether it appears in the note's `aliases`.
+- Compare that hand-built list against `fetchWikipediaCommonNames(title)` output. Every name you can find in the article that the pipeline misses is a gap to fix — regardless of whether it appears in the note's `aliases`.
 - Names already in `aliases` are a useful cross-check for false positives and regressions, but a low extraction count (e.g., 1 name from an article that lists 9) is a strong signal the extraction is incomplete, not that the note is already fine.
 - If the extracted count is suspiciously small relative to the article's named names, re-read the article text and hunt for unhandled constructions before concluding "nothing to fix."
 
@@ -20,7 +20,8 @@ This means `aliases` is **not** the target to match. Workflows that only diff th
 ```
 app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
-       → common-names.js (GBIF names, Wikipedia names)
+       → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
+       → wiki-extract.js (common-name extraction from Wikipedia text — implementation pending reconstruction)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -28,16 +29,15 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 ```
 
 The extraction pipeline:
-1. Fetch Wikipedia extract (full article — `exintro` removed so patterns can reach `== Common names ==` sections)
-2. Try each pattern in `WIKI_PATTERNS` against the extract
-3. Pass captured text to `extractNamesFromCapture()` for cleanup
-4. Return deduplicated list of common names
+1. Fetch Wikipedia extract (full article — no `exintro`, so extraction can reach `== Common names ==` sections)
+2. Extract common names from the plain-text extract
+3. Return deduplicated list of common names
 
-### Intro-only vs full-article extraction
-
-`fetchWikipediaCommonNames()` fetches the full article (no `exintro`). This allows patterns to match content in `== Common names ==` sections and other non-intro locations. Patterns that fire on section-level content:
-- **Pattern F** — `"Common names include X, Y, and Z"` (section heading content)
-- **Pattern M** — `"The name X is (often|sometimes) applied to"` (section content)
+The Wikipedia extraction implementation in `src/wiki-extract.js` was removed and is
+being reconstructed from the ground up. Its intended behaviour is defined by the
+regression tests in `test/common-names.test.js` and `test/wikidata.test.js`.
+Refinement work should drive that reconstruction through new regression tests, not
+by re-introducing prior implementation details.
 
 To verify what the pipeline currently extracts for a species, call `fetchWikipediaCommonNames(title)` directly.
 
@@ -57,7 +57,7 @@ The user provides a scientific name like `Quercus rubra`. Determine the Wikipedi
 const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=&titles=${title}&format=json&redirects=1`;
 ```
 
-The production pipeline fetches the full article (no `exintro`) so patterns can match `== Common names ==` sections. Use `redirects=1` to follow page redirects.
+The production pipeline fetches the full article (no `exintro`) so section-level name lists are reachable. Use `redirects=1` to follow page redirects.
 
 Use a descriptive `User-Agent` header per [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette).
 
@@ -88,7 +88,7 @@ These are the ground truth for what the pipeline **did** extract. Any name in `a
 ### 3. Run extraction and compare
 
 ```js
-const { fetchWikipediaCommonNames } = require('./src/common-names');
+const { fetchWikipediaCommonNames } = require('./src/common-names-fetch');
 const extracted = await fetchWikipediaCommonNames(wikipediaTitle);
 ```
 
@@ -96,7 +96,7 @@ The pipeline extracts from the full article, including `== Common names ==` sect
 
 | Situation | Meaning |
 |-----------|---------|
-| Name in `aliases` but not in `extracted` | Pipeline missed it — likely a pattern gap |
+| Name in `aliases` but not in `extracted` | Pipeline missed it — likely a coverage gap |
 | Name in `extracted` but not in `aliases` | Expected and desirable — a newly discovered name from the article. Verify it's a legitimate name (not junk), then let it flow into the note on update. |
 | Extracted names contain junk (geographic terms, prefixes, scientific names leaking) | Filter gap |
 
@@ -114,40 +114,18 @@ Flag suspicious extracted results containing:
 **a. Reproduce in isolation**
 
 ```js
-const { extractWikipediaCommonNames } = require('./src/common-names');
+const { extractWikipediaCommonNames } = require('./src/wiki-extract');
 const text = '...actual Wikipedia extract...';
 console.log(extractWikipediaCommonNames(text));
 ```
 
-**b. Trace which pattern fires**
-
-Test each pattern manually:
-
-```js
-const WIKI_PATTERNS = [ /* paste from src/common-names.js */ ];
-const text = '...';
-for (let i = 0; i < WIKI_PATTERNS.length; i++) {
-  const m = WIKI_PATTERNS[i](text);
-  if (m) console.log(`Pattern [${i}]: ${m[1].slice(0, 80)}`);
-}
-```
-
-**c. Identify the root cause**
-
-Common root causes:
-- Pattern matches across sentence boundaries (e.g., a pattern matching after a period that should have been constrained)
-- Prefix strip doesn't apply to middle segments (e.g., "also called" after a comma)
-- `\b` word boundary missing, matching inside words (e.g., "or" matching in "oregano")
-- Lazy `.+?` matching too far before hitting the terminator
-- Filter in `extractNamesFromCapture` missing a category (e.g., geographic terms)
-
-**d. Add the regression test first (red)**
+**b. Add the regression test first (red)**
 
 Write the test *before* fixing, so it drives the fix — but only after you've hand-enumerated the expected names from the full article (step 2a/2b of the process), so the assertion is ground truth, not a guess. Add to `TESTS` array in `test/common-names.test.js`:
 
 ```js
 {
-  name: 'Species name (brief description of the pattern)',
+  name: 'Species name (brief description of the construction)',
   extract: '...exact Wikipedia extract...',
   expected: ['name1', 'name2'],
 },
@@ -155,63 +133,48 @@ Write the test *before* fixing, so it drives the fix — but only after you've h
 
 Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a regression anchor. Run the suite; the new test should fail against the current pipeline. The failure shows you the current (wrong) behavior, and the diff between `expected` and the actual output is what you're fixing.
 
-**e. Fix the regex or filter**
+**c. Fix the implementation**
 
-- Prefer minimal regex changes that fix the specific case
-- Use `[^.;]` or `[^.;]+?` to prevent crossing sentence boundaries
-- Use `\b` word boundaries on connectors like `and`, `or`
-- Add filters in `extractNamesFromCapture` for new categories of junk
-- Re-run the suite; the new test should now pass (green).
+The extraction logic in `src/wiki-extract.js` is being rebuilt from the ground up, so prefer structural solutions that generalise across many constructions instead of one-off special cases. Re-run the suite; the new test should now pass (green) and all existing tests must remain green.
 
-**f. Verify the fix on the original species**
+**d. Verify the fix on the original species**
 
 After the test is green, re-run `fetchWikipediaCommonNames` on the actual Wikipedia title that triggered the issue. Confirm the bad names are gone and any legitimately expected names are still present — the live fetch can surface names from article passages the hardcoded extract doesn't cover. Then re-check against the note's `aliases` from step 2b to make sure names that were in the note are still extracted.
 
-**g. Run full test suite**
+**e. Run full test suite**
 
 ```bash
 npm test
 ```
 
-All existing tests must still pass. If a fix breaks another case, the fix is wrong. If the live verification in step f reveals additional gaps, extend the test's `extract`/`expected` and re-run the fix loop instead of making the fix pass silently.
+All existing tests must still pass. If a fix breaks another case, the fix is wrong. If the live verification in step d reveals additional gaps, extend the test's `extract`/`expected` and re-run the fix loop instead of making the fix pass silently.
 
-### 5. Common pitfalls
-
-| Pitfall | Example | Fix |
-|---------|---------|-----|
-| Missing `\b` on connectors | `or` matching in `oregano` | Use `\b(?:and\|or)\b` |
-| Lazy match crossing sentences | A pattern matching across the entire extract instead of the first sentence | Use `[^.;]+?` to stop at period/semicolon |
-| Prefix strip only on first segment | "also called" in middle segment | Apply strip per segment inside the comma-split loop |
-| `\n` in extract breaking regex | Multi-paragraph extracts | Use `.replace(/\n+/g, ' ')` before matching |
-| Redirect titles changing page content | `Pinus attenuata` → `Knobcone pine` | Always use `redirects=1` in API, handle in mapping |
-| Unbounded `^[^,]+` in appositive patterns | Consumes 129 chars past no-comma-after-sci-name, matches "Balkan Peninsula, ... Ukraine. It" | Limit initial segment length: `^[^,]{1,100}` |
-
-### 6. What NOT to fix
+### 5. What NOT to fix
 
 - **Legitimate geographic common names**: "European holly", "American basswood", "Chinese juniper" are real common names. Don't filter these.
 - **Regional variants**: "Spanish bluebell" vs "wood hyacinth" — both are valid.
-- **Pattern coverage gaps**: Some Wikipedia articles are too complex for any pattern. If the correct names come from Wikidata P1843 or GBIF, that's fine — Wikipedia extraction is supplementary.
+- **Coverage gaps elsewhere**: If the correct names come from Wikidata P1843 or GBIF, that's fine — Wikipedia extraction is supplementary.
 
-### 7. Key files
+### 6. Key files
 
 | File | Role |
 |------|------|
-| `src/common-names.js` | `WIKI_PATTERNS` array — search for `const WIKI_PATTERNS` |
-| `src/common-names.js` | `extractNamesFromCapture()` — cleanup and filtering |
-| `src/common-names.js` | `fetchWikipediaCommonNames()` — orchestrator |
+| `src/wiki-extract.js` | Wikipedia text extraction — implementation to be reconstructed (stubbed) |
+| `src/common-names-fetch.js` | `fetchWikipediaCommonNames()` — fetches extract, delegates extraction |
 | `src/names.js` | `collectCommonNames()` — merges all name sources, returns `{ names, bySource }` |
 | `src/names.js` | `buildAliases()` — final alias list for frontmatter |
 | `test/common-names.test.js` | Test cases (hardcoded extracts, no API calls) |
+| `test/wikidata.test.js` | `extractNamesFromCapture` unit cases (parenthetical/semicolon/language cleaning) |
 | `test/names.test.js` | `collectCommonNames` merge order/dedup/provenance (stubbed fetches) |
 | `src/frontmatter.js` | `parseFrontMatter()` — read existing note's YAML |
 | `src/utils.js` | `sanitizeFilename()` — compute note path from name |
 | `src/config.js` | `NOTE_ROOT` — directory containing plant notes |
 
-### 7.5. Ask before adding exports
+### 6.5. Ask before adding exports
 
 If during refinement you need to import an internal variable or utility that isn't exported, ask the user for permission before adding it to `module.exports`. Do not add exports unilaterally.
 
-### 8. Verification checklist
+### 7. Verification checklist
 
 After fixing, verify:
 
@@ -221,17 +184,3 @@ After fixing, verify:
 4. No junk terms leak through (verify with the flag list from step 3)
 
 For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
-
-## Example fix commit
-
-```
-fix: strip "also called" prefix from middle segments in extractNamesFromCapture
-
-The prefix strip regex only applied to the start of the full captured string.
-When "also called" appeared after a comma (e.g., "raspberry, also called red
-raspberry"), it wasn't stripped and leaked through as a common name.
-
-Added per-segment prefix stripping inside the comma-split loop.
-
-Test: Rubus idaeus ("also called" prefix in middle segment)
-```
