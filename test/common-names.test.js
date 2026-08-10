@@ -408,6 +408,71 @@ const TESTS = [
     extract: 'They are used for making pickles (কুলের আচার) in west Bengal and Bangladesh. In Assam it is known as "Bogori" and the pickle, Bogori aachar (বগৰি আচাৰ), is famous.',
     expected: ['Bogori', 'Bogori aachar'],
   },
+  {
+    name: 'Borago officinalis (leading name before pronunciation/synonym parenthetical)',
+    extract: 'Borage (  or ; Borago officinalis), also known as starflower, is an annual herb in the flowering plant family Boraginaceae native to the Mediterranean region.',
+    expected: ['Borage', 'starflower'],
+  },
+  {
+    name: 'Arctostaphylos manzanita ("has the common names X and Y")',
+    extract: 'One of many species of manzanita, Arctostaphylos manzanita has the common names common manzanita and whiteleaf manzanita.\nArctostaphylos manzanita is endemic to California.',
+    expected: ['common manzanita', 'whiteleaf manzanita'],
+  },
+  {
+    name: 'Cedrus ("with the common English name X")',
+    extract: 'Cedrus, with the common English name cedar, is a genus of coniferous trees in the plant family Pinaceae (subfamily Abietoideae).',
+    expected: ['cedar'],
+  },
+  {
+    name: 'Rutaceae ("commonly known as the rue or citrus family" expands to both)',
+    extract: 'The Rutaceae () is a family, commonly known as the rue or citrus family, of flowering plants, usually placed in the order Sapindales.',
+    expected: ['rue family', 'citrus family'],
+  },
+  {
+    name: 'Cyperaceae ("a family of ... plants known as sedges" with no true-sedges leak)',
+    extract: 'The Cyperaceae () are a family of  graminoid (grass-like), monocotyledonous flowering plants known as sedges. The family contains around 5,500 described species in about 90 genera \u2013 the largest being the "true sedges" (Carex), with over 2,000 species.',
+    expected: ['sedges'],
+  },
+  {
+    name: 'Erigeron speciosus ("known by the common names" before a == Description == section)',
+    extract: 'Erigeron speciosus is a widespread North American species of flowering plants in the family Asteraceae known by the common names aspen fleabane, garden fleabane, and showy fleabane.\n\n\n== Description ==\nE. speciosus can exceed 60 cm (24 in) in height.',
+    expected: ['aspen fleabane', 'garden fleabane', 'showy fleabane'],
+  },
+  {
+    name: 'Thuja ("Members are commonly known as X, Y, or Z" with parenthetical aside)',
+    extract: 'Thuja ( THEW-y\u0259) is a genus of coniferous tree or shrub in the Cupressaceae (cypress family). There are five species in the genus. Members are commonly known as arborvitaes (from the Latin term for \'tree of life\'), thujas, or New World false cedars.\n\n== Description ==',
+    expected: ['arborvitaes', 'thujas', 'New World false cedars'],
+  },
+  {
+    name: 'Philadelphus ("() (mock-orange) is a genus")',
+    extract: 'Philadelphus () (mock-orange) is a genus of about 60 species of shrubs from 3\u201320 ft (1\u20136 m) tall, native to North America and southern Europe.',
+    expected: ['mock-orange'],
+  },
+  {
+    name: 'Allium schoenoprasum ("Chives, scientific name Allium schoenoprasum, is")',
+    extract: 'Chives, scientific name Allium schoenoprasum, is a species of flowering plant in the family Amaryllidaceae.',
+    expected: ['Chives'],
+  },
+  {
+    name: 'Urtica dioica ("or just a nettle or stinger" strips article iteratively)',
+    extract: 'Urtica dioica, often known as common nettle, burn nettle, stinging nettle, nettle leaf, or just a nettle or stinger, is an herbaceous perennial flowering plant in the family Urticaceae.',
+    expected: ['common nettle', 'burn nettle', 'stinging nettle', 'nettle leaf', 'nettle', 'stinger'],
+  },
+  {
+    name: 'Cecropia false positive — "referred to as a dioecious species" rejected',
+    extract: 'Cecropia species have staminate and pistillate flowers on separate trees, more commonly referred to as a dioecious species. The fruits are achenes enveloped by a fleshy perianths.',
+    expected: [],
+  },
+  {
+    name: 'Cecropia false positive — fruit "known as snake fingers" rejected',
+    extract: 'Cecropia fruit, known as snake fingers, are a popular food of diverse animals, including bats.',
+    expected: [],
+  },
+  {
+    name: 'Ruscus aculeatus (Pattern K must not cross sentence boundary into "seeds are bird-distributed")',
+    extract: 'Ruscus aculeatus, known as butcher\'s-broom, is a low evergreen dioecious Eurasian shrub, with flat shoots known as cladodes that give the appearance of stiff, spine-tipped leaves. Small greenish flowers appear in spring, and are borne singly in the centre of the cladodes. The female flowers are followed by a red berry, and the seeds are bird-distributed, but the plant also spreads vegetatively by means of rhizomes. It is native to Eurasia and some northern parts of Africa.',
+    expected: ["butcher's-broom"],
+  },
 ];
 
 const GBIF_TESTS = [

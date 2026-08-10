@@ -126,12 +126,29 @@ const WIKI_PATTERNS = [
   // NOT preceded by "the", "a", or "an"
   // Lazy non-period capture to support comma-separated name lists
   // Use (?![A-Z][a-z]+\s+[a-z]+\s*\() to reject scientific names in apposition (e.g., "ScientificName, Pinus attenuata (syn...), is")
-  (text) => text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)(?![A-Z][a-z]+\s+[a-z]+\s*\()([^.]{1,100}?),\s+(?:is|are|was|were|has|have)\b/i),
+  (text) => {
+    const m = text.match(/^[^,]+,\s+(?!(?:the|a|an)\s)(?![A-Z][a-z]+\s+[a-z]+\s*\()([^.]{1,100}?),\s+(?:is|are|was|were|has|have)\b/i);
+    if (!m) return null;
+    // Reject when the name applies to a plant PART rather than the taxon
+    // (e.g., "Cecropia fruit, known as snake fingers, are...")
+    const subject = m[0].split(',')[0].trim();
+    if (/(?:fruits?|seeds?|flowers?|berries?|leaves?|cladodes?|shoots?|stems?|roots?|buds?|bark|pollen|sap|spores?)$/i.test(subject)) return null;
+    return m;
+  },
 
   // D: "known as" / "commonly known as" / "also known as"
   // Lazy capture, non-period chars to prevent crossing sentence boundaries
   // Negative lookbehind blocks "previously/formerly/originally known as" (taxonomic history, not common names)
-  (text) => text.match(/(?<!(?:previously|formerly|originally)\s+)(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i),
+  // Rejects when the name applies to a plant PART, not the taxon (e.g.,
+  // "Cecropia fruit, known as snake fingers, are..."), by checking the
+  // subject directly preceding "known as".
+  (text) => {
+    const m = text.match(/(?<!(?:previously|formerly|originally)\s+)(?:commonly\s+|also\s+)?known\s+(?:commonly\s+)?as\s+([^.]+?),\s+(?:is|are|was|were|has|have|refers)\b/i);
+    if (!m) return null;
+    const before = text.slice(Math.max(0, m.index - 60), m.index);
+    if (/(?:fruits?|seeds?|flowers?|berries?|leaves?|cladodes?|shoots?|stems?|roots?|buds?|bark|pollen|sap|spores?)\s*[,;]\s*$/i.test(before)) return null;
+    return m;
+  },
 
   // K: "known as X. It/They is/are" — verb in next sentence (e.g., "known as X, or Y. It is")
   // Lazy capture so abbreviation periods (e.g. "subsp.") don't break the match
@@ -183,8 +200,11 @@ const WIKI_PATTERNS = [
 
   // H: "known by the/common name(s) X, Y, and Z" (singular or plural)
   // Also handles "known by various common names" where "the" is replaced
-  // Capture limited to 120 chars to avoid consuming entire sentence
-  (text) => text.match(/known\s+by\s+(?:\w+\s+)?common\s+names?\s+([^.]{1,120}?)\.(?:\s+[A-Z]|$)/i),
+  // Capture limited to 120 chars to avoid consuming entire sentence.
+  // The tail accepts a period followed by a capital letter, a "== section =="
+  // header, or end-of-string, so sentences followed by newline section headers
+  // (e.g., Erigeron speciosus) still match.
+  (text) => text.match(/known\s+by\s+(?:\w+\s+)?common\s+names?\s+([^.]{1,120}?)\.(?=\s*(?:[A-Z]|==)|\s*$)/i),
 
   // I: "also/commonly known as/called X, Y, and Z, and is/are..." (second+ paragraph constructions)
   // Constrain to current sentence — don't cross period or section header boundaries
@@ -238,6 +258,63 @@ const WIKI_PATTERNS = [
     if (!/[,]|\band\b|\bor\b/i.test(m[1])) return null;
     return m;
   },
+
+  // Q: Leading common name before a parenthetical aside, followed by
+  // ", also/commonly/generally known as/called" — e.g.,
+  // "Borage (  or ; Borago officinalis), also known as starflower, is..."
+  // Leading "The/A/An" subjects are rejected, and binomial-shaped two-word
+  // leads (e.g., "Betula pubescens (syn. Betula alba), commonly known as ...")
+  // are rejected as scientific names rather than common names.
+  (text) => {
+    const m = text.match(/^(?!(?:The|A|An)\s)([A-Z][a-zA-Z]+(?:\s+[a-zA-Z]+)*)\s*\([^)]*\)\s*,\s+(?:also|commonly|generally)\s+(?:known\s+as|called)\b/i);
+    if (!m) return null;
+    if (/^[A-Z][a-z]+\s+[a-z]+(?:\s+[a-z]+)*$/i.test(m[1])) return null;
+    return m;
+  },
+
+  // R: "Members are commonly known as X, Y, or Z." — comma-less construction
+  // ending in a sentence-terminating period (no trailing ", is/are"), e.g., Thuja.
+  // Does not cross into the following sentence (no ". Capital") or sections, does
+  // not bleed into "family, of flowering plants ..." descriptions, and rejects
+  // "also known as" asides inside unclosed parentheticals about other taxa.
+  (text) => {
+    const m = text.match(/(?:commonly\s+|generally\s+)(?:well\s+)?known\s+(?:commonly\s+)?as\s+((?:(?!,\s+(?:is|are|was|were|has|have)\b)(?!,\s+of\b)(?!\.\s+[A-Z])[^.;])+?)\.(?=\s*(?:[A-Z]|==)|\s*$)/i);
+    if (!m) return null;
+    const before = text.slice(0, m.index);
+    const lastOpen = before.lastIndexOf('(');
+    const lastClose = before.lastIndexOf(')');
+    if (lastOpen > lastClose) return null;
+    return m;
+  },
+
+  // S: "X has the common name(s) A and B" — e.g.,
+  // "Arctostaphylos manzanita has the common names common manzanita and whiteleaf manzanita."
+  (text) => text.match(/has\s+the\s+common\s+names?\s+([^.;]{1,80})\.(?=\s*(?:[A-Z]|==)|\s*$)/i),
+
+  // T: "X, with the common English name Y," — single name construction (e.g., Cedrus)
+  (text) => text.match(/with\s+the\s+common\s+(?:English\s+)?name\s+([a-z][a-z'-]+)(?=,|\sis|\.)/i),
+
+  // U: "CommonName, scientific name Genus species, is/are..." (e.g., "Chives, scientific name Allium schoenoprasum, is")
+  (text) => text.match(/^([A-Z][a-zA-Z]+(?:\s+[a-zA-Z]+)*),\s+scientific\s+name\s+[A-Z][a-z]+\s+[a-z]+,\s+(?:is|are|was|were)\b/i),
+
+  // V: "ScientificName () (common name) is/are..." — empty pronunciation parens
+  // followed by the name in a second parenthetical (e.g., "Philadelphus () (mock-orange) is")
+  (text) => {
+    const m = text.match(/^[^(]{1,80}\(\s*\)\s*\(([a-z][a-z\s'-]+)\)\s+(?:is|are|was|were|has|have|refers)\b/);
+    return m ? [m[0], m[1]] : null;
+  },
+
+  // W: "commonly/also/generally known as the X or Y family" — expands to both
+  // family names (e.g., Rutaceae "the rue or citrus family" -> "rue family", "citrus family")
+  (text) => {
+    const m = text.match(/(?:commonly|also|generally|sometimes)\s+known\s+as\s+(?:the\s+)?([a-z][a-z\s'-]*?)\s+or\s+([a-z][a-z\s'-]*?)\s+family\b/i);
+    if (!m) return null;
+    return [m[0], m[1] + ' family, ' + m[2] + ' family'];
+  },
+
+  // X: "is/are a family of ... plants known as X." — captures the family common
+  // name (e.g., Cyperaceae "a family of graminoid ... flowering plants known as sedges.")
+  (text) => text.match(/\b(?:is|are)\s+(?:(?:a|an|the)\s+)?family\s+of\b[^.;]{0,90}?\bplants?\s+known\s+as\s+([a-z][a-z\s'-]+?)[.;]/i),
 ];
 
 function extractNamesFromCapture(captured) {
@@ -401,7 +478,13 @@ function extractNamesFromCapture(captured) {
 
     // Strip leading "as" (from "known as" constructions)  
     let normalized = name.replace(/^as\s+/i, '').trim();
-    normalized = stripArticle(normalized);
+    // Strip articles iteratively so "just a nettle" -> "nettle" (stripArticle is
+    // single-pass and would otherwise leave "a nettle" behind)
+    let prev;
+    do {
+      prev = normalized;
+      normalized = stripArticle(prev);
+    } while (normalized !== prev);
     // Strip stray double-quote characters (quoted lumber/industry terms like `"white fir" lumber`)
     normalized = normalized.replace(/["\u201C\u201D]/g, '').trim();
 
@@ -417,6 +500,15 @@ function extractNamesFromCapture(captured) {
     if (/^[\w\s]+:/.test(normalized)) continue;
 
     if (RANK_TERMS_RE.test(normalized)) continue;
+
+    // Skip generic descriptive phrases ending in "species"/"subspecies"
+    // (e.g., "...referred to as a dioecious species" — a description, not a name)
+    if (/\s+(?:species|subspecies)\s*$/i.test(normalized)) continue;
+
+    // Skip multi-word captures containing a be-verb in the middle — sentence
+    // fragments that leak past pattern boundaries (e.g., "...seeds are
+    // bird-distributed"), not common names.
+    if (/\s+(?:is|are|was|were|am)\s+/i.test(normalized)) continue;
 
     const lower = normalized.toLowerCase();
 
