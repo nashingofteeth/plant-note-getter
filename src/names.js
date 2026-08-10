@@ -1,6 +1,6 @@
 const { stripArticle, isAbbreviatedBinomial, cleanName, normalizeNameKey } = require('./utils');
 const { collectSynonymData } = require('./wikidata');
-const commonNamesModule = require('./common-names');
+const commonNamesModule = require('./common-names-fetch');
 
 function buildAliases(entity) {
   const aliases = [];

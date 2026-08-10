@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { extractWikipediaCommonNames, parseGbifVernacularName } = require('../src/common-names');
+const { extractWikipediaCommonNames, parseGbifVernacularName } = require('../src/wiki-extract');
 
 const TESTS = [
   {

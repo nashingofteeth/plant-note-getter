@@ -3,7 +3,7 @@ const assert = require('node:assert');
 
 // Stub the API functions BEFORE names.js loads, so its destructured refs
 // point at the stubs (deterministic, no API calls).
-const commonNames = require('../src/common-names');
+const commonNames = require('../src/common-names-fetch');
 commonNames.fetchGbifCommonNames = async () => [];
 commonNames.fetchWikipediaCommonNames = async () => [];
 const GBIF_STUB = commonNames.fetchGbifCommonNames;

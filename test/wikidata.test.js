@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { isSynonymOf } = require('../src/wikidata');
 const { stripArticle } = require('../src/utils');
-const { extractNamesFromCapture } = require('../src/common-names');
+const { extractNamesFromCapture } = require('../src/wiki-extract');
 
 // ─── stripArticle ───────────────────────────────────────────────────────────
 
