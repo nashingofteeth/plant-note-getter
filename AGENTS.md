@@ -28,7 +28,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
 | `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaCommonNames` |
-| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). Extraction logic is a blank stub pending ground-up reconstruction. |
+| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture`, locked by regression tests. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
@@ -57,24 +57,31 @@ Wikidata P1843 claims → wikidata.js (collectSynonymData) → names.js (collect
 (merged in this order — Wikipedia casing wins for duplicates; dedup via normalizeNameKey)
 ```
 
-### Reconstruction task for a future agent
+### Implementation
 
-The Wikipedia common-name extraction implementation in `src/wiki-extract.js`
-was removed in full and is currently blank stubs: `extractWikipediaCommonNames`
-(text → list of the taxon's common names stated in the article) and
-`extractNamesFromCapture` (passage → clean name list). Rebuild them from the
-ground up.
+`extractWikipediaCommonNames(text)` and `extractNamesFromCapture(captured)` in
+`src/wiki-extract.js` are implemented and pure (no API/fs/process I/O).
+`parseGbifVernacularName` remains unchanged. Structure:
 
-- The behavioural spec is the assertions in `test/common-names.test.js` and
-  `test/wikidata.test.js` (hardcoded extracts, no API calls). The failing cases
-  are the target; keep all existing cases passing too.
-- Prefer general, structural solutions that generalise across many natural
-  language constructions over one-off special cases.
-- Keep the functions pure (no API/fs/process I/O). `parseGbifVernacularName`
-  remains functional and must not change. `src/common-names-fetch.js`
-  (`fetchWikipediaCommonNames`) already delegates here.
-- A fuller worked methodology lives in [`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md).
-- Verify with `npm test` after any change.
+- `getSentences`/`sentenceEnds` segment the article into sentences
+  (abbreviation-aware); `isTaxonomicSentence` gates which sentences get scanned.
+- `== Common names ==` and `== Names ==` sections are extracted explicitly via
+  `extractSection`, and every sentence in them is scanned.
+- Per-sentence capture rules R1–R46 (in `extractWikipediaCommonNames`) pull
+  name-list passages out of naming constructions: appositives, parenthetical
+  glosses, "known as / called / referred to as", "common names include",
+  "with the common name", etc.
+- `extractNamesFromCapture` cleans a captured passage into individual names:
+  prefix stripping via `LEADING_PREFIX_PATTERNS`, parenthetical/semicolon
+  handling, `FILLER_SEGMENT_PATTERNS`, and rank/stopword/connector rejection.
+- Whole-name classifiers reject junk before adding: `isGenericJunk`,
+  `isGeographicJunk`, `isProcedural`, `isPronunciationNotation`,
+  `isMeaningParen`, `isEtiologyParen`.
+
+Refinement drives changes through new regression tests in
+`test/common-names.test.js` (see
+[`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md)) — keep all existing cases green
+and verify with `npm test` after any change.
 
 ## Tests
 

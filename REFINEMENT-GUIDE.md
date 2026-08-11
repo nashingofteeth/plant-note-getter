@@ -21,7 +21,7 @@ This means `aliases` is **not** the target to match. Workflows that only diff th
 app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
        → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
-       → wiki-extract.js (common-name extraction from Wikipedia text — implementation pending reconstruction)
+       → wiki-extract.js (pure text extraction — functions implemented, locked by regression tests)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -33,11 +33,11 @@ The extraction pipeline:
 2. Extract common names from the plain-text extract
 3. Return deduplicated list of common names
 
-The Wikipedia extraction implementation in `src/wiki-extract.js` was removed and is
-being reconstructed from the ground up. Its intended behaviour is defined by the
+The Wikipedia extraction implementation in `src/wiki-extract.js` is implemented
+(architecture documented in AGENTS.md). Its behaviour is locked down by the
 regression tests in `test/common-names.test.js` and `test/wikidata.test.js`.
-Refinement work should drive that reconstruction through new regression tests, not
-by re-introducing prior implementation details.
+Refinement work drives improvements through new regression tests against the
+existing implementation, not by rewriting it wholesale.
 
 To verify what the pipeline currently extracts for a species, call `fetchWikipediaCommonNames(title)` directly.
 
@@ -135,7 +135,7 @@ Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a re
 
 **c. Fix the implementation**
 
-The extraction logic in `src/wiki-extract.js` is being rebuilt from the ground up, so prefer structural solutions that generalise across many constructions instead of one-off special cases. Re-run the suite; the new test should now pass (green) and all existing tests must remain green.
+The extraction logic lives in `src/wiki-extract.js` — prefer structural solutions that generalise across many constructions instead of one-off special cases. Its architecture (sentence segmentation → `isTaxonomicSentence` gating → per-sentence capture rules → junk classifiers) is documented in AGENTS.md. Re-run the suite; the new test should now pass (green) and all existing tests must remain green.
 
 **d. Verify the fix on the original species**
 
@@ -159,7 +159,7 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 
 | File | Role |
 |------|------|
-| `src/wiki-extract.js` | Wikipedia text extraction — implementation to be reconstructed (stubbed) |
+| `src/wiki-extract.js` | Wikipedia text extraction — pure `extractWikipediaCommonNames` / `extractNamesFromCapture`, locked by regression tests |
 | `src/common-names-fetch.js` | `fetchWikipediaCommonNames()` — fetches extract, delegates extraction |
 | `src/names.js` | `collectCommonNames()` — merges all name sources, returns `{ names, bySource }` |
 | `src/names.js` | `buildAliases()` — final alias list for frontmatter |
