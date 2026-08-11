@@ -357,23 +357,52 @@ function truncateAtDescriptiveClause(capture) {
   return capture;
 }
 
-function addNames(captures, results, seenKeys) {
-  for (const capture of captures) {
+// Strip trailing sentence punctuation from a capture and enforce a length cap.
+// Returns the cleaned capture, or null when it exceeds maxLen.
+function finalizeCapture(capture, maxLen) {
+  const cleaned = capture.replace(/\s*[.,]\s*$/, '');
+  return cleaned.length < maxLen ? cleaned : null;
+}
+
+// Record an accepted name (or a duplicate skip) into results/seenKeys and the
+// optional trace. `rule` is the capture-rule label that produced the name.
+function pushResult(results, seenKeys, name, trace, rule) {
+  const key = name.toLowerCase();
+  if (seenKeys.has(key)) {
+    if (trace) trace.rejected.push({ name, rule, by: 'duplicate' });
+    return;
+  }
+  seenKeys.add(key);
+  results.push(name);
+  if (trace) trace.captures.push({ name, rule });
+}
+
+// `captures` is an array of { rule, capture } tuples (one per pushed capture,
+// including whole sentences for section-based extraction). Runs each capture
+// through the junk classifiers and records every decision on the trace.
+function addNames(captures, results, seenKeys, trace) {
+  for (const { rule, capture } of captures) {
     if (!capture || !capture.trim()) continue;
-    if (isPronunciationNotation(capture)) continue;
-    if (isMeaningParen(capture)) continue;
+    if (isPronunciationNotation(capture)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'isPronunciationNotation' });
+      continue;
+    }
+    if (isMeaningParen(capture)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'isMeaningParen' });
+      continue;
+    }
     // Reject provenance/descriptive captures wholesale (e.g. "from the Amur River region...")
-    if (/^(?:from\s+the|where\s+the|it\s+occurs\s+in|in\s+(?:northeastern|southern|northern|western|eastern|central)|native\s+to)/i.test(capture)) continue;
+    if (/^(?:from\s+the|where\s+the|it\s+occurs\s+in|in\s+(?:northeastern|southern|northern|western|eastern|central)|native\s+to)/i.test(capture)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'provenance' });
+      continue;
+    }
     const names = extractNamesFromCapture(capture);
     for (const name of names) {
-      if (isGenericJunk(name)) continue;
-      if (isGeographicJunk(name)) continue;
-      if (isProcedural(name)) continue;
-      if (hasCJK(name)) continue;
-      const key = name.toLowerCase();
-      if (seenKeys.has(key)) continue;
-      seenKeys.add(key);
-      results.push(name);
+      if (isGenericJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGenericJunk' }); continue; }
+      if (isGeographicJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGeographicJunk' }); continue; }
+      if (isProcedural(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isProcedural' }); continue; }
+      if (hasCJK(name)) { if (trace) trace.rejected.push({ name, rule, by: 'hasCJK' }); continue; }
+      pushResult(results, seenKeys, name, trace, rule);
     }
   }
 }
@@ -388,7 +417,7 @@ function extractSection(text, header) {
   return nextSection ? after.slice(0, nextSection.index) : after;
 }
 
-function extractWikipediaCommonNames(text) {
+function _extractWikipediaCommonNames(text, trace) {
   if (!text || !text.trim()) return [];
 
   const results = [];
@@ -412,14 +441,9 @@ function extractWikipediaCommonNames(text) {
       // Handle "The name X is often applied" directly
       const nameApplied = s.match(/(?:the\s+)?name\s+(.+?)\s+is\s+(?:often|also|commonly|frequently|widely)\s+applied\s+to/i);
       if (nameApplied) {
-        const name = nameApplied[1].trim();
-        const key = name.toLowerCase();
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          results.push(name);
-        }
+        pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Common names');
       }
-      addNames([s], results, seenKeys);
+      addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace);
     }
   }
   const namesSection = extractSection(processed, 'Names');
@@ -430,39 +454,47 @@ function extractWikipediaCommonNames(text) {
         // Handle "The name X is often applied" directly
         const nameApplied = s.match(/the\s+name\s+(.+?)\s+is\s+(?:often\s+)?applied/i);
         if (nameApplied) {
-          const name = nameApplied[1].trim();
-          const key = name.toLowerCase();
-          if (!seenKeys.has(key)) {
-            seenKeys.add(key);
-            results.push(name);
-          }
+          pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Names');
         }
-        addNames([s], results, seenKeys);
+        addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace);
       }
     }
   }
 
   // --- Sentence-by-sentence pattern matching ---
+  // ─── RULE INDEX (construction → rule; category banners below) ─────────────
+  // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44
+  // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
+  //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46
+  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47
+  // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45
+  // No-ops (handled elsewhere):       R27, R40, R42, R45
+  // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
     const first = isFirst.has(sentence);
-    if (!isTaxonomicSentence(sentence, first)) continue;
+    if (!isTaxonomicSentence(sentence, first)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
 
     const caps = [];
 
+    // ─── Sentence-open constructions ─────────────────────────────────────
     // R1: Leading appositive — "Genus species, <names>, is/was a..."
     const r1 = sentence.match(/^([A-ZÀ-Ÿ][\w.''\u2019-]+(?:\s+[\w.''\u2019-]+){0,3}),\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the|some|one)\b)/i);
     if (r1) {
       const subject = r1[1];
       const nameList = r1[2];
       if (isSubjectBinomial(subject) || /^The\s+/i.test(subject)) {
-        caps.push(nameList);
+        caps.push({ rule: 'R1', capture: nameList });
       }
     }
 
     // R2: "X or Y is a..." — alternative name at sentence start
     const r2 = sentence.match(/^([A-ZÀ-Ÿ][\w.''-]+(?:\s+[\w.''-]+){0,3})\s+or\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the|some|one)\b)/i);
     if (r2 && isSubjectBinomial(r2[1])) {
-      caps.push(r2[2]);
+      caps.push({ rule: 'R2', capture: r2[2] });
     }
 
     // R3: "The X (Binomial), also called/known as..." — leading name + parenthetical binomial + alias
@@ -471,9 +503,9 @@ function extractWikipediaCommonNames(text) {
       const leadName = stripArticle(r3[1]).trim();
       const genericSubjects = /^(?:olive|onion|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|fir|spruce|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle)$/i;
       if (leadName && !isAbbreviatedBinomialLike(leadName) && !genericSubjects.test(leadName)) {
-        caps.push(leadName);
+        caps.push({ rule: 'R3', capture: leadName });
       }
-      caps.push(r3[4]);
+      caps.push({ rule: 'R3', capture: r3[4] });
     }
 
     // R4: "The X (Binomial) is..." — leading common name only
@@ -484,16 +516,17 @@ function extractWikipediaCommonNames(text) {
       // If parenthetical contains a quoted common name, extract it
       const quotedName = parenContent.match(/["']([^"']+)["']/);
       if (quotedName) {
-        caps.push(quotedName[1].trim());
+        caps.push({ rule: 'R4', capture: quotedName[1].trim() });
       }
       // Reject single-word generic subjects (e.g. "olive" in "The olive (botanical name...)")
       const genericSubjects = /^(?:olive|onion|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|fir|spruce|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle)$/i;
       if (leadName && !isAbbreviatedBinomialLike(leadName) && leadName.length > 1 && !genericSubjects.test(leadName)) {
-        caps.push(leadName);
+        caps.push({ rule: 'R4', capture: leadName });
       }
     }
 
     // R4b: "The X (Binomial L., ...) is..." or "The X (Binomial L., ...), also known as Y, is..."
+    // (R4b's broad ", clause," tail is only safe because the paren must carry an author citation "L.")
     const r4b = sentence.match(/^(The\s+)(.+?)\s+\(([A-Z][a-z]+\s+[a-z]+\s+L\.[^)]*)\)(?:\s*,\s*[^,]+)?\s*,?\s+(?:is|was|are|were)/i);
     if (r4b && !r4 && !r3) {
       const leadName = r4b[2].trim();
@@ -501,25 +534,25 @@ function extractWikipediaCommonNames(text) {
       // Extract quoted common name
       const quotedName = parenContent.match(/["']([^"']+)["']/);
       if (quotedName) {
-        caps.push(quotedName[1].trim());
+        caps.push({ rule: 'R4b', capture: quotedName[1].trim() });
       }
       // Reject single-word generic subjects
       const genericSubjects = /^(?:olive|onion|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|fir|spruce|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle)$/i;
       if (leadName && !isAbbreviatedBinomialLike(leadName) && leadName.length > 1 && !genericSubjects.test(leadName)) {
-        caps.push(leadName);
+        caps.push({ rule: 'R4b', capture: leadName });
       }
     }
 
     // R4c: "X (etymology), or Y, is a Z" — leading name with parenthetical etymology + alternative name
     const r4c = sentence.match(/^([A-ZÀ-Ÿ][\w''\u2019-]+)\s+\([^)]*(?:\([^)]*\)[^)]*)*(?:meaning|from|derived|Greek|Latin|ancient)[^)]*(?:\([^)]*\)[^)]*)*\)\s*,?\s*or\s+(.+?)\s*,?\s*(?:is|was|are)/i);
     if (r4c && !r4 && !r3) {
-      caps.push(r4c[2]);
+      caps.push({ rule: 'R4c', capture: r4c[2] });
     }
 
     // R4d: "X is a genus of plants commonly known as Y" — lead name at sentence start
     const r4d = sentence.match(/^([A-ZÀ-Ÿ][\w''\u2019-]+)\s+(?:is|was)\s+(?:a|an)\s+(?:genus|species|family|plant|tree|shrub)\s+of\s+(?:plants?\s+)?(?:commonly|generally|widely)\s+known\s+as/i);
     if (r4d && !r4 && !r3 && !r4c) {
-      caps.push(r4d[1]);
+      caps.push({ rule: 'R4d', capture: r4d[1] });
     }
 
     // R5: "X (Binomial) is..." — no article (common name before parenthetical)
@@ -538,12 +571,12 @@ function extractWikipediaCommonNames(text) {
         else if (words.length >= 2 && !/^[A-Z]\.\s/.test(lead)) {
           // Accept if it's not a Latin binomial (common names like "Spanish moss" OK)
           if (!isSubjectBinomial(lead)) {
-            caps.push(lead);
+            caps.push({ rule: 'R5', capture: lead });
           } else {
             // For binomial-like subjects, check epithet blocklist
             const epithetBlock = /^(?:fruit|leaf|tree|bark|root|seed|flower|wood|plant|moss)$/i;
             if (!epithetBlock.test(words[words.length - 1])) {
-              caps.push(lead);
+              caps.push({ rule: 'R5', capture: lead });
             }
           }
         }
@@ -553,26 +586,27 @@ function extractWikipediaCommonNames(text) {
     // R5b: "X (also known as/called Y, Z) is..." — single-word name before parenthetical alias list
     const r5b = sentence.match(/^([A-ZÀ-Ÿ][\w''\u2019-]+)\s+\(\s*(?:also\s+)?(?:known\s+as|called)\s+(.+?)\)\s+(?:is|was|are)/i);
     if (r5b) {
-      caps.push(r5b[1]);
-      caps.push(r5b[2]);
+      caps.push({ rule: 'R5b', capture: r5b[1] });
+      caps.push({ rule: 'R5b', capture: r5b[2] });
     }
 
+    // ─── Parenthetical glosses ───────────────────────────────────────────
     // R6: Parenthetical common names — "(known as/called/commonly known as X, Y, Z)" before "is"
     const r6 = sentence.match(/\(\s*(?:(?:also|commonly)\s+)?(?:known\s+as|called|named|referred\s+to\s+as)\s+(.+?)\)\s+(?:is|was|are)/i);
     if (r6) {
-      caps.push(r6[1]);
+      caps.push({ rule: 'R6', capture: r6[1] });
     }
 
     // R6b: Parenthetical with "common names" prefix — "(common names X, Y, Z) is"
     const r6b = sentence.match(/\(\s*common\s+names?\s+(.+?)\)\s+(?:is|was|are)/i);
     if (r6b) {
-      caps.push(r6b[1]);
+      caps.push({ rule: 'R6b', capture: r6b[1] });
     }
 
     // R6b2: Parenthetical with "botanical name Binomial, "name"" — extract the quoted/common name
     const r6b2 = sentence.match(/\(\s*botanical\s+name\s+[A-Z][a-z]+\s+[a-z]+[^,]*,\s*["']?([^"')]+?)["']?\s*\)\s+(?:is|was|are)/i);
     if (r6b2) {
-      caps.push(r6b2[1].trim());
+      caps.push({ rule: 'R6b2', capture: r6b2[1].trim() });
     }
 
     // R6c: Parenthetical bare name list — "(X, Y, Z or W) is a species" (Rosa, Rubus)
@@ -584,7 +618,7 @@ function extractWikipediaCommonNames(text) {
           && !/^\s*botanical\s+name\s/i.test(content)
           && !isAbbreviatedBinomialLike(content)
           && !/^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content.trim())) {
-        caps.push(content);
+        caps.push({ rule: 'R6c', capture: content });
       }
     }
 
@@ -593,22 +627,23 @@ function extractWikipediaCommonNames(text) {
     if (r6d && !r6c) {
       const content = r6d[1];
       if (!/^\s*syn\.?\s/i.test(content) && !/^\s*botanical\s+name\s/i.test(content)) {
-        caps.push(content);
+        caps.push({ rule: 'R6d', capture: content });
       }
     }
 
     // R7: "known by the common name[s]" — stop at copula or end
     const r7 = sentence.match(/known\s+by\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
     if (r7) {
-      let capture = r7[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r7[1], 300);
+      if (capture) caps.push({ rule: 'R7', capture: capture });
     }
 
+    // ─── "known as / called / referred to as" ────────────────────────────
     // R8: "commonly known as" / "generally known as" — stop at copula or end
     const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety))\b|$)/i);
     if (r8) {
-      let capture = r8[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r8[1], 300);
+      if (capture) caps.push({ rule: 'R8', capture: capture });
     }
 
     // R8b: "known as the X" — without commonly/generally, only match in taxonomic context
@@ -619,50 +654,39 @@ function extractWikipediaCommonNames(text) {
         || /was\s+(?:a|an)\s+(?:flowering\s+)?(?:plant|tree|shrub|herb|vine|fern|species|genus)\b/i.test(sentence)
         || /\b(?:hybrid|genus|species)\b/i.test(sentence);
       if (hasTaxonomicPredicate) {
-        let capture = r8b[1].replace(/\s*[.,]\s*$/, '');
-        if (capture.length < 300) caps.push(capture);
+        const capture = finalizeCapture(r8b[1], 300);
+        if (capture) caps.push({ rule: 'R8b', capture: capture });
       }
     }
 
     // R9: "commonly called" — stop at copula or end
     const r9 = sentence.match(/commonly\s+called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
     if (r9) {
-      let capture = r9[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r9[1], 300);
+      if (capture) caps.push({ rule: 'R9', capture: capture });
     }
 
-    // R10: "also known as" / "also called" mid-sentence — stop at copula
-    const r10 = sentence.match(/,\s+also\s+(?:known\s+as|called)\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
+    // R10: "also known as" / "also called" — at sentence start ("It is...") or
+    // mid-sentence (after a comma) — stop at copula
+    const r10 = sentence.match(/(?:\s*,\s+also\s+|^It\s+(?:is|was)\s+also\s+)(?:known\s+as|called)\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
     if (r10) {
-      let capture = r10[1].replace(/\s*[.,]\s*$/, '');
-      capture = truncateAtDescriptiveClause(capture);
+      let capture = truncateAtDescriptiveClause(r10[1].replace(/\s*[.,]\s*$/, ''));
       // Reject attribution context: "by the indigenous people", "by the Cahuilla"
       if (capture.length < 300 && !/\s+by\s+(?:the\s+)?(?:indigenous|native|local|aboriginal|tribe|people)/i.test(capture)) {
-        caps.push(capture);
-      }
-    }
-
-    // R10b: "also known as" / "also called" at sentence start (after "It is") — stop at copula
-    const r10b = sentence.match(/^It\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
-    if (r10b) {
-      let capture = r10b[1].replace(/\s*[.,]\s*$/, '');
-      capture = truncateAtDescriptiveClause(capture);
-      // Reject attribution context: "by the indigenous", "by the Cahuilla", etc.
-      if (capture.length < 300 && !/\s+by\s+(?:the\s+)?(?:indigenous|native|local|aboriginal|tribe|people)/i.test(capture)) {
-        caps.push(capture);
+        caps.push({ rule: 'R10', capture: capture });
       }
     }
 
     // R11: "referred to as" mid-sentence — capture to end
     const r11 = sentence.match(/referred\s+to\s+as\s+(?:a\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
     if (r11) {
-      let capture = r11[1].replace(/\s*[.,]\s*$/, '');
+      const capture = finalizeCapture(r11[1], 300);
       // Reject anatomical structures, lumber-industry jargon, and provenance
-      if (capture.length < 300
+      if (capture
           && !/\b(?:structures?|anatomical|spurs|peduncles?|stamens?|pistils?|stigma|ovary|ovules?|anthers?|filaments?|petals?|sepals?|leaves?|roots?|stems?|bark|wood|tissues?|cells?|organs?)\b/i.test(sentence)
           && !/\b(?:logging|industry|lumber|timber|shipped|intergrades?|variety)\b/i.test(sentence)
           && !/\b(?:specific\s+epithet|generic\s+epithet|species\s+epithet|common\s+names?\s+are\s+from|etymology|named\s+(?:after|for))\b/i.test(sentence)) {
-        caps.push(capture);
+        caps.push({ rule: 'R11', capture: capture });
       }
     }
 
@@ -670,121 +694,123 @@ function extractWikipediaCommonNames(text) {
     const r11b = sentence.match(/^(?:The\s+)?name\s+(.+?)\s+is\s+(?:often|also|commonly|frequently|widely)\s+applied\s+to/i);
     if (r11b) {
       let capture = r11b[1].trim();
-      if (capture.length < 200) caps.push(capture);
+      if (capture.length < 200) caps.push({ rule: 'R11b', capture: capture });
     }
 
     // R11c: "Members are commonly known as X, Y, or Z" — plural subject with naming pattern
     const r11c = sentence.match(/(?:members|species|plants?|trees?|shrubs?)\s+(?:are|is)\s+commonly\s+known\s+as\s+(.+?)(?:\s*\.|$)/i);
     if (r11c) {
-      let capture = r11c[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r11c[1], 300);
+      if (capture) caps.push({ rule: 'R11c', capture: capture });
     }
 
     // R11d: "known by various common names including X, Y" — pattern with "various"
     const r11d = sentence.match(/known\s+by\s+various\s+common\s+names?\s+(?:including\s+)?(.+?)(?:\s*[,]?\s*(?:among|amongst|as well as)\s+other\s+names?\b|$)/i);
     if (r11d) {
-      let capture = r11d[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r11d[1], 300);
+      if (capture) caps.push({ rule: 'R11d', capture: capture });
     }
 
     // R11e: "plants known as X" — extraction for "known as" after descriptive phrase
     const r11e = sentence.match(/plants?\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s*\.|\s*(?:with|in|that|which|is|are|has|have)\b|$)/i);
     if (r11e) {
-      let capture = r11e[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200 && !isGenericJunk(capture)) caps.push(capture);
+      const capture = finalizeCapture(r11e[1], 200);
+      if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R11e', capture: capture });
     }
 
+    // ─── Common-name list constructions ──────────────────────────────────
     // R12: "common names include" / "Common names for X include" — capture full list, stop at though/despite
     const r12 = sentence.match(/common\s+names?\s+(?:for\s+.+?\s+)?(?:usually\s+)?(?:include|are)\s+(.+?)(?:\s*,\s*(?:though|despite|but)\b|$)/i);
     if (r12) {
-      let capture = r12[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r12[1], 300);
+      if (capture) caps.push({ rule: 'R12', capture: capture });
     }
 
     // R13: "English names include" / "names include" / "Other names include" / "English names variously applied to... include"
     const r13 = sentence.match(/(?:(?:English|Other|additional|alternate|alternative)\s+)?names?\s+(?:(?:variously\s+)?applied\s+to\s+.+?\s+)?(?:include|are)\s+(.+)/i);
     if (r13) {
-      let capture = r13[1].replace(/\s*[.,]\s*$/, '');
+      const capture = finalizeCapture(r13[1], 300);
       // Reject provenance clauses: "from the Amur River region..."
-      if (capture.length < 300 && !/^(?:from\s+the|in\s+(?:northeastern|southern|northern|western|eastern|central))/i.test(capture)) {
-        caps.push(capture);
+      if (capture && !/^(?:from\s+the|in\s+(?:northeastern|southern|northern|western|eastern|central))/i.test(capture)) {
+        caps.push({ rule: 'R13', capture: capture });
       }
     }
 
     // R14: "with the common name[s]"
     const r14 = sentence.match(/with\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b)/i);
     if (r14) {
-      let capture = r14[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r14[1], 200);
+      if (capture) caps.push({ rule: 'R14', capture: capture });
     }
 
     // R15: "known commonly as" — capture to copula or end
     const r15 = sentence.match(/known\s+commonly\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
     if (r15) {
-      let capture = r15[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r15[1], 300);
+      if (capture) caps.push({ rule: 'R15', capture: capture });
     }
 
     // R16: "commonly named"
     const r16 = sentence.match(/commonly\s+named\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s|$)/i);
     if (r16) {
-      let capture = r16[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r16[1], 200);
+      if (capture) caps.push({ rule: 'R16', capture: capture });
     }
 
     // R17: "The name X is often applied" / "The name X is a common name"
     const r17 = sentence.match(/The\s+name\s+(.+?)\s+is\s+(?:often\s+)?(?:applied|used)/i);
     if (r17) {
-      caps.push(r17[1]);
+      caps.push({ rule: 'R17', capture: r17[1] });
     }
 
     // R18: "Alternative names ... are X and Y" — capture full list
     const r18 = sentence.match(/Alternative\s+names\s+(?:in\s+.+?\s+)?are\s+(.+)/i);
     if (r18) {
-      let capture = r18[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r18[1], 300);
+      if (capture) caps.push({ rule: 'R18', capture: capture });
     }
 
     // R19: "has the common names X and Y" — capture full list
     const r19 = sentence.match(/has\s+the\s+common\s+names?\s+(.+)/i);
     if (r19) {
-      let capture = r19[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r19[1], 300);
+      if (capture) caps.push({ rule: 'R19', capture: capture });
     }
 
     // R20: "with the common English name X"
     const r20 = sentence.match(/with\s+the\s+common\s+(?:English\s+)?name\s+(.+?)(?:\s+(?:is|was|are)\s|,)/i);
     if (r20) {
-      let capture = r20[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r20[1], 200);
+      if (capture) caps.push({ rule: 'R20', capture: capture });
     }
 
     // R21: "simply referred to as"
     const r21 = sentence.match(/simply\s+referred\s+to\s+as\s+(.+?)(?:\s*[.,]|$)/i);
     if (r21) {
-      let capture = r21[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r21[1], 200);
+      if (capture) caps.push({ rule: 'R21', capture: capture });
     }
 
     // R22: "X is a species... also called Y" in same sentence (Rubus parviflorus)
     const r22 = sentence.match(/the\s+fruit\s+of\s+which\s+is\s+commonly\s+called\s+(?:the\s+)?(.+?)(?:\s*,\s+is\b|\s*[.,]\s*$)/i);
     if (r22) {
-      let capture = r22[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r22[1], 200);
+      if (capture) caps.push({ rule: 'R22', capture: capture });
     }
 
+    // ─── "known as / called / referred to as" ────────────────────────────
     // R23: "more commonly X" / "more commonly known as X"
     const r23 = sentence.match(/,\s+more\s+commonly\s+(?:known\s+as\s+)?(?:the\s+)?(.+?)(?:\s*,\s+is\b|\s+(?:is|was)\b|\s*[.,]\s*$)/i);
     if (r23) {
-      let capture = r23[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r23[1], 200);
+      if (capture) caps.push({ rule: 'R23', capture: capture });
     }
 
     // R24: "called X, Y, or Z" after comma, before "is" (Lilium regale)
     const r24 = sentence.match(/,\s+called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s*[.,]\s*$)/i);
     if (r24) {
-      let capture = r24[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r24[1], 200);
+      if (capture) caps.push({ rule: 'R24', capture: capture });
     }
 
     // R25: "is known as X" — passive form
@@ -800,15 +826,15 @@ function extractWikipediaCommonNames(text) {
       const isExplanatory = /\b(?:because|since)\s+/i.test(sentence.slice(nameEnd));
       if (!(isSingleWord && isExplanatory)) {
         capture = capture.replace(/\s*[.,]\s*$/, '');
-        if (capture.length < 200) caps.push(capture);
+        if (capture.length < 200) caps.push({ rule: 'R25', capture: capture });
       }
     }
 
     // R26: "called X in Y" — language qualifier
     const r26 = sentence.match(/called\s+(.+?)\s+in\s+(?:Japanese|Afrikaans|Greek|Welsh|Spanish|French|German|Italian|Portuguese|Dutch|Russian|Chinese|Korean|Hindi|Arabic|Turkish|Persian|Thai|Vietnamese|Indonesian|Malay|Tagalog|Swahili|Zulu|Xhosa|Yoruba|Hausa|Amharic)/i);
     if (r26) {
-      let capture = r26[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r26[1], 200);
+      if (capture) caps.push({ rule: 'R26', capture: capture });
     }
 
     // R46: "where it is called X" / "called X" in subordinate clause (Farfugium "tsuwabuki")
@@ -816,7 +842,7 @@ function extractWikipediaCommonNames(text) {
     if (r46) {
       let capture = r46[1].replace(/\s*[(),].*$/, '').trim();
       if (capture && capture.length < 200 && !hasCJK(capture) && !isInsideParens(sentence, r46.index)) {
-        caps.push(capture);
+        caps.push({ rule: 'R46', capture: capture });
       }
     }
 
@@ -826,7 +852,7 @@ function extractWikipediaCommonNames(text) {
     if (r47) {
       let capture = r47[1].replace(/\s*[.,]\s*$/, '').trim();
       if (capture && capture.length < 200) {
-        caps.push(capture);
+        caps.push({ rule: 'R47', capture: capture });
       }
     }
 
@@ -836,21 +862,21 @@ function extractWikipediaCommonNames(text) {
     // R28: Parenthetical after binomial with "common names" inside
     const r28 = sentence.match(/\([A-Z][a-z]+\s+[a-z]+[^)]*,\s*(?:also\s+)?(?:called|known\s+as|commonly\s+known\s+as)\s+(.+?)\)/i);
     if (r28 && !r3 && !r6) {
-      caps.push(r28[1]);
+      caps.push({ rule: 'R28', capture: r28[1] });
     }
 
     // R29: "called" after binomial parenthetical, comma before "is"
     const r29 = sentence.match(/\([A-Z][a-z]+\s+[a-z]+[^)]*\)\s*,\s*(?:also\s+)?(?:called|known\s+as)\s+(.+?)(?:\s+(?:is|was)\s+[a]\b|,)/i);
     if (r29) {
-      caps.push(r29[1]);
+      caps.push({ rule: 'R29', capture: r29[1] });
     }
 
     // R30: "are referred to as X" — passive plural
     const r30 = sentence.match(/are\s+referred\s+to\s+as\s+(?:a\s+)?(.+?)\.\s*$/i);
     if (r30) {
-      let capture = r30[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300 && !/\b(?:dioecious|species|monoecious)\b/i.test(capture)) {
-        caps.push(capture);
+      const capture = finalizeCapture(r30[1], 300);
+      if (capture && !/\b(?:dioecious|species|monoecious)\b/i.test(capture)) {
+        caps.push({ rule: 'R30', capture: capture });
       }
     }
 
@@ -859,73 +885,74 @@ function extractWikipediaCommonNames(text) {
     if (r31) {
       const subject = sentence.split(/\s+(?:is|are)\s+/i)[0].trim();
       if (subject && !isSubjectBinomial(subject)) {
-        caps.push(subject);
+        caps.push({ rule: 'R31', capture: subject });
       }
     }
 
     // R32: "Numerous common names exist... such as X, Y, Z"
     const r32 = sentence.match(/common\s+names?\s+exist[^,]*,\s*(?:such\s+as\s+)?(.+?)\.\s*$/i);
     if (r32) {
-      caps.push(r32[1]);
+      caps.push({ rule: 'R32', capture: r32[1] });
     }
 
     // R32b: "depending on region, such as X, Y, Z"
     const r32b = sentence.match(/depending\s+on\s+region\s*,\s*(?:such\s+as\s+)?(.+?)\.\s*$/i);
     if (r32b) {
-      caps.push(r32b[1]);
+      caps.push({ rule: 'R32b', capture: r32b[1] });
     }
 
     // R33: "The common name (ScientificName), also called..." 
     const r33 = sentence.match(/^(The\s+.+?)\s+\([^)]+\)\s*,\s*also\s+called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+[a]\b|,)/i);
     if (r33) {
-      caps.push(stripArticle(r33[1]).trim());
-      caps.push(r33[2]);
+      caps.push({ rule: 'R33', capture: stripArticle(r33[1]).trim() });
+      caps.push({ rule: 'R33', capture: r33[2] });
     }
 
+    // ─── Common-name list constructions ──────────────────────────────────
     // R34: "with common names including" / "with common name" / "with various common names, such as" — capture to copula or end
     const r34 = sentence.match(/with\s+(?:various\s+)?common\s+names?\s*(?:,\s*suc+h\s+as\s*|including\s*)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
     if (r34) {
-      let capture = r34[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r34[1], 300);
+      if (capture) caps.push({ rule: 'R34', capture: capture });
     }
 
     // R35: "Common names include X, though..." — truncate at "though"
     const r35 = sentence.match(/common\s+names?\s+(?:for\s+.+?\s+)?(?:usually\s+)?(?:include|are)\s+(.+?)(?:\s*,\s*though\b|\s*[.,]|$)/i);
     if (r35) {
-      let capture = r35[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r35[1], 200);
+      if (capture) caps.push({ rule: 'R35', capture: capture });
     }
 
     // R35b: "Alternative names ... are X and Y" — alternative name list
     const r35b = sentence.match(/(?:alternative|other|local|regional)\s+names?\s+(?:for\s+.+?\s+)?(?:in\s+.+?\s+)?(?:are|include)\s+(.+?)(?:\s*[.,]|$)/i);
     if (r35b) {
-      let capture = r35b[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 300) caps.push(capture);
+      const capture = finalizeCapture(r35b[1], 300);
+      if (capture) caps.push({ rule: 'R35b', capture: capture });
     }
 
     // R36: "(common name) is a genus" — parenthetical before "is a genus/species/plant"
     const r36 = sentence.match(/\)\s+\((.+?)\)\s+is\s+(?:a\s+)?(?:genus|species|plant)/i);
     if (r36) {
-      caps.push(r36[1]);
+      caps.push({ rule: 'R36', capture: r36[1] });
     }
 
     // R37: "Chives, scientific name X, is" — leading name before "scientific name"
     const r37 = sentence.match(/^([A-ZÀ-Ÿ][\w.''-]+(?:\s+[\w.''-]+){0,3}),\s+scientific\s+name\s+/i);
     if (r37) {
-      caps.push(r37[1]);
+      caps.push({ rule: 'R37', capture: r37[1] });
     }
 
     // R38: "X, often known as Y, Z, or W, is..." — appositive with "often known as"
     const r38 = sentence.match(/^([A-ZÀ-Ÿ][\w.''-]+(?:\s+[\w.''-]+){0,3})\s*,\s*(?:often\s+)?known\s+as\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b)/i);
     if (r38 && isSubjectBinomial(r38[1])) {
-      caps.push(r38[2]);
+      caps.push({ rule: 'R38', capture: r38[2] });
     }
 
     // R39: "are commonly known as X, Y, or Z" — mid-sentence plural
     const r39 = sentence.match(/are\s+commonly\s+known\s+as\s+(.+?)(?:\s*[.,]|$)/i);
     if (r39) {
-      let capture = r39[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200) caps.push(capture);
+      const capture = finalizeCapture(r39[1], 200);
+      if (capture) caps.push({ rule: 'R39', capture: capture });
     }
 
     // R40: "is also widely cultivated as an ornamental" — skip
@@ -942,7 +969,7 @@ function extractWikipediaCommonNames(text) {
         let capture = r41Match[3].replace(/\s*[(),].*$/, '').trim();
         if (capture && capture.length < 200 && capture.length > 2) {
           const trimmed = capture.replace(/\s+(?:or|and)\s+.*$/i, '').trim();
-          if (trimmed && !isGenericJunk(trimmed)) caps.push(trimmed);
+          if (trimmed && !isGenericJunk(trimmed)) caps.push({ rule: 'R41', capture: trimmed });
         }
       }
     }
@@ -953,22 +980,22 @@ function extractWikipediaCommonNames(text) {
     // R43: "are consumed... referred to as X" — food context (Ziziphus jujuba)
     const r43 = sentence.match(/(?:consumed|eaten|used)\s+.*?(?:referred\s+to\s+as|known\s+as)\s+(?:a\s+)?(.+?)\.\s*$/i);
     if (r43 && !/\b(?:species|dioecious|genus)\b/i.test(sentence)) {
-      let capture = r43[1].replace(/\s*[.,]\s*$/, '');
-      if (capture.length < 200 && !isGenericJunk(capture)) {
-        caps.push(capture);
+      const capture = finalizeCapture(r43[1], 200);
+      if (capture && !isGenericJunk(capture)) {
+        caps.push({ rule: 'R43', capture: capture });
       }
     }
 
     // R44: "Borage (pronunciation; Binomial), also known as starflower" — leading name before complex parenthetical
     const r44 = sentence.match(/^([A-ZÀ-Ÿ][\w.''-]+(?:\s+[\w.''-]+){0,2})\s+\(\s*(?:[;|/]|or)\s*;/i);
     if (r44) {
-      caps.push(r44[1]);
+      caps.push({ rule: 'R44', capture: r44[1] });
     }
 
     // R45: "and the subspecies" — stop extraction at subspecies mention (Lyonothamnus)
     // Handled by boundary in regex patterns
 
-    addNames(caps, results, seenKeys);
+    addNames(caps, results, seenKeys, trace);
   }
 
   // --- Post-process: expand "the X or Y family" → "X family, Y family" ---
@@ -984,6 +1011,7 @@ function extractWikipediaCommonNames(text) {
         if (!seenKeys.has(key)) {
           seenKeys.add(key);
           expanded.push(n);
+          if (trace) trace.captures.push({ name: n, rule: 'Post-process: family' });
         }
       }
     } else {
@@ -994,8 +1022,27 @@ function extractWikipediaCommonNames(text) {
   return expanded;
 }
 
+function extractWikipediaCommonNames(text) {
+  return _extractWikipediaCommonNames(text, null);
+}
+
+// Debug helper: runs the full extraction pipeline while recording every
+// decision. Returns { names, captures, rejected, skippedSentences }.
+//   - names:            identical to extractWikipediaCommonNames(text)
+//   - captures:         accepted names, labeled with the rule that produced them
+//   - rejected:         names/captures dropped, labeled with the classifier
+//                       (isGenericJunk, isGeographicJunk, isProcedural, hasCJK,
+//                       isPronunciationNotation, isMeaningParen, provenance, duplicate)
+//   - skippedSentences: sentences gated out by isTaxonomicSentence
+function traceExtraction(text) {
+  const trace = { captures: [], rejected: [], skippedSentences: [] };
+  const names = _extractWikipediaCommonNames(text, trace);
+  return Object.assign({ names }, trace);
+}
+
 module.exports = {
   parseGbifVernacularName,
   extractNamesFromCapture,
-  extractWikipediaCommonNames
+  extractWikipediaCommonNames,
+  traceExtraction
 };

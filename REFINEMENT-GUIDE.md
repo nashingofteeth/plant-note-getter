@@ -21,7 +21,7 @@ This means `aliases` is **not** the target to match. Workflows that only diff th
 app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
        → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
-       → wiki-extract.js (pure text extraction — functions implemented, locked by regression tests)
+       → wiki-extract.js (pure text extraction — functions implemented, locked by regression tests, incl. traceExtraction debug helper)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -35,7 +35,8 @@ The extraction pipeline:
 
 The Wikipedia extraction implementation in `src/wiki-extract.js` is implemented
 (architecture documented in AGENTS.md). Its behaviour is locked down by the
-regression tests in `test/common-names.test.js` and `test/wikidata.test.js`.
+regression tests in `test/common-names.test.js`, `test/wikidata.test.js`, and
+`test/trace.test.js`.
 Refinement work drives improvements through new regression tests against the
 existing implementation, not by rewriting it wholesale.
 
@@ -114,10 +115,17 @@ Flag suspicious extracted results containing:
 **a. Reproduce in isolation**
 
 ```js
-const { extractWikipediaCommonNames } = require('./src/wiki-extract');
+const { traceExtraction } = require('./src/wiki-extract');
 const text = '...actual Wikipedia extract...';
-console.log(extractWikipediaCommonNames(text));
+console.log(traceExtraction(text));
 ```
+
+`traceExtraction` returns the same `names` as `extractWikipediaCommonNames`,
+plus `captures` (`{ name, rule }` — every accepted capture and the rule that
+got it), `rejected` (`{ name, rule, by }` — every rejection and its
+classifier reason), and `skippedSentences` (sentences gated out by
+`isTaxonomicSentence`). Use it to pinpoint which rule captured (or rejected)
+a name before writing the regression test — see 4.5 below.
 
 **b. Add the regression test first (red)**
 
@@ -149,6 +157,43 @@ npm test
 
 All existing tests must still pass. If a fix breaks another case, the fix is wrong. If the live verification in step d reveals additional gaps, extend the test's `extract`/`expected` and re-run the fix loop instead of making the fix pass silently.
 
+### 4.5 Debug which rule captures or rejects a name
+
+```js
+const { traceExtraction } = require('./src/wiki-extract');
+const t = traceExtraction('...actual Wikipedia extract...');
+console.log(t.names);             // final names (identical to extractWikipediaCommonNames)
+console.log(t.captures);          // [{ name, rule }] — accepted captures + originating rule
+console.log(t.rejected);          // [{ name, rule, by }] — rejections + classifier reason
+console.log(t.skippedSentences);  // non-taxonomic sentences gated out entirely
+```
+
+Debugging decision tree:
+
+1. **A name is missing from `t.names`.**
+   - First check `t.skippedSentences`: if the sentence containing the name was
+     gated out, no rule will ever fire on it — widen `isTaxonomicSentence` and
+     add a regression test.
+   - Then check `t.captures`. Is the name captured at all?
+     - **Not in `captures` and not in `rejected`**: no rule matched the
+       construction. Consult the RULE INDEX + category banners at the top of
+       the rule loop, then write a new capture rule (or widen an existing one)
+       and a regression test.
+     - **Not in `captures`, but in `rejected`**: a rule captured it but a
+       classifier rejected it. The `by` reason names the classifier: fix the
+       classifier (wrongly rejected) or the capture regex (grabbed the wrong
+       passage).
+     - **In `captures` with a different `rule` than expected**: an earlier rule
+       won and stole the passage (rules fire in order; later rules guard
+       against earlier ones with `!r#` checks). Adjust the guard or the winning
+       rule's regex.
+2. **A junk name IS in `t.names`.** Its `captures` entry shows which rule
+   produced it. Add it as a regression case, then fix that rule or route the
+   passage through the correct classifier.
+3. **A name sits in `t.rejected` with `by: 'duplicate'`.** Expected — it was
+   already accepted by an earlier rule. Confirm the `rule` shown is a
+   duplicate-prone sibling (e.g. R8 vs R1, R13/R35 vs R12) and move on.
+
 ### 5. What NOT to fix
 
 - **Legitimate geographic common names**: "European holly", "American basswood", "Chinese juniper" are real common names. Don't filter these.
@@ -159,11 +204,12 @@ All existing tests must still pass. If a fix breaks another case, the fix is wro
 
 | File | Role |
 |------|------|
-| `src/wiki-extract.js` | Wikipedia text extraction — pure `extractWikipediaCommonNames` / `extractNamesFromCapture`, locked by regression tests |
+| `src/wiki-extract.js` | Wikipedia text extraction — pure `extractWikipediaCommonNames` / `extractNamesFromCapture` / `traceExtraction`, locked by regression tests |
 | `src/common-names-fetch.js` | `fetchWikipediaCommonNames()` — fetches extract, delegates extraction |
 | `src/names.js` | `collectCommonNames()` — merges all name sources, returns `{ names, bySource }` |
 | `src/names.js` | `buildAliases()` — final alias list for frontmatter |
 | `test/common-names.test.js` | Test cases (hardcoded extracts, no API calls) |
+| `test/trace.test.js` | `traceExtraction` parity/rule-label/rejection tests (no API calls) |
 | `test/wikidata.test.js` | `extractNamesFromCapture` unit cases (parenthetical/semicolon/language cleaning) |
 | `test/names.test.js` | `collectCommonNames` merge order/dedup/provenance (stubbed fetches) |
 | `src/frontmatter.js` | `parseFrontMatter()` — read existing note's YAML |

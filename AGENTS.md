@@ -28,7 +28,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
 | `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaCommonNames` |
-| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture`, locked by regression tests. |
+| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
@@ -39,6 +39,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `test/common-names.test.js` | Regression tests, no API calls, runs via `npm test` |
 | `test/hierarchy.test.js` | Tag generation tests with mocked ancestor chains |
 | `test/names.test.js` | `collectCommonNames` merge order/dedup/provenance, stubbed fetches, no API calls |
+| `test/trace.test.js` | `traceExtraction` parity/rule-label/rejection tests, no API calls |
 
 ## Tag hierarchy via label-map.json
 
@@ -67,16 +68,24 @@ Wikidata P1843 claims → wikidata.js (collectSynonymData) → names.js (collect
   (abbreviation-aware); `isTaxonomicSentence` gates which sentences get scanned.
 - `== Common names ==` and `== Names ==` sections are extracted explicitly via
   `extractSection`, and every sentence in them is scanned.
-- Per-sentence capture rules R1–R46 (in `extractWikipediaCommonNames`) pull
+- Per-sentence capture rules R1–R47 (in `extractWikipediaCommonNames`) pull
   name-list passages out of naming constructions: appositives, parenthetical
   glosses, "known as / called / referred to as", "common names include",
-  "with the common name", etc.
+  "with the common name", etc. Rules are grouped under commented category
+  banners, with a RULE INDEX block at the top of the loop.
 - `extractNamesFromCapture` cleans a captured passage into individual names:
   prefix stripping via `LEADING_PREFIX_PATTERNS`, parenthetical/semicolon
   handling, `FILLER_SEGMENT_PATTERNS`, and rank/stopword/connector rejection.
 - Whole-name classifiers reject junk before adding: `isGenericJunk`,
   `isGeographicJunk`, `isProcedural`, `isPronunciationNotation`,
   `isMeaningParen`, `isEtiologyParen`.
+- `traceExtraction(text)` is a debug twin of `extractWikipediaCommonNames`:
+  same names output, plus `captures` (`{ name, rule }` for every accepted
+  capture with its originating rule label), `rejected`
+  (`{ name, rule, by }` for every rejection with its classifier reason), and
+  `skippedSentences` (non-taxonomic sentences gated out by
+  `isTaxonomicSentence`). Use it to see exactly which rule captured (or
+  rejected) a name while refining.
 
 Refinement drives changes through new regression tests in
 `test/common-names.test.js` (see
@@ -89,5 +98,6 @@ and verify with `npm test` after any change.
 - `test/common-names.test.js` — regression tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wiki-extract.js`.
 - `test/hierarchy.test.js` — tag generation tests with mocked ancestor chains (no live Wikidata).
 - `test/names.test.js` — `collectCommonNames` merge order/dedup/provenance (stubbed fetches, no API calls).
+- `test/trace.test.js` — `traceExtraction` parity/rule-label/rejection tests (no API calls).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first. When modifying `collectCommonNames` in `src/names.js`, run names tests first.
 
