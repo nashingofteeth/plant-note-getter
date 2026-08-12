@@ -57,7 +57,8 @@ const LEADING_PREFIX_PATTERNS = [
 const STOPWORD_SEGMENTS = new Set([
   'species', 'genus', 'family', 'or', 'and', 'the', 'in', 'of',
   'primarily', 'especially', 'including', 'such as',
-  'tree', 'shrub', 'herb', 'plant', 'trees', 'shrubs', 'herbs', 'plants'
+  'tree', 'shrub', 'herb', 'plant', 'trees', 'shrubs', 'herbs', 'plants',
+  'possibly', 'perhaps'
 ]);
 
 const QUOTE_CHARS = /^['"\u2018\u2019\u201C\u201D]+/g;
@@ -103,6 +104,9 @@ function extractNamesFromCapture(captured) {
     keptClauses.push(clause);
   }
   text = keptClauses.join(', ');
+
+  // Strip hedge interjections: "or, possibly, Y" → "or Y"
+  text = text.replace(/,\s*(?:possibly|perhaps),/gi, ',');
 
   text = text.replace(/\s*,?\s+(?:and|or)\s+/gi, (match, offset, string) => {
     // Don't split "X or Y family/genus/species" patterns, but only when the
@@ -172,16 +176,19 @@ function extractNamesFromCapture(captured) {
     if (hasCJK(segment)) continue;
     // Reject segments that are just pinyin/romanization markers
     if (/^(?:pinyin|simplified\s+chinese|traditional\s+chinese):\s*/i.test(segment)) continue;
-    // Reject pinyin-style romanized words (lowercase with diacritics, no spaces)
-    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment)) continue;
+    // Reject pinyin-style romanized words (lowercase with diacritics, no spaces).
+    // Allow words with ñ (common in Spanish common names like "cuaresmeñas").
+    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment)) continue;
     // Reject full binomials (Capitalized-lowercase) that look like Latin scientific names,
     // but allow common English descriptors (European, American, wild, etc.)
     const segWords = segment.split(/\s+/);
     if (segWords.length === 2 && /^[A-ZÀ-Ÿ]/.test(segWords[0]) && /^[a-z]/.test(segWords[1])) {
       // Allow names with non-ASCII characters (accented letters are common in foreign-language common names)
       if (/[^\x00-\x7F]/.test(segment)) { /* skip binomial check */ }
+      // Allow possessive common names like "Adam's needle"
+      else if (/^[A-ZÀ-Ÿ][\w.''\u2019-]*['\u2019]s$/i.test(segWords[0])) { /* skip binomial check */ }
       else {
-        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
+        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
         if (!englishPrefixes.test(segWords[0])) continue;
       }
     }
@@ -343,7 +350,8 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/known\s+(?:by|as)\s/i.test(sentence)) return true;
   if (/known\s+by\s+various/i.test(sentence)) return true;
   if (/\balso\s+called\b/i.test(sentence)) return true;
-  if (/\bis\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
+  if (/\b(?:is|are)\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
+  if (/\b(?:often|sometimes|frequently)\s+called\b/i.test(sentence)) return true;
   return false;
 }
 
@@ -417,6 +425,29 @@ function extractSection(text, header) {
   return nextSection ? after.slice(0, nextSection.index) : after;
 }
 
+// Extract quoted names that are followed by "in <Language>" or
+// "in (<Language>)" — signals indigenous/multilingual common names
+// in naming sentences like "called 'X' in the Western Mono language".
+function extractQuotedLanguageNames(sentence) {
+  const results = [];
+  const seenKeys = new Set();
+  const re = /['"\u2018\u2019]([^'"\u2018\u2019]+)['"\u2018\u2019]\s+(?:in\b|\([^)]*language[^)]*\))/gi;
+  let m;
+  while ((m = re.exec(sentence)) !== null) {
+    const name = m[1].trim();
+    if (!name) continue;
+    if (isGenericJunk(name)) continue;
+    if (isGeographicJunk(name)) continue;
+    if (isProcedural(name)) continue;
+    const key = name.toLowerCase();
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      results.push(name);
+    }
+  }
+  return results;
+}
+
 function _extractWikipediaCommonNames(text, trace) {
   if (!text || !text.trim()) return [];
 
@@ -443,7 +474,15 @@ function _extractWikipediaCommonNames(text, trace) {
       if (nameApplied) {
         pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Common names');
       }
-      addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace);
+      // Check for quoted indigenous-language names first
+      const quotedNames = extractQuotedLanguageNames(s);
+      if (quotedNames.length > 0) {
+        for (const name of quotedNames) {
+          pushResult(results, seenKeys, name, trace, 'Section:Common names:quoted');
+        }
+      } else {
+        addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace);
+      }
     }
   }
   const namesSection = extractSection(processed, 'Names');
@@ -456,7 +495,15 @@ function _extractWikipediaCommonNames(text, trace) {
         if (nameApplied) {
           pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Names');
         }
-        addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace);
+        // Check for quoted indigenous-language names first
+        const quotedNames = extractQuotedLanguageNames(s);
+        if (quotedNames.length > 0) {
+          for (const name of quotedNames) {
+            pushResult(results, seenKeys, name, trace, 'Section:Names:quoted');
+          }
+        } else {
+          addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace);
+        }
       }
     }
   }
@@ -478,6 +525,14 @@ function _extractWikipediaCommonNames(text, trace) {
       continue;
     }
 
+    // Skip sentences that attribute common names to a specific species rather
+    // than to the taxon the note is about (e.g. "The yucca, specifically
+    // Yucca gigantea, ... is known as flor de izote").
+    if (/\b(?:specifically|namely)\s+[A-ZÀ-Ÿ][a-zà-ÿ]+\s+[a-zà-ÿ]+/i.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
     const caps = [];
 
     // ─── Sentence-open constructions ─────────────────────────────────────
@@ -486,7 +541,10 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r1) {
       const subject = r1[1];
       const nameList = r1[2];
-      if (isSubjectBinomial(subject) || /^The\s+/i.test(subject)) {
+      // Reject prepositional/framing subjects ("In the other half", "In particular")
+      // so non-appositive commas aren't mistaken for common-name lists.
+      const prepositionalSubject = /^(?:in|on|at|of|for|with|as|by|to|from|while|although|though|because|since|when|where|if|despite|unlike|among|between|during|throughout|including|such)\s+/i;
+      if ((isSubjectBinomial(subject) || /^The\s+/i.test(subject)) && !prepositionalSubject.test(subject)) {
         caps.push({ rule: 'R1', capture: nameList });
       }
     }
@@ -763,6 +821,12 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R17', capture: r17[1] });
     }
 
+    // R49: "The English common names X and Y are shared by closely related genera"
+    const r49 = sentence.match(/(?:The\s+)?(?:English\s+)?common\s+names?\s+(.+?)\s+are\s+shared\s+by/i);
+    if (r49) {
+      caps.push({ rule: 'R49', capture: r49[1] });
+    }
+
     // R18: "Alternative names ... are X and Y" — capture full list
     const r18 = sentence.match(/Alternative\s+names\s+(?:in\s+.+?\s+)?are\s+(.+)/i);
     if (r18) {
@@ -814,7 +878,7 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R25: "is known as X" — passive form
-    const r25 = sentence.match(/is\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+[a-z]+\s+[a-z]+\b|[.,]\s*$)/i);
+    const r25 = sentence.match(/is\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+[a-z]+\s+(?!(?:in|on|at|of|for|with|by|to|from|as|into|through|during|without|within|via)\b)[a-z]+\b|[.,]\s*$)/i);
     if (r25) {
       let capture = r25[1].trim();
       // Reject explanatory single-word nicknames: "is known as "stinking" because..."
@@ -965,13 +1029,59 @@ function _extractWikipediaCommonNames(text, trace) {
     const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+(?:or|and)\s+|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
-      if (!/^(?:is|are|was|were|be|been)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
+      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
         let capture = r41Match[3].replace(/\s*[(),].*$/, '').trim();
+        // Strip surrounding quotes and a trailing period ("Agave Noah". -> Agave Noah)
+        capture = capture.replace(/^["'\u2018\u2019\u201C\u201D]+/, '').replace(/["'\u2018\u2019\u201C\u201D]+\.?\s*$/, '').trim();
         if (capture && capture.length < 200 && capture.length > 2) {
           const trimmed = capture.replace(/\s+(?:or|and)\s+.*$/i, '').trim();
           if (trimmed && !isGenericJunk(trimmed)) caps.push({ rule: 'R41', capture: trimmed });
         }
       }
+    }
+
+    // R48: regional common-name distribution —
+    // "called X in <place>, Y, Z, or W in <place>, and V in <place>"
+    // e.g. "being called flor de izote in Mexico, ... flores de palma (palm flowers)
+    //       in Hidalgo and San Luis Potosí, guayas, cuaresmeñas, or chochos in Veracruz,
+    //       and chochas in Tamaulipas"
+    const r48 = sentence.match(/(?:being\s+)?(?:also\s+)?called\s+(.+?)\s*[.;]\s*$/i);
+    const r48Places = (r48 && r48[1].match(/\sin\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*(?:\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*)*(?:\s+(?:and|&)\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*(?:\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*)*)*/g)) || [];
+    if (r48 && r48Places.length >= 2) {
+      let clause = r48[1];
+      // Remove embedded sentence restarts ("yucca flowers are also called")
+      clause = clause.replace(/\b[A-Za-z' -]+?\s+(?:flowers?|plants?|trees?|shrubs?)\s+are\s+(?:also\s+)?(?:called|known\s+as)\s+/gi, ' ');
+      // Remove " in <Place>( and <Place>)*" qualifiers
+      clause = clause.replace(/\s+in\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*(?:\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*)*(?:\s+(?:and|&)\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*(?:\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]*)*)*/g, ' ');
+      caps.push({ rule: 'R48', capture: clause });
+    }
+
+    // R50: quoted names after a naming verb — referred to as "winter (or spring) heather"
+    const r50 = sentence.match(/(?:referred\s+to\s+as|called|known\s+as)\s+["'\u201C\u2018]([^"'\u201D\u2019]+)["'\u201D\u2019]/i);
+    if (r50) {
+      const inner = r50[1].trim();
+      const bare = inner.replace(/["'\u201C\u201D]/g, '').trim();
+      const isSingleWord = bare.length > 0 && !/\s/.test(bare);
+      const nameEnd = r50.index + r50[0].length;
+      const isExplanatory = /\b(?:because|since)\s+/i.test(sentence.slice(nameEnd));
+      const hasJargon = /\b(?:logging|industry|lumber|timber|shipped|intergrades?|variety|anatomical|structures?|peduncles?|spurs|stamens?|pistils?|petals?|sepals?|leaves?|roots?|stems?|bark|wood|tissues?)\b/i.test(sentence);
+      if (!(isSingleWord && isExplanatory) && !hasJargon) {
+        // Expand "winter (or spring) heather" → "winter heather", "spring heather"
+        const alt = inner.match(/^(.+?)\s+\(\s*(?:also\s+)?(?:or|and)\s+(.+?)\s*\)\s+(.+)$/i);
+        if (alt) {
+          caps.push({ rule: 'R50', capture: `${alt[1]} ${alt[3]}` });
+          caps.push({ rule: 'R50', capture: `${alt[2]} ${alt[3]}` });
+        } else {
+          caps.push({ rule: 'R50', capture: inner });
+        }
+      }
+    }
+
+    // R51: "often/sometimes/frequently called (the) X" — "often called the Cape heaths"
+    const r51 = sentence.match(/(?:often|sometimes|frequently)\s+called\s+(?:the\s+)?(.+?)(?:\s*[,.;]\s*|$)/i);
+    if (r51) {
+      const capture = finalizeCapture(r51[1], 200);
+      if (capture) caps.push({ rule: 'R51', capture: capture });
     }
 
     // R42: "and native to Asia" / "previously known as" filtering

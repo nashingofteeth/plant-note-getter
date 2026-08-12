@@ -478,6 +478,56 @@ const TESTS = [
     extract: 'Maackia amurensis, commonly known as the Amur maackia, is a species of tree in the family Fabaceae that can grow 15 metres (49 ft) tall. The species epithet and common names are from the Amur River region, where the tree originated; it occurs in northeastern China, Korea, and Russia.',
     expected: ['Amur maackia'],
   },
+  {
+    name: 'Erica (English common names X and Y are shared by closely related genera)',
+    extract: 'Erica is a genus of roughly 857 species of flowering plants in the family Ericaceae. The English common names heath and heather are shared by some closely related genera of similar appearance.',
+    expected: ['heath', 'heather'],
+  },
+  {
+    name: 'Erica ("winter (or spring) heather" quoted distinction; Cape heaths collective name)',
+    extract: 'Erica is sometimes referred to as "winter (or spring) heather" to distinguish it from Calluna "summer (or autumn) heather". Around 690 of the species are endemic to South Africa, and these are often called the Cape heaths, forming the largest genus in the fynbos.',
+    expected: ['winter heather', 'spring heather', 'Cape heaths'],
+  },
+  {
+    name: 'Erica (species-specific names excluded: tree heather/broom heather/tree heath/besom heath)',
+    extract: 'Most European species are dwarf shrubs, growing 20–80 cm tall. The largest are the tree heather (Erica arborea) and the broom heather (Erica scoparia), which can reach 6–10 meters. Most of the species of Erica are small shrubs from 20–150 centimetres (8–59 inches) high, though some are taller; the tallest are E. arborea (tree heath) and E. scoparia (besom heath), both of which can reach up to 7 metres (23 feet) tall.',
+    expected: [],
+  },
+  {
+    name: 'Erica (full article: heath, heather, winter/spring heather, Cape heaths)',
+    extract: 'Erica is a genus of roughly 857 species of flowering plants in the family Ericaceae. The English common names heath and heather are shared by some closely related genera of similar appearance. Erica is sometimes referred to as "winter (or spring) heather" to distinguish it from Calluna "summer (or autumn) heather". Around 690 of the species are endemic to South Africa, and these are often called the Cape heaths, forming the largest genus in the fynbos.',
+    expected: ['heath', 'heather', 'winter heather', 'spring heather', 'Cape heaths'],
+  },
+  {
+    name: 'Yucca (Names section: common names list, Adam\'s needle possessive binomial)',
+    extract: 'In addition to yucca, they are also known as Adam\'s needle or Spanish-bayonet. The name yucca is used as an English common name for plant species in the genus. It is also known as Adam\'s needle or as Spanish-bayonet. Other common names for some species include Spanish dagger, shin dagger, soapweed, or soaptree. In the plant trade they are sometimes known as palm lilies.',
+    expected: ['yucca', "Adam's needle", 'Spanish-bayonet', 'Spanish dagger', 'shin dagger', 'soapweed', 'soaptree', 'palm lilies'],
+  },
+  {
+    name: 'Yucca (no "it" from "In the other half", no "discovery that Yucca", no "like plants")',
+    extract: 'In the other half, it is a fleshy fruit. In particular, the discovery that Yucca, like plants in Agave, has 5 large and 20 small chromosomes was a large factor in reconsidering their relationship.',
+    expected: [],
+  },
+  {
+    name: 'Yucca (flor de izote attributed to the specific species Yucca gigantea, not the genus — not extracted)',
+    extract: 'The yucca, specifically Yucca gigantea, is the national flower of El Salvador, where it is known as flor de izote.',
+    expected: [],
+  },
+  {
+    name: 'Yucca (regional flower names: yucca flowers broadly called flor de izote in Mexico, flores de palma, guayas, cuaresmeñas, chochos, chochas)',
+    extract: 'In addition to being called flor de izote in Mexico, yucca flowers are also called flores de palma (palm flowers) in Hidalgo and San Luis Potosí, guayas, cuaresmeñas, or chochos in Veracruz, and chochas in Tamaulipas.',
+    expected: ['flor de izote', 'flores de palma', 'guayas', 'cuaresmeñas', 'chochos', 'chochas'],
+  },
+  {
+    name: 'Agave ovatifolia ("Agave Noah" quoted name, no stray trailing quote)',
+    extract: 'Agave ovatifolia, the whale\'s tongue agave, is a species of flowering plant in the family Asparagaceae. Plants were first found by nickel (1870) and known as "Agave Noah".',
+    expected: ['whale\'s tongue agave', 'Agave Noah'],
+  },
+  {
+    name: 'Claytonia perfoliata (indigenous-language quoted names, R25 hedge interjection "or, possibly,")',
+    extract: 'Claytonia perfoliata, commonly known as miner\'s lettuce or winter purslane, is a flowering plant in the family Montiaceae.\n\n\n=== Names ===\nC. perfoliata is called \'piyada̠\' in the Western Mono language and \'palsingat\' in Ivilyuat — two Native American languages of California or \'rooreh\' in (Ohlone language) The name Rooreh has been adopted by the Jepson Herbarium at University of California, Berkeley.\n\n\n== Uses ==\nThe plant is known as palsingat or, possibly, lahchumeek in Ivilyuat and it was eaten fresh or boiled as a green by the Ivilyuqaletem (Cahuilla) people of Southern California.',
+    expected: ["miner's lettuce", 'winter purslane', 'piyada̠', 'palsingat', 'rooreh', 'lahchumeek'],
+  },
 ];
 
 const GBIF_TESTS = [
