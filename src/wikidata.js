@@ -1,6 +1,7 @@
 const { fetchJSON, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API } = require('./api-client');
 const { stripArticle, normalizeNameKey, TAXON_Q_IDS } = require('./utils');
 const { RANK_LABELS, RANK_PREFERENCE } = require('./ranks');
+const { askChoice } = require('./prompt');
 
 async function searchTaxon(name) {
   await rateLimit();
@@ -49,7 +50,7 @@ async function searchTaxon(name) {
   return [];
 }
 
-async function resolveTaxon(input) {
+async function resolveTaxon(input, selectIndex) {
   const results = await searchTaxon(input);
 
   if (results.length === 0) {
@@ -76,14 +77,13 @@ async function resolveTaxon(input) {
     if (taxonResults.length === 1) {
       selected = taxonResults[0];
       console.log(`  Using: ${selected.label} (${selected.rankLabel || 'taxon'})`);
+    } else if (selectIndex !== undefined && selectIndex >= 0 && selectIndex < taxonResults.length) {
+      selected = taxonResults[selectIndex];
+      console.log(`  Selected [${selectIndex + 1}]: ${selected.label} (${selected.rankLabel || 'taxon'})`);
     } else {
       console.log(`  ${taxonResults.length} taxa found:\n`);
-      taxonResults.forEach((r, i) => {
-        const rankStr = r.rankLabel ? ` (${r.rankLabel})` : '';
-        console.log(`  ${i + 1}. ${r.label}${rankStr} — ${r.description || 'no description'}`);
-      });
-      console.log(`\n  Using first result: ${taxonResults[0].label}`);
-      selected = taxonResults[0];
+      const idx = await askChoice(taxonResults, 'Select taxon');
+      selected = taxonResults[idx];
     }
   } else {
     console.log(`  Found: ${selected.label}`);

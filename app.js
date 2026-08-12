@@ -27,18 +27,19 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error('Usage: plant-note "Scientific Name" [--apply]');
+    console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N]');
     console.error('       plant-note --populate [--apply]');
     console.error('       plant-note --check "Note Name"');
     console.error('');
     console.error('Options:');
     console.error('  --apply    Auto-apply updates to existing files without prompting');
+    console.error('  --select=N Select result N from search (bypasses prompt)');
     console.error('  --check    Show tag hierarchy child counts for a note');
     console.error('');
     console.error('Examples:');
     console.error('  plant-note "Populus"');
     console.error('  plant-note "Populus" --apply');
-    console.error('  plant-note "Eschscholzia californica"');
+    console.error('  plant-note "Eschscholzia californica" --select=2');
     console.error('  plant-note --populate');
     console.error('  plant-note --populate --apply');
     console.error('  plant-note --check "Lysimachia borealis"');
@@ -69,14 +70,16 @@ async function main() {
   }
 
   const autoApply = args.includes('--apply');
-  const input = args.filter(a => a !== '--apply').join(' ');
+  const selectArg = args.find(a => a.startsWith('--select='));
+  const selectIndex = selectArg ? parseInt(selectArg.split('=')[1], 10) - 1 : undefined;
+  const input = args.filter(a => a !== '--apply' && !a.startsWith('--select=')).join(' ');
 
   printSection('Wikidata Search');
 
   console.log(`  Searching for: ${input}`);
 
   try {
-    const { entity, candidateEntities } = await resolveTaxon(input);
+    const { entity, candidateEntities } = await resolveTaxon(input, selectIndex);
 
     const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
 
