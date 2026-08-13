@@ -61,10 +61,14 @@ async function resolveTaxon(input, selectIndex) {
   const entityCache = new Map();
 
   if (results.length > 1) {
+    const entitiesMap = await getEntitiesData(results.map(r => r.id));
+    for (const [id, entity] of entitiesMap) {
+      entityCache.set(id, entity);
+    }
+
     const taxonResults = [];
     for (const r of results) {
-      const entity = await getEntityData(r.id);
-      entityCache.set(r.id, entity);
+      const entity = entitiesMap.get(r.id);
       if (entity && entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
         taxonResults.push({ ...r, rankLabel: entity.rankLabel });
       }
@@ -110,17 +114,7 @@ function getLabel(labels) {
   return null;
 }
 
-async function getEntityData(id) {
-  await rateLimit();
-  const params = new URLSearchParams({
-    action: 'wbgetentities',
-    ids: id,
-    props: 'claims|aliases|sitelinks|labels|descriptions',
-    languages: 'en|mul',
-    format: 'json'
-  });
-  const data = await fetchJSON(`${WIKIDATA_API}?${params}`);
-  const entity = data.entities?.[id];
+function parseEntity(id, entity) {
   if (!entity) return null;
 
   const claims = entity.claims || {};
@@ -193,6 +187,29 @@ async function getEntityData(id) {
     wikipediaUrl,
     wikipediaTitle
   };
+}
+
+async function getEntitiesData(ids) {
+  if (!ids || ids.length === 0) return new Map();
+  await rateLimit();
+  const params = new URLSearchParams({
+    action: 'wbgetentities',
+    ids: ids.join('|'),
+    props: 'claims|aliases|sitelinks|labels|descriptions',
+    languages: 'en|mul',
+    format: 'json'
+  });
+  const data = await fetchJSON(`${WIKIDATA_API}?${params}`);
+  const map = new Map();
+  for (const [id, raw] of Object.entries(data.entities || {})) {
+    map.set(id, parseEntity(id, raw));
+  }
+  return map;
+}
+
+async function getEntityData(id) {
+  const map = await getEntitiesData([id]);
+  return map.get(id) || null;
 }
 
 function pickBestParent(parentIds, ancestorMap) {
