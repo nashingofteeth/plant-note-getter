@@ -1,4 +1,4 @@
-const { fetchJSON, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API } = require('./api-client');
+const { fetchJSON, fetchSparql, rateLimit, WIKIDATA_API, GBIF_API } = require('./api-client');
 const { stripArticle, normalizeNameKey, TAXON_Q_IDS } = require('./utils');
 const { RANK_LABELS, RANK_PREFERENCE } = require('./ranks');
 const { askChoice } = require('./prompt');
@@ -28,7 +28,7 @@ async function searchTaxon(name) {
     if (gbifData && gbifData.usageKey && gbifData.matchType !== 'NONE') {
       const gbifId = gbifData.usageKey;
       const query = `SELECT ?item WHERE { ?item wdt:P846 "${gbifId}" }`;
-      const sparqlData = await fetchJSON(`${SPARQL_ENDPOINT}?${new URLSearchParams({ query, format: 'json' })}`);
+      const sparqlData = await fetchSparql(`SELECT ?item WHERE { ?item wdt:P846 "${gbifId}" }`);
       if (sparqlData.results?.bindings?.length > 0) {
         const qId = sparqlData.results.bindings[0].item.value.split('/').pop();
         const labelData = await fetchJSON(`${WIKIDATA_API}?${new URLSearchParams({
@@ -217,7 +217,7 @@ async function getParentChain(id) {
   OPTIONAL { ?taxon wdt:P171 ?parent. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
 }`;
-  const data = await fetchJSON(`${SPARQL_ENDPOINT}?${new URLSearchParams({ query, format: 'json' })}`);
+  const data = await fetchSparql(query);
   const bindings = data.results?.bindings || [];
 
   const ancestors = new Map();

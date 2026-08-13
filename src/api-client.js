@@ -19,6 +19,34 @@ async function rateLimit() {
   lastRequestTime = Date.now();
 }
 
+const SPARQL_TIMEOUT_MS = 90000;
+const SPARQL_RETRIES = 3;
+const SPARQL_RETRY_BASE_MS = 2000;
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function isRetryable(err) {
+  return /timed out/.test(err.message) || /HTTP (429|5\d\d)/.test(err.message);
+}
+
+async function fetchSparql(query, timeoutMs = SPARQL_TIMEOUT_MS) {
+  const url = `${SPARQL_ENDPOINT}?${new URLSearchParams({ query, format: 'json', maxlag: '5' })}`;
+  let lastErr;
+  for (let attempt = 0; attempt < SPARQL_RETRIES; attempt++) {
+    try {
+      return await fetchJSON(url, null, timeoutMs);
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryable(err) || attempt === SPARQL_RETRIES - 1) throw err;
+      const delay = SPARQL_RETRY_BASE_MS * 2 ** attempt;
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
 function fetchJSON(url, body = null, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
@@ -68,4 +96,4 @@ function fetchJSON(url, body = null, timeoutMs = 30000) {
   });
 }
 
-module.exports = { fetchJSON, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API, WIKIPEDIA_MEDIAWIKI_API };
+module.exports = { fetchJSON, fetchSparql, rateLimit, WIKIDATA_API, SPARQL_ENDPOINT, GBIF_API, WIKIPEDIA_MEDIAWIKI_API };
