@@ -76,7 +76,7 @@ function stripOuterParens(text) {
   return result;
 }
 
-function extractNamesFromCapture(captured) {
+function extractNamesFromCapture(captured, trace, rule) {
   if (!captured || !captured.trim()) return [];
 
   let text = captured.trim();
@@ -91,7 +91,13 @@ function extractNamesFromCapture(captured) {
 
   text = text
     .split(';')
-    .filter(part => !/^\s*syn\.?\s/i.test(part))
+    .filter(part => {
+      if (/^\s*syn\.?\s/i.test(part)) {
+        if (trace) trace.rejected.push({ name: part.trim(), rule, by: 'syn-clause' });
+        return false;
+      }
+      return true;
+    })
     .join(',');
 
   // Clause-level DROP: drop entire comma-separated clauses that start with
@@ -100,7 +106,10 @@ function extractNamesFromCapture(captured) {
   const clauses = text.split(',').map(c => c.trim()).filter(Boolean);
   const keptClauses = [];
   for (const clause of clauses) {
-    if (DROP_CLAUSE.test(clause)) continue;
+    if (DROP_CLAUSE.test(clause)) {
+      if (trace) trace.rejected.push({ name: clause, rule, by: 'drop-clause' });
+      continue;
+    }
     keptClauses.push(clause);
   }
   text = keptClauses.join(', ');
@@ -144,7 +153,10 @@ function extractNamesFromCapture(captured) {
 
     segment = segment.replace(/\s+in\s+[A-Z][a-zA-Z]*$/, '');
     // Reject segments that are purely geographic qualifiers
-    if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/.test(segment)) continue;
+    if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'geographic-qualifier' });
+      continue;
+    }
 
     // Strip trailing orphan connectors ("elm or", "poppy and")
     segment = segment.replace(/\s+(?:or|and)\s*$/, '').trim();
@@ -168,17 +180,38 @@ function extractNamesFromCapture(captured) {
     } while (segment !== prevArticle && segment);
 
     if (!segment) continue;
-    if (FILLER_SEGMENT_PATTERNS.some(pattern => pattern.test(segment))) continue;
-    if (STOPWORD_SEGMENTS.has(segment.toLowerCase())) continue;
-    if (/\d/.test(segment)) continue;
-    if (isAbbreviatedBinomial(segment)) continue;
+    if (FILLER_SEGMENT_PATTERNS.some(pattern => pattern.test(segment))) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'filler-segment' });
+      continue;
+    }
+    if (STOPWORD_SEGMENTS.has(segment.toLowerCase())) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'stopword' });
+      continue;
+    }
+    if (/\d/.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'numeric' });
+      continue;
+    }
+    if (isAbbreviatedBinomial(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'abbreviated-binomial' });
+      continue;
+    }
     // Reject segments with CJK characters
-    if (hasCJK(segment)) continue;
+    if (hasCJK(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'cjk' });
+      continue;
+    }
     // Reject segments that are just pinyin/romanization markers
-    if (/^(?:pinyin|simplified\s+chinese|traditional\s+chinese):\s*/i.test(segment)) continue;
+    if (/^(?:pinyin|simplified\s+chinese|traditional\s+chinese):\s*/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'pinyin-marker' });
+      continue;
+    }
     // Reject pinyin-style romanized words (lowercase with diacritics, no spaces).
     // Allow words with ñ (common in Spanish common names like "cuaresmeñas").
-    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment)) continue;
+    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'phonetic-only' });
+      continue;
+    }
     // Reject full binomials (Capitalized-lowercase) that look like Latin scientific names,
     // but allow common English descriptors (European, American, wild, etc.)
     const segWords = segment.split(/\s+/);
@@ -191,16 +224,31 @@ function extractNamesFromCapture(captured) {
       else if (/^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*-[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*$/.test(segWords[0])) { /* skip binomial check */ }
       else {
         const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
-        if (!englishPrefixes.test(segWords[0])) continue;
+        if (!englishPrefixes.test(segWords[0])) {
+          if (trace) trace.rejected.push({ name: segment, rule, by: 'binomial-lookalike' });
+          continue;
+        }
       }
     }
-    if (segment.split(/\s+/).length > 5) continue;
+    if (segment.split(/\s+/).length > 5) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'too-long' });
+      continue;
+    }
     // Reject hybrid scientific names containing the × character (e.g. "Populus × canescens")
-    if (/\s×\s/i.test(segment) || segment.startsWith('× ')) continue;
+    if (/\s×\s/i.test(segment) || segment.startsWith('× ')) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'hybrid-notation' });
+      continue;
+    }
     // Reject leftover verb-phrase fragments (e.g. "is widely found", "are grown")
-    if (/^(?:is|are|was|were|being|been)\s+(?:widely|commonly|often|particularly|typically|especially|found|distributed|known|used|native|common)/i.test(segment)) continue;
+    if (/^(?:is|are|was|were|being|been)\s+(?:widely|commonly|often|particularly|typically|especially|found|distributed|known|used|native|common)/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'verb-phrase' });
+      continue;
+    }
     // Reject taxonomic rank-prefixed fragments (e.g. "subspecies L. f. ssp. aspleniifolius")
-    if (/^(?:subspecies|ssp\.?|subsp\.?|variety|var\.?|subvariety|subvar\.?|forma|form\.?|subform|section|subsection|cultivar|cv\.?)\s+/i.test(segment)) continue;
+    if (/^(?:subspecies|ssp\.?|subsp\.?|variety|var\.?|subvariety|subvar\.?|forma|form\.?|subform|section|subsection|cultivar|cv\.?)\s+/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'rank-prefix' });
+      continue;
+    }
 
     const key = segment.toLowerCase();
     if (seenKeys.has(key)) continue;
@@ -406,7 +454,7 @@ function addNames(captures, results, seenKeys, trace) {
       if (trace) trace.rejected.push({ name: capture, rule, by: 'provenance' });
       continue;
     }
-    const names = extractNamesFromCapture(capture);
+    const names = extractNamesFromCapture(capture, trace, rule);
     for (const name of names) {
       if (isGenericJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGenericJunk' }); continue; }
       if (isGeographicJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGeographicJunk' }); continue; }
