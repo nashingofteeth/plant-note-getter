@@ -133,6 +133,21 @@ function extractNamesFromCapture(captured, trace, rule) {
     return ', ';
   });
 
+  // Shared-head expansion: "the coffee, madder, or bedstraw family" →
+  // "the coffee family, madder family, bedstraw family". Distributes the
+  // trailing rank head (family/genus/species) onto every comma-separated
+  // list item so the 2-item post-process at the caller can handle 3+ items.
+  const sharedHead = text.match(/^(.+?)\s+(?:or|and)\s+([^,]+?)\s+(family|genus|species)\s*$/i);
+  if (sharedHead) {
+    const head = sharedHead[3];
+    const items = [...sharedHead[1].split(','), sharedHead[2]]
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (items.length >= 2 && items.every(it => it.split(/\s+/).length <= 3)) {
+      text = items.map(it => `${it} ${head}`).join(', ');
+    }
+  }
+
   const results = [];
   const seenKeys = new Set();
 
@@ -707,10 +722,12 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // ─── Parenthetical glosses ───────────────────────────────────────────
-    // R6: Parenthetical common names — "(known as/called/commonly known as X, Y, Z)" before "is"
-    const r6 = sentence.match(/\(\s*(?:(?:also|commonly)\s+)?(?:known\s+as|called|named|referred\s+to\s+as)\s+(.+?)\)\s+(?:is|was|are)/i);
-    if (r6) {
-      caps.push({ rule: 'R6', capture: r6[1] });
+    // R6: Parenthetical common names — "ScientificName (known as/called/commonly known as X, Y, Z) is"
+    // Only when the gloss directly follows a scientific name (uppercase-initial word, optionally + epithet),
+    // so mechanism/other English heads like "Secondary pollen presentation (also known as ...)" are excluded.
+    const r6 = sentence.match(/([A-Za-zÀ-ÿ][\w''\u2019-]+(?:\s+[a-z][\w''\u2019-]+)?)\s*\(\s*(?:(?:also|commonly)\s+)?(?:known\s+as|called|named|referred\s+to\s+as)\s+(.+?)\)\s+(?:is|was|are)/i);
+    if (r6 && /^[A-ZÀ-Ÿ]/.test(r6[1])) {
+      caps.push({ rule: 'R6', capture: r6[2] });
     }
 
     // R6b: Parenthetical with "common names" prefix — "(common names X, Y, Z) is"

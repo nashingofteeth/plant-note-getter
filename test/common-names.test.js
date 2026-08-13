@@ -434,6 +434,16 @@ const TESTS = [
     expected: ['rue family', 'citrus family'],
   },
   {
+    name: 'Rubiaceae ("the coffee, madder, or bedstraw family" — 3-item shared head expands to all)',
+    extract: 'Rubiaceae is a family of flowering plants, commonly known as the coffee, madder, or bedstraw family. It consists of terrestrial trees, shrubs, lianas, or herbs that are recognizable by simple, opposite leaves.',
+    expected: ['coffee family', 'madder family', 'bedstraw family'],
+  },
+  {
+    name: 'Rubiaceae (mechanism gloss "Secondary pollen presentation (also known as stylar pollen presentation or ixoroid pollen mechanism)" not extracted as common names)',
+    extract: 'Rubiaceae is a family of flowering plants, commonly known as the coffee, madder, or bedstraw family. Secondary pollen presentation (also known as stylar pollen presentation or ixoroid pollen mechanism) is especially known from the Gardenieae and related tribes.',
+    expected: ['coffee family', 'madder family', 'bedstraw family'],
+  },
+  {
     name: 'Cyperaceae ("a family of ... plants known as sedges" with no true-sedges leak)',
     extract: 'The Cyperaceae () are a family of  graminoid (grass-like), monocotyledonous flowering plants known as sedges. The family contains around 5,500 described species in about 90 genera \u2013 the largest being the "true sedges" (Carex), with over 2,000 species.',
     expected: ['sedges'],
