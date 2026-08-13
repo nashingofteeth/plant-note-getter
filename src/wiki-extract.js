@@ -1134,6 +1134,17 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R51', capture: capture });
     }
 
+    // R52: native-script name paired with romanized transliteration in a naming
+    // sentence — "the Standard Chinese name 七子花 qī zi huā" (bare) and
+    // "common name in Standard Chinese 七子花 (qī zi huā)" (parenthetical).
+    const r52 = sentence.match(/([\u4e00-\u9fff\u3400-\u4dbf]+)\s*(?:\(\s*([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40})\s*\)|([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40})(?=[\s.,;)\u2014-]|$))/);
+    if (r52 && /\bnames?\b/i.test(sentence)) {
+      const roman = (r52[2] || r52[3] || '').trim();
+      if (roman && roman.length > 1 && !hasCJK(roman)) {
+        caps.push({ rule: 'R52', capture: roman });
+      }
+    }
+
     // R42: "and native to Asia" / "previously known as" filtering
     // Handled by extractNamesFromCapture's DROP markers
 

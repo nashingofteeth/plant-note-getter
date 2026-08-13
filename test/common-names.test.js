@@ -533,6 +533,11 @@ const TESTS = [
     extract: 'Eutrochium is a North American genus of herbaceous flowering plants in the family Asteraceae. They are commonly referred to as Joe-Pye weeds. They are native to the United States and Canada, and have non-dissected foliage and pigmented flowers.',
     expected: ['Joe-Pye weeds'],
   },
+  {
+    name: 'Heptacodium miconioides (Standard Chinese regional name "qī zi huā" from naming sentences)',
+    extract: 'Heptacodium miconioides, the seven-son flower, is a species of flowering plant. It is the sole species in the monotypic genus Heptacodium, of the honeysuckle family Caprifoliaceae. The common name "seven-son flower" is a direct translation of the Standard Chinese name 七子花 qī zi huā.\n\n\n== Etymology ==\nThe common name in Standard Chinese 七子花 (qī zi huā) is composed of the characters 七 (qī) \'seven\', 子 (zi) \'son\' / \'child\' and 花 (huā) \'flower\' - whence \'Seven Son(s) Flower\' (\'Flower with seven children\').',
+    expected: ['seven-son flower', 'qī zi huā'],
+  },
 ];
 
 const GBIF_TESTS = [
