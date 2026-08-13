@@ -528,6 +528,11 @@ const TESTS = [
     extract: 'Claytonia perfoliata, commonly known as miner\'s lettuce or winter purslane, is a flowering plant in the family Montiaceae.\n\n\n=== Names ===\nC. perfoliata is called \'piyada̠\' in the Western Mono language and \'palsingat\' in Ivilyuat — two Native American languages of California or \'rooreh\' in (Ohlone language) The name Rooreh has been adopted by the Jepson Herbarium at University of California, Berkeley.\n\n\n== Uses ==\nThe plant is known as palsingat or, possibly, lahchumeek in Ivilyuat and it was eaten fresh or boiled as a green by the Ivilyuqaletem (Cahuilla) people of Southern California.',
     expected: ["miner's lettuce", 'winter purslane', 'piyada̠', 'palsingat', 'rooreh', 'lahchumeek'],
   },
+  {
+    name: 'Eutrochium (hyphenated proper-name compound "Joe-Pye weeds"; "such" rejected)',
+    extract: 'Eutrochium is a North American genus of herbaceous flowering plants in the family Asteraceae. They are commonly referred to as Joe-Pye weeds. They are native to the United States and Canada, and have non-dissected foliage and pigmented flowers.',
+    expected: ['Joe-Pye weeds'],
+  },
 ];
 
 const GBIF_TESTS = [

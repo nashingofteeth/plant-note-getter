@@ -187,6 +187,8 @@ function extractNamesFromCapture(captured) {
       if (/[^\x00-\x7F]/.test(segment)) { /* skip binomial check */ }
       // Allow possessive common names like "Adam's needle"
       else if (/^[A-ZÀ-Ÿ][\w.''\u2019-]*['\u2019]s$/i.test(segWords[0])) { /* skip binomial check */ }
+      // Allow hyphenated proper-name compounds like "Joe-Pye weeds" (genera never have hyphens)
+      else if (/^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*-[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*$/.test(segWords[0])) { /* skip binomial check */ }
       else {
         const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
         if (!englishPrefixes.test(segWords[0])) continue;
@@ -223,7 +225,7 @@ const GENERIC_JUNK = new Set([
   'terminal bud', 'cabbage', 'alpines',
   'dioecious species', 'monoecious species',
   'smoking mixture', 'dried leaves', 'dried bark',
-  'spurs', 'landscape', 'garden plant',
+  'spurs', 'landscape', 'garden plant', 'such',
 ]);
 
 const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
