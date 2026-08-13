@@ -34,6 +34,11 @@ const TESTS = [
     expected: ['Siskiyou lewisia', 'cliff maids'],
   },
   {
+    name: 'Mimulus ringens (known by the common names — place-name prefix "Allegheny")',
+    extract: 'Mimulus ringens is a species of monkeyflower known by the common names Allegheny monkeyflower and square-stemmed monkeyflower.',
+    expected: ['Allegheny monkeyflower', 'square-stemmed monkeyflower'],
+  },
+  {
     name: 'Oreomecon crocea (appositive without article, common name prefix)',
     extract: 'Oreomecon crocea, common name ice poppy, is a species of flowering plant in the poppy family.',
     expected: ['ice poppy'],
