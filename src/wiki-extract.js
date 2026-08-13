@@ -238,7 +238,7 @@ function extractNamesFromCapture(captured, trace, rule) {
       // Allow hyphenated proper-name compounds like "Joe-Pye weeds" (genera never have hyphens)
       else if (/^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*-[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*$/.test(segWords[0])) { /* skip binomial check */ }
       else {
-        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|allegheny|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
+        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|allegheny|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|madagascar|cordilleran|caribbean|labrador|scandinavian|alaska|bogori)/i;
         if (!englishPrefixes.test(segWords[0])) {
           if (trace) trace.rejected.push({ name: segment, rule, by: 'binomial-lookalike' });
           continue;
@@ -408,6 +408,7 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/^[A-Z]\.\s+[a-z]\.\s/i.test(sentence)) return true;
   if (TAXONOMIC_PREDICATE.test(sentence)) return true;
   if (/common\s+name/i.test(sentence)) return true;
+  if (/vernacular\s+names?\s+among\s+(?:which|them)\b/i.test(sentence)) return true;
   if (/names?\s+(?:variously\s+)?(?:applied|used)/i.test(sentence)) return true;
   if (/referred\s+to\s+as/i.test(sentence)) return true;
   if (/(?:alternative|other|local|regional)\s+names?\s/i.test(sentence)) return true;
@@ -580,7 +581,7 @@ function _extractWikipediaCommonNames(text, trace) {
   // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
   //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47
-  // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b
+  // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
   // Misc / special-case:              R17, R22, R31, R40, R42, R45
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
@@ -1196,6 +1197,13 @@ function _extractWikipediaCommonNames(text, trace) {
     const r53 = sentence.match(/^[A-Z]\.\s+[a-z]\.\s+[^,]+,\s+(?:the\s+)?([A-Za-z][a-z]+(?:[ '\u2019-][a-zA-Z]+)*)(?=\s+(?:\(\s*syn\.|(?:is|are|was|were|ranges|grows|occurs|spreads|extends|is\s+found|is\s+native|is\s+endemic)\b))/i);
     if (r53) {
       caps.push({ rule: 'R53', capture: r53[1] });
+    }
+
+    // R54: "It has many vernacular names among which are X, Y, Z" — vernacular name list
+    const r54 = sentence.match(/(?:has|having|with)\s+(?:many|several|numerous|various)\s+(?:vernacular|common|local|regional|alternative|indigenous|traditional)\s+names?\s+among\s+(?:which|them)\s+(?:are|include)\s+(.+?)(?:\s*[.,]\s*$|$)/i);
+    if (r54) {
+      const capture = finalizeCapture(r54[1], 300);
+      if (capture) caps.push({ rule: 'R54', capture: capture });
     }
 
     addNames(caps, results, seenKeys, trace);

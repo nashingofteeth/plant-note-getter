@@ -39,6 +39,16 @@ const TESTS = [
     expected: ['Allegheny monkeyflower', 'square-stemmed monkeyflower'],
   },
   {
+    name: 'Catharanthus roseus (place-name prefix "Madagascar" not binomial-lookalike)',
+    extract: 'Catharanthus roseus, commonly known as bright eyes, Cape periwinkle, graveyard plant, Madagascar periwinkle, old maid, pink periwinkle, rose periwinkle, is a perennial species of flowering plant in the family Apocynaceae.',
+    expected: ['bright eyes', 'Cape periwinkle', 'graveyard plant', 'Madagascar periwinkle', 'old maid', 'pink periwinkle', 'rose periwinkle'],
+  },
+  {
+    name: 'Catharanthus roseus (has many vernacular names among which are X, Y, Z)',
+    extract: 'Catharanthus roseus, commonly known as bright eyes, Cape periwinkle, graveyard plant, Madagascar periwinkle, old maid, pink periwinkle, rose periwinkle, is a perennial species of flowering plant in the family Apocynaceae. It has many vernacular names among which are arivotaombelona or rivotambelona, tonga, tongatse or trongatse, tsimatiririnina, and vonenina.',
+    expected: ['bright eyes', 'Cape periwinkle', 'graveyard plant', 'Madagascar periwinkle', 'old maid', 'pink periwinkle', 'rose periwinkle', 'arivotaombelona', 'rivotambelona', 'tonga', 'tongatse', 'trongatse', 'tsimatiririnina', 'vonenina'],
+  },
+  {
     name: 'Oreomecon crocea (appositive without article, common name prefix)',
     extract: 'Oreomecon crocea, common name ice poppy, is a species of flowering plant in the poppy family.',
     expected: ['ice poppy'],
