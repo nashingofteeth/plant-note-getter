@@ -390,6 +390,7 @@ function isInsideParens(text, index) {
 function isTaxonomicSentence(sentence, isFirst) {
   if (isFirst) return true;
   if (/^It\s/.test(sentence) || /^It's\s/.test(sentence)) return true;
+  if (/^[A-Z]\.\s+[a-z]\.\s/i.test(sentence)) return true;
   if (TAXONOMIC_PREDICATE.test(sentence)) return true;
   if (/common\s+name/i.test(sentence)) return true;
   if (/names?\s+(?:variously\s+)?(?:applied|used)/i.test(sentence)) return true;
@@ -560,7 +561,7 @@ function _extractWikipediaCommonNames(text, trace) {
 
   // --- Sentence-by-sentence pattern matching ---
   // ─── RULE INDEX (construction → rule; category banners below) ─────────────
-  // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44
+  // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44, R53
   // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
   //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47
@@ -621,15 +622,22 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r4 && !r3) {
       const leadName = r4[2].trim();
       const parenContent = r4[3].trim();
-      // If parenthetical contains a quoted common name, extract it
-      const quotedName = parenContent.match(/["']([^"']+)["']/);
-      if (quotedName) {
-        caps.push({ rule: 'R4', capture: quotedName[1].trim() });
-      }
-      // Reject single-word generic subjects (e.g. "olive" in "The olive (botanical name...)")
-      const genericSubjects = /^(?:olive|onion|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|fir|spruce|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle)$/i;
-      if (leadName && !isAbbreviatedBinomialLike(leadName) && leadName.length > 1 && !genericSubjects.test(leadName)) {
-        caps.push({ rule: 'R4', capture: leadName });
+      // The parenthetical must be a proper binomial (capitalized genus), not a
+      // descriptive aside like "(felled in 2015 at approximately 316 years old)"
+      // (the /i flag lets the regex match lowercase, so require an uppercase start)
+      if (!/^[A-ZÀ-Ÿ]/.test(parenContent)) {
+        if (trace) trace.rejected.push({ name: parenContent, rule: 'R4', by: 'non-binomial-paren' });
+      } else {
+        // If parenthetical contains a quoted common name, extract it
+        const quotedName = parenContent.match(/["']([^"']+)["']/);
+        if (quotedName) {
+          caps.push({ rule: 'R4', capture: quotedName[1].trim() });
+        }
+        // Reject single-word generic subjects (e.g. "olive" in "The olive (botanical name...)")
+        const genericSubjects = /^(?:olive|onion|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|fir|spruce|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle)$/i;
+        if (leadName && !isAbbreviatedBinomialLike(leadName) && leadName.length > 1 && !genericSubjects.test(leadName)) {
+          caps.push({ rule: 'R4', capture: leadName });
+        }
       }
     }
 
@@ -1165,6 +1173,13 @@ function _extractWikipediaCommonNames(text, trace) {
 
     // R45: "and the subspecies" — stop extraction at subspecies mention (Lyonothamnus)
     // Handled by boundary in regex patterns
+
+    // R53: "P. d. monilifera (Aiton) Eckenw., the plains cottonwood (syn. ...) ranges from..." —
+    //      subspecies appositive naming a common name in a Variation/Taxonomy section
+    const r53 = sentence.match(/^[A-Z]\.\s+[a-z]\.\s+[^,]+,\s+(?:the\s+)?([A-Za-z][a-z]+(?:[ '\u2019-][a-zA-Z]+)*)(?=\s+(?:\(\s*syn\.|(?:is|are|was|were|ranges|grows|occurs|spreads|extends|is\s+found|is\s+native|is\s+endemic)\b))/i);
+    if (r53) {
+      caps.push({ rule: 'R53', capture: r53[1] });
+    }
 
     addNames(caps, results, seenKeys, trace);
   }

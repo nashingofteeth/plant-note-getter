@@ -538,6 +538,11 @@ const TESTS = [
     extract: 'Heptacodium miconioides, the seven-son flower, is a species of flowering plant. It is the sole species in the monotypic genus Heptacodium, of the honeysuckle family Caprifoliaceae. The common name "seven-son flower" is a direct translation of the Standard Chinese name 七子花 qī zi huā.\n\n\n== Etymology ==\nThe common name in Standard Chinese 七子花 (qī zi huā) is composed of the characters 七 (qī) \'seven\', 子 (zi) \'son\' / \'child\' and 花 (huā) \'flower\' - whence \'Seven Son(s) Flower\' (\'Flower with seven children\').',
     expected: ['seven-son flower', 'qī zi huā'],
   },
+  {
+    name: 'Populus deltoides (subspecies appositives in Variation section; individual tree "Balmville Tree" not a common name)',
+    extract: 'Populus deltoides, the eastern cottonwood or necklace poplar, is a species of cottonwood poplar native to North America.\n\n== Variation ==\nThe species is divided into three subspecies or up to five varieties.\nPopulus deltoides subsp. deltoides, eastern cottonwood is found in southeastern Canada and the eastern United States.\nP. d. monilifera (Aiton) Eckenw., the plains cottonwood (syn. P. deltoides var. occidentalis Rydb.; P. sargentii Dode) ranges from southcentral Canada to the central United States.\nP. d. wislizeni (S.Watson) Eckenw., the Rio Grande cottonwood (syn. P. wislizeni (S.Watson) Sarg.; P. fremontii var. wislizeni S.Watson) grows from southern Colorado south through Texas to northeastern Mexico.\n\n== Oldest and largest ==\nThe Balmville Tree (felled in 2015 at approximately 316 years old) was the oldest eastern cottonwood in the United States.',
+    expected: ['eastern cottonwood', 'necklace poplar', 'plains cottonwood', 'Rio Grande cottonwood'],
+  },
 ];
 
 const GBIF_TESTS = [
