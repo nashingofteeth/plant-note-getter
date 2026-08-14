@@ -259,6 +259,13 @@ function extractNamesFromCapture(captured, trace, rule) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'verb-phrase' });
       continue;
     }
+    // Reject pronoun-subject descriptive clauses (e.g. "it contains two seeds",
+    // "they produce fruit") left after a comma-split — they describe the plant
+    // rather than name it.
+    if (/^(?:it|they|these|those|which|that)\s+(?:contains?|contain|produces?|produce|gives?|give|yields?|yield|bears?|bear|grows?|grow|forms?|form|has|have|is|are|was|were)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'descriptive-clause' });
+      continue;
+    }
     // Reject taxonomic rank-prefixed fragments (e.g. "subspecies L. f. ssp. aspleniifolius")
     if (/^(?:subspecies|ssp\.?|subsp\.?|variety|var\.?|subvariety|subvar\.?|forma|form\.?|subform|section|subsection|cultivar|cv\.?)\s+/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'rank-prefix' });
@@ -1141,7 +1148,13 @@ function _extractWikipediaCommonNames(text, trace) {
       const nameEnd = r50.index + r50[0].length;
       const isExplanatory = /\b(?:because|since)\s+/i.test(sentence.slice(nameEnd));
       const hasJargon = /\b(?:logging|industry|lumber|timber|shipped|intergrades?|variety|anatomical|structures?|peduncles?|spurs|stamens?|pistils?|petals?|sepals?|leaves?|roots?|stems?|bark|wood|tissues?)\b/i.test(sentence);
-      if (!(isSingleWord && isExplanatory) && !hasJargon) {
+      // Reject aliases bundled in a parenthetical directly after a scientific
+      // binomial — they belong to that other taxon, not the article subject
+      // (e.g. "Coffea canephora (known as \"Robusta\")").
+      const beforeMatch = sentence.slice(0, r50.index);
+      const otherTaxonAlias = /\([^()]*$/.test(beforeMatch)
+        && /\b[A-Z][a-z]+\s+[a-z]+\s*\($/.test(beforeMatch);
+      if (!(isSingleWord && isExplanatory) && !hasJargon && !otherTaxonAlias) {
         // Expand "winter (or spring) heather" → "winter heather", "spring heather"
         const alt = inner.match(/^(.+?)\s+\(\s*(?:also\s+)?(?:or|and)\s+(.+?)\s*\)\s+(.+)$/i);
         if (alt) {

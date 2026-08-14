@@ -214,6 +214,16 @@ const TESTS = [
     expected: ['Jack-in-the-pulpit', 'Indian turnip', 'bog onion', 'brown dragon'],
   },
   {
+    name: 'Coffea (pronoun descriptive clauses after "referred to as" rejected)',
+    extract: 'The fruit is often referred to as a "coffee cherry", and it contains two seeds, called "coffee beans".',
+    expected: ['coffee cherry', 'coffee beans'],
+  },
+  {
+    name: 'Coffea (aliases of other species in parenthetical binomial rejected)',
+    extract: 'The coffee trade relies heavily on two of the over 120 species, Coffea arabica (commonly known simply as "Arabica"), which accounts for around 55% of the world\'s coffee production, and Coffea canephora (known as "Robusta"), which accounts for around 45%.',
+    expected: [],
+  },
+  {
     name: 'Wisteria frutescens (no "previously known as")',
     extract: 'Wisteria frutescens (common names American wisteria, swamp wisteria, Mississippi wisteria, and Atlantic wisteria) is a woody, deciduous, perennial climbing vine.\nRhizobium radiobacter, previously known as Agrobacterium tumefaciens and commonly as crown gall, is a soil-borne bacterium that occasionally infects wisteria.',
     expected: ['American wisteria', 'swamp wisteria', 'Mississippi wisteria', 'Atlantic wisteria'],
