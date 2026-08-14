@@ -9,6 +9,11 @@ const TESTS = [
     expected: ['California poppy', 'golden poppy', 'Mexican poppy', 'California sunlight', 'cup of gold'],
   },
   {
+    name: 'Erica vagans (appositive, place-name prefix "Cornish" not binomial-lookalike)',
+    extract: 'Erica vagans, the Cornish heath or wandering heath, is a species of flowering plant in the family Ericaceae, native to Ireland, Cornwall, western France and Spain.',
+    expected: ['Cornish heath', 'wandering heath'],
+  },
+  {
     name: 'Stellaria media (appositive without article, single name)',
     extract: 'Stellaria media, chickweed, is an annual flowering plant in the family Caryophyllaceae.',
     expected: ['chickweed'],
