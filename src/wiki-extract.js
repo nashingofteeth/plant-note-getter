@@ -1018,6 +1018,14 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R29', capture: r29[1] });
     }
 
+    // R29b: trailing item of a "known as A, …, and C is a …" intro list —
+    // the lazy R29 capture stops at the first comma, dropping final items
+    // (e.g. "and garden stonecrop is a succulent …")
+    const r29b = sentence.match(/(?:called|known\s+as)\s+.+?,\s+and\s+([^()]+?)\s+(?:is|was)\s+(?:a|an|the)\b/i);
+    if (r29b && r29b[1]) {
+      caps.push({ rule: 'R29b', capture: r29b[1].trim() });
+    }
+
     // R30: "are referred to as X" — passive plural
     const r30 = sentence.match(/are\s+referred\s+to\s+as\s+(?:a\s+)?(.+?)\.\s*$/i);
     if (r30) {

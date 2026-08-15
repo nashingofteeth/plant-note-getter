@@ -579,6 +579,11 @@ const TESTS = [
     expected: ['seven-son flower', 'qī zi huā'],
   },
   {
+    name: 'Hylotelephium telephium (intro "known as …, and garden stonecrop is a …" trailing list item; section repeats the rest)',
+    extract: 'Hylotelephium telephium (synonym Sedum telephium), known as orpine, livelong, frog\'s-stomach, harping Johnny, life-everlasting, live-forever, midsummer-men, Orphan John, witch\'s moneybags, and garden stonecrop is a succulent perennial plant of the family Crassulaceae native to Eurasia.\n\n== Common names ==\nHylotelephium telephium has earned many common names in English, including orpine, livelong, life-everlasting, live-forever, frog\'s-stomach, harping Johnny, midsummer-men, orphan John and witch\'s moneybags.',
+    expected: ['orpine', 'livelong', 'frog\'s-stomach', 'harping Johnny', 'life-everlasting', 'live-forever', 'midsummer-men', 'orphan John', 'witch\'s moneybags', 'garden stonecrop'],
+  },
+  {
     name: 'Populus deltoides (subspecies appositives in Variation section; individual tree "Balmville Tree" not a common name)',
     extract: 'Populus deltoides, the eastern cottonwood or necklace poplar, is a species of cottonwood poplar native to North America.\n\n== Variation ==\nThe species is divided into three subspecies or up to five varieties.\nPopulus deltoides subsp. deltoides, eastern cottonwood is found in southeastern Canada and the eastern United States.\nP. d. monilifera (Aiton) Eckenw., the plains cottonwood (syn. P. deltoides var. occidentalis Rydb.; P. sargentii Dode) ranges from southcentral Canada to the central United States.\nP. d. wislizeni (S.Watson) Eckenw., the Rio Grande cottonwood (syn. P. wislizeni (S.Watson) Sarg.; P. fremontii var. wislizeni S.Watson) grows from southern Colorado south through Texas to northeastern Mexico.\n\n== Oldest and largest ==\nThe Balmville Tree (felled in 2015 at approximately 316 years old) was the oldest eastern cottonwood in the United States.',
     expected: ['eastern cottonwood', 'necklace poplar', 'plains cottonwood', 'Rio Grande cottonwood'],
