@@ -301,9 +301,10 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
   const existingAliasKeys = new Set((primaryEntity.aliases || []).map(a => normalizeNameKey(a)));
   const synonymNames = [];
   let wikipediaUrl = primaryEntity.wikipediaUrl;
+  let wikipediaTitle = primaryEntity.wikipediaTitle;
 
   if (!candidateEntities?.length) {
-    return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
+    return { wikipediaUrl, wikipediaTitle, commonNames: mergedCommonNames, synonymNames };
   }
 
   for (const candidate of candidateEntities) {
@@ -331,9 +332,13 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
     if (!wikipediaUrl && candidate.wikipediaUrl) {
       wikipediaUrl = candidate.wikipediaUrl;
     }
+
+    if (!wikipediaTitle && candidate.wikipediaTitle) {
+      wikipediaTitle = candidate.wikipediaTitle;
+    }
   }
 
-  return { wikipediaUrl, commonNames: mergedCommonNames, synonymNames };
+  return { wikipediaUrl, wikipediaTitle, commonNames: mergedCommonNames, synonymNames };
 }
 
 module.exports = {

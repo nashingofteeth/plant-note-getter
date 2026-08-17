@@ -254,8 +254,10 @@ function extractNamesFromCapture(captured, trace, rule) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'hybrid-notation' });
       continue;
     }
-    // Reject leftover verb-phrase fragments (e.g. "is widely found", "are grown")
-    if (/^(?:is|are|was|were|being|been)\s+(?:widely|commonly|often|particularly|typically|especially|found|distributed|known|used|native|common)/i.test(segment)) {
+    // Reject leftover verb-phrase fragments (e.g. "is widely found", "are grown",
+    // "is famous") left after a comma-split — copula-starting segments describe
+    // the plant rather than name it.
+    if (/^(?:is|are|was|were|being|been)\s+(?:widely|commonly|often|particularly|typically|especially|found|distributed|known|used|native|common|famous|said|reported|considered|regarded|thought|believed|claimed|called|grown|cultivated|harvested|eaten|edible|poisonous|toxic|endangered|widespread|popular|rare|valued|praised|sold|shipped|exported|imported)/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'verb-phrase' });
       continue;
     }
@@ -960,8 +962,12 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R24', capture: capture });
     }
 
-    // R25: "is known as X" — passive form
-    const r25 = sentence.match(/is\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+[a-z]+\s+(?!(?:in|on|at|of|for|with|by|to|from|as|into|through|during|without|within|via)\b)[a-z]+\b|[.,]\s*$)/i);
+    // R25: "is known as X" — passive form. The tail terminates the capture at
+    // a place/language qualifier ("in <Place>"), a subordinate-clause
+    // introducer (because/which/where/…), or a clause/sentence end, so that
+    // name-list connectors ("and"/"or") and multi-word names ("mañío hembra")
+    // are never treated as truncation points.
+    const r25 = sentence.match(/is\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+in\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*(?:\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*)*|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|[.;]\s*$)/i);
     if (r25) {
       let capture = r25[1].trim();
       // Reject explanatory single-word nicknames: "is known as "stinking" because..."
@@ -1225,6 +1231,14 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r54) {
       const capture = finalizeCapture(r54[1], 300);
       if (capture) caps.push({ rule: 'R54', capture: capture });
+    }
+
+    // R55: "known by its genus name, or sometimes as X and Y" — alternative
+    // name list following an "or sometimes as" construction (Saxegothaea).
+    const r55 = sentence.match(/\bor\s+sometimes\s+as\s+(.+?)(?=[.;]|$)/i);
+    if (r55) {
+      const capture = finalizeCapture(r55[1], 200);
+      if (capture) caps.push({ rule: 'R55', capture: capture });
     }
 
     addNames(caps, results, seenKeys, trace);

@@ -39,6 +39,7 @@ function buildAliases(entity) {
 async function collectCommonNames(entity, candidateEntities) {
   const synonymData = await collectSynonymData(entity, candidateEntities);
   entity.wikipediaUrl = synonymData.wikipediaUrl;
+  entity.wikipediaTitle = synonymData.wikipediaTitle;
   entity.commonNames = synonymData.commonNames;
   const bySource = {
     wikidata: [...(entity.commonNames || [])]

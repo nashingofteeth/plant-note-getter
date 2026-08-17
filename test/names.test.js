@@ -151,6 +151,29 @@ test('collectCommonNames: no Wikipedia fetch when wikipediaTitle missing', async
   resetStubs();
 });
 
+test('collectCommonNames: wikipediaTitle propagated from synonym candidate triggers Wikipedia fetch', async () => {
+  stubCommonNames({ wikipedia: ['species common name'] });
+  const primary = {
+    id: 'Q1',
+    scientificName: 'Saxegothaea',
+    commonNames: [],
+    aliases: [],
+    taxonSynonymIds: ['Q2']
+  };
+  const candidate = {
+    id: 'Q2',
+    scientificName: 'Saxegothaea conspicua',
+    commonNames: [],
+    aliases: [],
+    synonymOfIds: ['Q1'],
+    wikipediaTitle: 'Saxegothaea'
+  };
+  const { names, bySource } = await collectCommonNames(primary, [candidate]);
+  assert.deepStrictEqual(bySource.wikipedia, ['species common name']);
+  assert.ok(names.includes('species common name'));
+  resetStubs();
+});
+
 test('collectCommonNames: synonym common names merged from candidate entities', async () => {
   stubCommonNames({});
   const primary = {

@@ -588,6 +588,11 @@ const TESTS = [
     extract: 'Populus deltoides, the eastern cottonwood or necklace poplar, is a species of cottonwood poplar native to North America.\n\n== Variation ==\nThe species is divided into three subspecies or up to five varieties.\nPopulus deltoides subsp. deltoides, eastern cottonwood is found in southeastern Canada and the eastern United States.\nP. d. monilifera (Aiton) Eckenw., the plains cottonwood (syn. P. deltoides var. occidentalis Rydb.; P. sargentii Dode) ranges from southcentral Canada to the central United States.\nP. d. wislizeni (S.Watson) Eckenw., the Rio Grande cottonwood (syn. P. wislizeni (S.Watson) Sarg.; P. fremontii var. wislizeni S.Watson) grows from southern Colorado south through Texas to northeastern Mexico.\n\n== Oldest and largest ==\nThe Balmville Tree (felled in 2015 at approximately 316 years old) was the oldest eastern cottonwood in the United States.',
     expected: ['eastern cottonwood', 'necklace poplar', 'plains cottonwood', 'Rio Grande cottonwood'],
   },
+  {
+    name: 'Saxegothaea conspicua (or sometimes as X and Y; R25 must not truncate name list at connectors)',
+    extract: 'Saxegothaea is a genus comprising a single species, Saxegothaea conspicua. It is a conifer in the podocarp family Podocarpaceae, native to southern South America. It grows in Chile and Argentina from 35\u00b0 to 46\u00b0 South latitude; in its northernmost natural distribution it grows between 800 and 1000 (2600\u20133300 ft) m above sea level and in the south it lives at sea level. The species is most often known by its genus name, or sometimes as female maniu (a translation of its name in Spanish) and Prince Albert\'s yew; in South America it is known as ma\u00f1\u00edo hembra or mani\u00fa hembra.',
+    expected: ['female maniu', "Prince Albert's yew", 'ma\u00f1\u00edo hembra', 'mani\u00fa hembra'],
+  },
 ];
 
 const GBIF_TESTS = [
