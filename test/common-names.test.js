@@ -603,6 +603,16 @@ const TESTS = [
     extract: 'Phyllostachys aurea is a species of bamboo, and is of the \'running bamboo\' type, belonging to the diverse Bambuseae tribe. It is native to Fujian and Zhejiang in China. It is commonly known by the names fishpole bamboo, golden bamboo, monk\'s belly bamboo, and fairyland bamboo (Australia).',
     expected: ['fishpole bamboo', 'golden bamboo', 'monk\'s belly bamboo', 'fairyland bamboo'],
   },
+  {
+    name: 'Asclepias tuberosa (commonly known as X because of explanatory clause; R8 must stop at "because")',
+    extract: 'Asclepias tuberosa, commonly known as butterfly weed or pleurisy root, is a species of milkweed native to eastern and southwestern North America. It is commonly known as butterfly weed because of the butterflies that are attracted to the plant by its color and its copious production of nectar.',
+    expected: ['butterfly weed', 'pleurisy root'],
+  },
+  {
+    name: 'Asclepias tuberosa (Common names section; geographic place-name prefix "Canada")',
+    extract: '== Common names ==\nCommon names include butterfly weed, Canada root, chieger flower, chiggerflower, fluxroot, Indian paintbrush, Indian posy, orange milkweed, orange root, orange swallow-wort, pleurisy root, silky swallow-wort, tuber root, yellow milkweed, white-root, windroot, butterfly love, butterflyweed, and butterfly milkweed.',
+    expected: ['butterfly weed', 'Canada root', 'chieger flower', 'chiggerflower', 'fluxroot', 'Indian paintbrush', 'Indian posy', 'orange milkweed', 'orange root', 'orange swallow-wort', 'pleurisy root', 'silky swallow-wort', 'tuber root', 'yellow milkweed', 'white-root', 'windroot', 'butterfly love', 'butterflyweed', 'butterfly milkweed'],
+  },
 ];
 
 const GBIF_TESTS = [
