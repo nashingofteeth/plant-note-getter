@@ -613,6 +613,11 @@ const TESTS = [
     extract: '== Common names ==\nCommon names include butterfly weed, Canada root, chieger flower, chiggerflower, fluxroot, Indian paintbrush, Indian posy, orange milkweed, orange root, orange swallow-wort, pleurisy root, silky swallow-wort, tuber root, yellow milkweed, white-root, windroot, butterfly love, butterflyweed, and butterfly milkweed.',
     expected: ['butterfly weed', 'Canada root', 'chieger flower', 'chiggerflower', 'fluxroot', 'Indian paintbrush', 'Indian posy', 'orange milkweed', 'orange root', 'orange swallow-wort', 'pleurisy root', 'silky swallow-wort', 'tuber root', 'yellow milkweed', 'white-root', 'windroot', 'butterfly love', 'butterflyweed', 'butterfly milkweed'],
   },
+  {
+    name: 'Lilium candidum (appositive "the X or Y", title-prefix "Madonna" not binomial-lookalike)',
+    extract: 'Lilium candidum, the Madonna lily or white lily, is a plant in the true lily family.',
+    expected: ['Madonna lily', 'white lily'],
+  },
 ];
 
 const GBIF_TESTS = [
