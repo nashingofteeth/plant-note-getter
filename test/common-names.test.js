@@ -598,6 +598,11 @@ const TESTS = [
     extract: 'Tamarix chinensis is a species of flowering plant in the family Tamaricaceae. It is sometimes referred to by the common names five-stamen tamarisk and Chinese tamarisk or saltcedar. It is native to China and Korea.',
     expected: ['five-stamen tamarisk', 'Chinese tamarisk', 'saltcedar'],
   },
+  {
+    name: 'Phyllostachys aurea (It is commonly known by the names X, Y, Z, and W (place qualifier))',
+    extract: 'Phyllostachys aurea is a species of bamboo, and is of the \'running bamboo\' type, belonging to the diverse Bambuseae tribe. It is native to Fujian and Zhejiang in China. It is commonly known by the names fishpole bamboo, golden bamboo, monk\'s belly bamboo, and fairyland bamboo (Australia).',
+    expected: ['fishpole bamboo', 'golden bamboo', 'monk\'s belly bamboo', 'fairyland bamboo'],
+  },
 ];
 
 const GBIF_TESTS = [
