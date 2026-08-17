@@ -774,8 +774,8 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R7: "known by the common name[s]" — stop at copula or end
-    const r7 = sentence.match(/known\s+by\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
+    // R7: "known by the common name[s]" / "referred to by the common name[s]" — stop at copula or end
+    const r7 = sentence.match(/(?:known|referred\s+to)\s+by\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
     if (r7) {
       const capture = finalizeCapture(r7[1], 300);
       if (capture) caps.push({ rule: 'R7', capture: capture });

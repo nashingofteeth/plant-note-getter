@@ -593,6 +593,11 @@ const TESTS = [
     extract: 'Saxegothaea is a genus comprising a single species, Saxegothaea conspicua. It is a conifer in the podocarp family Podocarpaceae, native to southern South America. It grows in Chile and Argentina from 35\u00b0 to 46\u00b0 South latitude; in its northernmost natural distribution it grows between 800 and 1000 (2600\u20133300 ft) m above sea level and in the south it lives at sea level. The species is most often known by its genus name, or sometimes as female maniu (a translation of its name in Spanish) and Prince Albert\'s yew; in South America it is known as ma\u00f1\u00edo hembra or mani\u00fa hembra.',
     expected: ['female maniu', "Prince Albert's yew", 'ma\u00f1\u00edo hembra', 'mani\u00fa hembra'],
   },
+  {
+    name: 'Tamarix chinensis (referred to by the common names X and Y or Z)',
+    extract: 'Tamarix chinensis is a species of flowering plant in the family Tamaricaceae. It is sometimes referred to by the common names five-stamen tamarisk and Chinese tamarisk or saltcedar. It is native to China and Korea.',
+    expected: ['five-stamen tamarisk', 'Chinese tamarisk', 'saltcedar'],
+  },
 ];
 
 const GBIF_TESTS = [
