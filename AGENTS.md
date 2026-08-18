@@ -13,6 +13,9 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
        → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
        → wiki-extract.js (pure text extraction, no API)
+       → llm-reviewer.js (advisory LLM second pass over Wikipedia extracts; deterministic verification)
+       → llm-backend.js (local transformers.js completer; null-completer fallback keeps regex-only)
+       → review-log.js (JSONL review-gap tally; consumed by scripts/review-tally.js)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
        → frontmatter.js (generateFrontMatter: YAML front matter string)
@@ -28,7 +31,11 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
 | `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaCommonNames` |
-| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. |
+| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. Exports `getSentences`, `isGenericJunk`, `isGeographicJunk`, `isProcedural`, `isAbbreviatedBinomialLike`, `hasCJK` for the LLM reviewer. |
+| `src/llm-reviewer.js` | Advisory second pass: runs regex extraction unchanged, LLM proposes missed names, deterministic verification (in-text, `extractNamesFromCapture` cleaning, junk classifiers, dedup) decides acceptance. Pure, DI of the completer. |
+| `src/llm-backend.js` | Local transformers.js text-generation completer (greedy decoding). Lazy singleton; any load failure yields a null completer so regex-only extraction keeps working. |
+| `src/review-log.js` | `appendReviewRecord` JSONL writer for `.review-data/review-gaps.jsonl` (gitignored). |
+| `scripts/review-tally.js` | `npm run tally` — tallies caught names by gate (`skipped` vs `parsed-no-capture`); `--regressions=N` prints copy-paste test snippets. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
