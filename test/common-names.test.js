@@ -618,6 +618,11 @@ const TESTS = [
     extract: 'Lilium candidum, the Madonna lily or white lily, is a plant in the true lily family.',
     expected: ['Madonna lily', 'white lily'],
   },
+  {
+    name: 'Pseudocydonia sinensis (Names section: CJK-annotated names mùguā, mogwa-namu, mogwa, karin, wa-mokka; no sentence-fragment junk)',
+    extract: 'Pseudocydonia sinensis or Chinese quince (Chinese: 木瓜; pinyin: mùguā) is a deciduous or semi-evergreen tree in the family Rosaceae, native to southern and eastern China. It is the sole species in the genus Pseudocydonia. Its hard, astringent fruit is used in traditional Chinese medicine and as a food in East Asia. Trees are generally 10\u201318 metres (33\u201359 ft) tall.\nThe tree is closely related to the east Asian genus Chaenomeles, and is sometimes placed as Chaenomeles sinensis, but lacks thorns and has single, not clustered, flowers. Chinese quince is further distinguished from quince, Cydonia oblonga, by its serrated leaves and lack of fuzz.\n\n== Names ==\nIn China, both the tree and its fruit are called mùguā (木瓜), which also refers to papaya and the flowering quince (Chaenomeles speciosa). In Korea the tree is called mogwa-namu (모과나무) and the fruit mogwa (모과; from mokgwa (Korean: 목과; Hanja: 木瓜), the Korean reading of the Chinese characters). In Japan, both tree and fruit are called karin (花梨; rarely 榠樝) except in medicine where the fruit is called wa-mokka (和木瓜) from the Chinese and Korean names.',
+    expected: ['Chinese quince', 'mùguā', 'mogwa-namu', 'mogwa', 'karin', 'wa-mokka'],
+  },
 ];
 
 const GBIF_TESTS = [

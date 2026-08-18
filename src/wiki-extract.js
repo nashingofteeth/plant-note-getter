@@ -524,6 +524,35 @@ function extractQuotedLanguageNames(sentence) {
   return results;
 }
 
+// Extract romanized names glossed by a CJK parenthetical in a naming
+// sentence — "are called mùguā (木瓜)", "and the fruit mogwa (모과; …)".
+// The name is anchored to a naming verb ("called") or a list connector
+// ("and the fruit") so the lazy capture can't swallow the whole sentence.
+// Mirrors extractQuotedLanguageNames' classifier checks (generic/geographic/
+// procedural only — no phonetic-only rejection, since romanized glosses
+// like "mùguā" carry diacritics and would otherwise be dropped).
+function extractCjkAnnotatedNames(sentence) {
+  const results = [];
+  const seenKeys = new Set();
+  const re = /(?:is|are|was|were)\s+(?:commonly|sometimes|often|frequently|usually|also\s+)?(?:called|named)\s+([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40}?)\s*\(\s*[\u4e00-\u9fff\u3400-\u4dbf\uac00-\ud7af]|(?:and|or)\s+(?:the\s+)?(?:fruit|tree|plant|species|flower|leaf|leaves|seed|bark|root)\s+(?!is|are|was|were)([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40}?)\s*\(\s*[\u4e00-\u9fff\u3400-\u4dbf\uac00-\ud7af]/gi;
+  let m;
+  while ((m = re.exec(sentence)) !== null) {
+    const raw = (m[1] || m[2] || '').trim();
+    const name = stripArticle(raw).trim();
+    if (!name || name.length > 40) continue;
+    if (isGenericJunk(name)) continue;
+    if (isGeographicJunk(name)) continue;
+    if (isProcedural(name)) continue;
+    if (hasCJK(name)) continue;
+    const key = name.toLowerCase();
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      results.push(name);
+    }
+  }
+  return results;
+}
+
 function _extractWikipediaCommonNames(text, trace) {
   if (!text || !text.trim()) return [];
 
@@ -550,11 +579,17 @@ function _extractWikipediaCommonNames(text, trace) {
       if (nameApplied) {
         pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Common names');
       }
-      // Check for quoted indigenous-language names first
+      // Check for quoted indigenous-language names and CJK-annotated romanized
+      // names first; when either is found, skip the whole-sentence comma-split
+      // fallback (which would otherwise leak sentence-fragment junk).
       const quotedNames = extractQuotedLanguageNames(s);
-      if (quotedNames.length > 0) {
+      const cjkNames = extractCjkAnnotatedNames(s);
+      if (quotedNames.length > 0 || cjkNames.length > 0) {
         for (const name of quotedNames) {
           pushResult(results, seenKeys, name, trace, 'Section:Common names:quoted');
+        }
+        for (const name of cjkNames) {
+          pushResult(results, seenKeys, name, trace, 'Section:Common names:cjk');
         }
       } else {
         addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace);
@@ -571,11 +606,17 @@ function _extractWikipediaCommonNames(text, trace) {
         if (nameApplied) {
           pushResult(results, seenKeys, nameApplied[1].trim(), trace, 'Section:Names');
         }
-        // Check for quoted indigenous-language names first
+        // Check for quoted indigenous-language names and CJK-annotated romanized
+        // names first; when either is found, skip the whole-sentence comma-split
+        // fallback (which would otherwise leak sentence-fragment junk).
         const quotedNames = extractQuotedLanguageNames(s);
-        if (quotedNames.length > 0) {
+        const cjkNames = extractCjkAnnotatedNames(s);
+        if (quotedNames.length > 0 || cjkNames.length > 0) {
           for (const name of quotedNames) {
             pushResult(results, seenKeys, name, trace, 'Section:Names:quoted');
+          }
+          for (const name of cjkNames) {
+            pushResult(results, seenKeys, name, trace, 'Section:Names:cjk');
           }
         } else {
           addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace);
