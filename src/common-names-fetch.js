@@ -43,7 +43,44 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
   const extract = Object.values(pages)[0]?.extract;
   if (!extract) return [];
 
-  return extractWikipediaCommonNames(extract);
+  let names = extractWikipediaCommonNames(extract);
+
+  // Hybrid LLM reviewer (advisory second pass). Lazy requires keep module
+  // load cheap and allow tests to stub fetchWikipediaCommonNames offline.
+  const config = require('./config');
+  if (config.LLM_ENABLED) {
+    const { getCompleter } = require('./llm-backend');
+    const { reviewExtractWikipediaNames } = require('./llm-reviewer');
+    const { appendReviewRecord } = require('./review-log');
+
+    const completer = await getCompleter();
+    const { names: reviewed, trace } = await reviewExtractWikipediaNames(extract, {
+      completer,
+      maxInputChars: config.LLM_MAX_INPUT_CHARS,
+      gate: config.LLM_GATE
+    });
+    if (trace.kept && trace.kept.length) names = reviewed;
+
+    const hasCatches = trace.catches && trace.catches.length;
+    const hasDrops = trace.dropped && trace.dropped.length;
+    if (config.REVIEW_LOG_ALL || hasCatches || hasDrops) {
+      appendReviewRecord(
+        {
+          taxon: wikipediaTitle,
+          wikipediaTitle,
+          date: new Date().toISOString(),
+          extract,
+          baseNames: extractWikipediaCommonNames(extract),
+          llmAdded: trace.kept || [],
+          catches: trace.catches || [],
+          dropped: trace.dropped || []
+        },
+        config.REVIEW_LOG_PATH
+      );
+    }
+  }
+
+  return names;
 }
 
 module.exports = {

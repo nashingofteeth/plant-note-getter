@@ -220,6 +220,8 @@ Debugging decision tree:
 
 If during refinement you need to import an internal variable or utility that isn't exported, ask the user for permission before adding it to `module.exports`. Do not add exports unilaterally.
 
+Approved exports (for the hybrid LLM reviewer, see §8): `getSentences`, `isGenericJunk`, `isGeographicJunk`, `isProcedural`, `isAbbreviatedBinomialLike`, `hasCJK`.
+
 ### 7. Verification checklist
 
 After fixing, verify:
@@ -230,3 +232,18 @@ After fixing, verify:
 4. No junk terms leak through (verify with the flag list from step 3)
 
 For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
+
+### 8. Hybrid LLM reviewer & review-gap tally
+
+The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extractor. `fetchWikipediaCommonNames` additionally runs an advisory LLM second pass (`src/llm-reviewer.js`): it keeps the regex output unchanged, asks a local instruct model (`src/llm-backend.js`, transformers.js, no API keys) for missed common names, and only accepts proposals that pass the same deterministic gauntlet as regex captures — verbatim in-text presence, `extractNamesFromCapture` cleaning, junk classifiers, CJK/abbreviated-binomial rejection, dedup. A missing/broken model degrades to regex-only; a note is never blocked.
+
+Each run where the LLM finds or drops names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`).
+
+**Tally → red test → regex patch loop** (the user of this guide):
+
+1. Run a few species through the normal pipeline (or `--populate`). Every LLM catch is logged.
+2. `npm run tally` — shows recurring caught names with their gate: `skipped` (sentence excluded by `isTaxonomicSentence`) or `parsed-no-capture` (sentence scanned, no rule matched). `skipped` often needs the gating relaxed; `parsed-no-capture` needs a new/patched rule.
+3. `npm run tally -- --regressions=3` — prints ready-to-paste `{ name, extract, expected }` objects for `test/common-names.test.js`.
+4. Paste the top cases as **red** tests, run `npm test` to confirm they fail.
+5. Patch the regex rules in `src/wiki-extract.js`, then run `npm test` until the new tests are green and all existing cases still pass.
+6. Rerun the species to confirm the tally stops recording that catch.

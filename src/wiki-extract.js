@@ -1485,5 +1485,11 @@ module.exports = {
   parseGbifVernacularName,
   extractNamesFromCapture,
   extractWikipediaCommonNames,
-  traceExtraction
+  traceExtraction,
+  getSentences,
+  isGenericJunk,
+  isGeographicJunk,
+  isProcedural,
+  isAbbreviatedBinomialLike,
+  hasCJK
 };
