@@ -51,6 +51,7 @@ const LEADING_PREFIX_PATTERNS = [
   /^pinyin:\s*/i,
   /^simplified\s+Chinese:\s*/i,
   /^traditional\s+Chinese:\s*/i,
+  /^lit\.?\s*/i,
   /^often\s+known\s+as\s+/i,
 ];
 
@@ -1408,9 +1409,12 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R57', capture: r57[3] });
     }
 
-    // R58: "It is also sometimes spelled as pak choi, bok choi, and pak choy." —
-    // alternate spellings list (Bok choy).
-    const r58 = sentence.match(/spelled\s+as\s+(.+?)\.\s*$/i);
+    // R58: "It is also sometimes spelled as pak choi, bok choi, and pak choy." or
+    // "The common name is also spelled false spirea." — alternate spellings list
+    // (Bok choy, Sorbaria sorbifolia). The [^()] guard keeps it from also firing
+    // on parenthetical "(also spelled camomile)" glosses, which are expanded
+    // separately during capture cleanup.
+    const r58 = sentence.match(/spelled\s+(?:as\s+)?([^()]+?)\.\s*$/i);
     if (r58) {
       const capture = finalizeCapture(r58[1], 200);
       if (capture) caps.push({ rule: 'R58', capture: capture });

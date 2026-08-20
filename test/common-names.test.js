@@ -683,6 +683,11 @@ const TESTS = [
     extract: 'Abies balsamea or balsam fir is a North American fir, native to most of eastern and central Canada.\nFlat – sometimes referred to as "dry swamps", these areas are better drained than swamps but still retain moisture well.',
     expected: ['balsam fir'],
   },
+  {
+    name: 'Sorbaria sorbifolia ("common name also spelled X" spelling variant; "lit. \'pearl plum\'" gloss stripped to pearl plum)',
+    extract: "Sorbaria sorbifolia, the false spiraea, is a species of flowering plant in the family Rosaceae. The common name is also spelled false spirea. Other common names include false goat's beard, sorb-leaved schizonotus, Ural false spirea, and in Chinese: 珍珠梅; pinyin: zhen zhu mei; lit. 'pearl plum'.",
+    expected: ['false spiraea', 'false spirea', 'false goat\'s beard', 'sorb-leaved schizonotus', 'Ural false spirea', 'zhen zhu mei', 'pearl plum'],
+  },
 ];
 
 const GBIF_TESTS = [
