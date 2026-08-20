@@ -57,13 +57,21 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
     const { names: reviewed, trace } = await reviewExtractWikipediaNames(extract, {
       completer,
       maxInputChars: config.LLM_MAX_INPUT_CHARS,
-      gate: config.LLM_GATE
+      gate: config.LLM_GATE,
+      rejectEnabled: config.LLM_REJECT_ENABLED,
+      rejectMax: config.LLM_REJECT_MAX
     });
-    if (trace.kept && trace.kept.length) names = reviewed;
+    if (
+      (trace.kept && trace.kept.length) ||
+      (trace.removals && trace.removals.length)
+    ) {
+      names = reviewed;
+    }
 
     const hasCatches = trace.catches && trace.catches.length;
     const hasDrops = trace.dropped && trace.dropped.length;
-    if (config.REVIEW_LOG_ALL || hasCatches || hasDrops) {
+    const hasRemovals = trace.removals && trace.removals.length;
+    if (config.REVIEW_LOG_ALL || hasCatches || hasDrops || hasRemovals) {
       appendReviewRecord(
         {
           taxon: wikipediaTitle,
@@ -73,7 +81,8 @@ async function fetchWikipediaCommonNames(wikipediaTitle) {
           baseNames: extractWikipediaCommonNames(extract),
           llmAdded: trace.kept || [],
           catches: trace.catches || [],
-          dropped: trace.dropped || []
+          dropped: trace.dropped || [],
+          llmRemoved: trace.removals || []
         },
         config.REVIEW_LOG_PATH
       );

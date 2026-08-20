@@ -1,6 +1,13 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { reviewExtractWikipediaNames, parseNamesJson, verifyCandidate } = require('../src/llm-reviewer');
+const {
+  reviewExtractWikipediaNames,
+  parseNamesJson,
+  parseReviewJson,
+  verifyCandidate,
+  verifyVeto,
+  REJECT_CATEGORIES
+} = require('../src/llm-reviewer');
 
 const OAK =
   'Quercus robur, pedunculate oak, European oak, or English oak, is a species of flowering plant in the beech and oak family, Fagaceae. The leaves are lanceolate and green. The flowers are catkins. This species is widely planted in parks.';
@@ -130,6 +137,148 @@ test('reviewExtractWikipediaNames: maxInputChars caps the extract sent to the mo
     maxInputChars: 40
   });
   assert.ok(!sent.includes('Extra filler text'), 'filler beyond the cap should not reach the model');
+});
+
+// ─── noise-rejection (veto) pass ────────────────────────────────────────────
+
+const PINE_NOISE =
+  'Pinus sylvestris, the scots pine, is a species of conifer. Common names include scots pine and lanceolate.';
+
+test('reviewExtractWikipediaNames: removes a base name the LLM vetoes (allowlisted category)', async () => {
+  const { names, trace } = await reviewExtractWikipediaNames(PINE_NOISE, {
+    completer: completerReturning(
+      JSON.stringify({ add: [], remove: [{ name: 'lanceolate', category: 'morphological' }] })
+    )
+  });
+  assert.deepStrictEqual(names, ['scots pine']);
+  assert.deepStrictEqual(trace.vetoed, ['lanceolate']);
+  assert.strictEqual(trace.removals.length, 1);
+  assert.strictEqual(trace.removals[0].name, 'lanceolate');
+  assert.strictEqual(trace.removals[0].category, 'morphological');
+});
+
+test('reviewExtractWikipediaNames: ignores a veto whose name the regex did not produce', async () => {
+  const { names, trace } = await reviewExtractWikipediaNames(PINE_NOISE, {
+    completer: completerReturning(
+      JSON.stringify({ add: [], remove: [{ name: 'purple pine', category: 'generic' }] })
+    )
+  });
+  assert.deepStrictEqual(names, ['scots pine', 'lanceolate']);
+  assert.deepStrictEqual(trace.vetoIgnored, [{ name: 'purple pine', reason: 'not-a-base-name' }]);
+  assert.deepStrictEqual(trace.vetoed, []);
+});
+
+test('reviewExtractWikipediaNames: ignores a veto with an unknown category', async () => {
+  const { names, trace } = await reviewExtractWikipediaNames(PINE_NOISE, {
+    completer: completerReturning(
+      JSON.stringify({ add: [], remove: [{ name: 'lanceolate', category: 'made-up' }] })
+    )
+  });
+  assert.deepStrictEqual(names, ['scots pine', 'lanceolate']);
+  assert.deepStrictEqual(trace.vetoIgnored, [
+    { name: 'lanceolate', reason: 'unknown-category:made-up' }
+  ]);
+});
+
+test('reviewExtractWikipediaNames: malformed removal entry is ignored', async () => {
+  const { names, trace } = await reviewExtractWikipediaNames(PINE_NOISE, {
+    completer: completerReturning(JSON.stringify({ add: [], remove: [{ noName: 1 }] }))
+  });
+  assert.deepStrictEqual(names, ['scots pine', 'lanceolate']);
+  assert.deepStrictEqual(trace.vetoed, []);
+});
+
+test('reviewExtractWikipediaNames: caps the number of vetoes per article', async () => {
+  const text =
+    'Pinus sylvestris, the scots pine, is a conifer. Common names include scots pine, lanceolate and needle.';
+  const { names, trace } = await reviewExtractWikipediaNames(text, {
+    completer: completerReturning(
+      JSON.stringify({
+        add: [],
+        remove: [
+          { name: 'lanceolate', category: 'morphological' },
+          { name: 'needle', category: 'morphological' }
+        ]
+      })
+    ),
+    rejectMax: 1
+  });
+  assert.deepStrictEqual(names, ['scots pine', 'needle']);
+  assert.deepStrictEqual(trace.vetoed, ['lanceolate']);
+  assert.deepStrictEqual(trace.vetoIgnored, [{ name: 'needle', reason: 'over-cap' }]);
+});
+
+test('reviewExtractWikipediaNames: rejectEnabled=false keeps all base names (add-only)', async () => {
+  const { names, trace } = await reviewExtractWikipediaNames(PINE_NOISE, {
+    completer: completerReturning(
+      JSON.stringify({ add: [], remove: [{ name: 'lanceolate', category: 'morphological' }] })
+    ),
+    rejectEnabled: false
+  });
+  assert.deepStrictEqual(names, ['scots pine', 'lanceolate']);
+  assert.deepStrictEqual(trace.vetoed, []);
+});
+
+test('reviewExtractWikipediaNames: broken-capture noise is removed and attributed', async () => {
+  const text =
+    'Quercus robur is a species of flowering plant. In North America it is often called the "boundary oak" by local woodworkers.';
+  const leaky = 'boundary oak" by local woodworkers';
+  const { names, trace } = await reviewExtractWikipediaNames(text, {
+    completer: completerReturning(
+      JSON.stringify({ add: [], remove: [{ name: leaky, category: 'broken-capture' }] })
+    )
+  });
+  assert.deepStrictEqual(names, []);
+  assert.strictEqual(trace.removals.length, 1);
+  assert.strictEqual(trace.removals[0].category, 'broken-capture');
+  assert.match(trace.removals[0].sentence, /called the/);
+});
+
+// ─── parseReviewJson ────────────────────────────────────────────────────────
+
+test('parseReviewJson: parses the object shape { add, remove }', () => {
+  assert.deepStrictEqual(
+    parseReviewJson('{"add":["a"],"remove":[{"name":"b","category":"generic"}]}'),
+    { add: ['a'], remove: [{ name: 'b', category: 'generic' }] }
+  );
+});
+
+test('parseReviewJson: bare array response is treated as add-only (backward compat)', () => {
+  assert.deepStrictEqual(parseReviewJson('["a", "b"]'), { add: ['a', 'b'], remove: [] });
+});
+
+test('parseReviewJson: strips code fences and normalizes categories', () => {
+  assert.deepStrictEqual(
+    parseReviewJson('```json\n{"add":[],"remove":[{"name":"b","category":"Broken-Capture"}]}\n```'),
+    { add: [], remove: [{ name: 'b', category: 'broken-capture' }] }
+  );
+});
+
+test('parseReviewJson: unparseable or non-object returns empty', () => {
+  assert.deepStrictEqual(parseReviewJson('nope'), { add: [], remove: [] });
+  assert.deepStrictEqual(parseReviewJson(null), { add: [], remove: [] });
+});
+
+// ─── verifyVeto ─────────────────────────────────────────────────────────────
+
+test('verifyVeto: enforces base-name match and allowlisted category', () => {
+  const baseKeys = new Set(['scots pine'.toLowerCase()]);
+  assert.deepStrictEqual(verifyVeto({ name: 'Scots Pine', category: 'generic' }, baseKeys), {
+    vetoed: true
+  });
+  assert.deepStrictEqual(verifyVeto({ name: 'nope', category: 'generic' }, baseKeys), {
+    ignored: 'not-a-base-name'
+  });
+  assert.deepStrictEqual(verifyVeto({ name: 'scots pine', category: 'nonsense' }, baseKeys), {
+    ignored: 'unknown-category:nonsense'
+  });
+});
+
+test('REJECT_CATEGORIES allows the expected noise classes', () => {
+  assert.deepStrictEqual(
+    [...REJECT_CATEGORIES].sort(),
+    ['broken-capture', 'generic', 'geographic', 'morphological', 'procedural']
+  );
 });
 
 // ─── parseNamesJson ─────────────────────────────────────────────────────────

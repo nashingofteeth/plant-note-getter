@@ -25,6 +25,11 @@ const LLM_MODEL_ID = process.env.LLM_MODEL_ID || 'onnx-community/Qwen2.5-1.5B-In
 const LLM_MAX_INPUT_CHARS = parseInt(process.env.LLM_MAX_INPUT_CHARS || '16000', 10);
 const LLM_GATE = process.env.LLM_GATE || 'always'; // 'always' | 'auto'
 
+// Noise-rejection pass: LLM may remove regex names that are not genuine common
+// names (allowlisted categories + cap applied by the reviewer).
+const LLM_REJECT_ENABLED = process.env.LLM_REJECT_ENABLED !== 'false';
+const LLM_REJECT_MAX = parseInt(process.env.LLM_REJECT_MAX || '3', 10);
+
 // Review-gap tally log (catches later become red tests → regex patches).
 const REVIEW_LOG_PATH = process.env.REVIEW_LOG_PATH || path.join(__dirname, '..', '.review-data', 'review-gaps.jsonl');
 const REVIEW_LOG_ALL = process.env.REVIEW_LOG_ALL === 'true';
@@ -37,6 +42,8 @@ module.exports = {
   LLM_MODEL_ID,
   LLM_MAX_INPUT_CHARS,
   LLM_GATE,
+  LLM_REJECT_ENABLED,
+  LLM_REJECT_MAX,
   REVIEW_LOG_PATH,
   REVIEW_LOG_ALL
 };

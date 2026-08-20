@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Tally the review-gap log (.review-data/review-gaps.jsonl) to surface common
-// names the deterministic regex pipeline missed. The most-recurring catches
-// can be promoted into red regression tests for src/wiki-extract.js via
-// `--regressions=N`, which prints ready-to-paste { name, extract, expected }
-// objects for test/common-names.test.js.
+// names the deterministic regex pipeline missed (catches) and names the LLM
+// removed as noise (llmRemoved). Recurring catches become red regression tests
+// via `--regressions=N`, which prints ready-to-paste { name, extract, expected }
+// objects for test/common-names.test.js. Broken-capture removals get expected
+// lists that exclude the malformed capture (drives a regex-rule fix); recurring
+// non-broken removals get must-keep guards plus a "possible false veto" list.
 //
 // Usage:
 //   npm run tally
@@ -95,4 +97,92 @@ if (regressions > 0) {
 
 if (!recurring.length) {
   console.log('\nNo recurring catches above the min-taxa threshold yet.');
+}
+
+// --- LLM removals (noise-rejection pass) ---
+const withRemovals = records.filter((r) => (r.llmRemoved || []).length);
+console.log(`\nRecords with LLM removals: ${withRemovals.length}`);
+
+const removalCatCounts = {};
+const removalGateCounts = {};
+for (const r of withRemovals) {
+  for (const rm of r.llmRemoved) {
+    removalCatCounts[rm.category] = (removalCatCounts[rm.category] || 0) + 1;
+    removalGateCounts[rm.gate] = (removalGateCounts[rm.gate] || 0) + 1;
+  }
+}
+console.log(
+  'Removal categories:',
+  Object.entries(removalCatCounts).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'
+);
+console.log(
+  'Removal gates:',
+  Object.entries(removalGateCounts).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'
+);
+
+const byRemoved = new Map();
+for (const r of withRemovals) {
+  for (const rm of r.llmRemoved) {
+    const key = rm.name.toLowerCase();
+    if (!byRemoved.has(key)) {
+      byRemoved.set(key, { name: rm.name, taxa: new Set(), categories: {}, gates: {}, record: r });
+    }
+    const e = byRemoved.get(key);
+    e.taxa.add(r.taxon);
+    e.categories[rm.category] = (e.categories[rm.category] || 0) + 1;
+    e.gates[rm.gate] = (e.gates[rm.gate] || 0) + 1;
+    e.record = r;
+  }
+}
+
+const recurringRemovals = [...byRemoved.values()]
+  .filter((e) => e.taxa.size >= minTaxa)
+  .sort((a, b) => b.taxa.size - a.taxa.size);
+
+console.log(`\nRecurring LLM removals (>= ${minTaxa} taxa):`);
+for (const e of recurringRemovals) {
+  console.log(
+    `  ${e.name}  (${e.taxa.size} taxa, cats=${Object.entries(e.categories)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(',')})`
+  );
+}
+
+const falseVetoes = recurringRemovals.filter((e) => !e.categories['broken-capture']);
+if (falseVetoes.length) {
+  console.log('\nPossible false vetoes (non-broken-capture, recurring): review these —');
+  console.log('  they may be legitimate names the LLM is wrongly removing.');
+  for (const e of falseVetoes) {
+    console.log(`  ${e.name}  (${e.taxa.size} taxa)`);
+  }
+}
+
+if (regressions > 0) {
+  const bc = recurringRemovals.filter((e) => e.categories['broken-capture']);
+  if (bc.length) {
+    console.log(
+      `\nBroken-capture regression snippets (expected excludes the malformed capture; fix the regex rule):`
+    );
+    for (const e of bc.slice(0, regressions)) {
+      const r = e.record;
+      const removedKeys = new Set((r.llmRemoved || []).map((x) => x.name.toLowerCase()));
+      const expected = (r.baseNames || []).filter((n) => !removedKeys.has(n.toLowerCase()));
+      console.log(
+        JSON.stringify({ name: `${e.name} (broken capture)`, extract: r.extract, expected }, null, 2)
+      );
+    }
+  }
+  if (falseVetoes.length) {
+    console.log('\nMust-keep guards (the name must stay extracted; protects against false vetoes):');
+    for (const e of falseVetoes.slice(0, regressions)) {
+      const r = e.record;
+      console.log(
+        JSON.stringify(
+          { name: `${e.name} (must keep)`, extract: r.extract, expected: r.baseNames || [] },
+          null,
+          2
+        )
+      );
+    }
+  }
 }

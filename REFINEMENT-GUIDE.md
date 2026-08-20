@@ -235,15 +235,24 @@ For bulk processing across multiple notes, see `--populate` mode in `app.js` (vi
 
 ### 8. Hybrid LLM reviewer & review-gap tally
 
-The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extractor. `fetchWikipediaCommonNames` additionally runs an advisory LLM second pass (`src/llm-reviewer.js`): it keeps the regex output unchanged, asks a local instruct model (`src/llm-backend.js`, transformers.js, no API keys) for missed common names, and only accepts proposals that pass the same deterministic gauntlet as regex captures — verbatim in-text presence, `extractNamesFromCapture` cleaning, junk classifiers, CJK/abbreviated-binomial rejection, dedup. A missing/broken model degrades to regex-only; a note is never blocked.
+The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extractor. `fetchWikipediaCommonNames` additionally runs an advisory LLM second pass (`src/llm-reviewer.js`): it keeps the regex output unchanged for any name a regex rule captured, then a single call to a local instruct model (`src/llm-backend.js`, transformers.js, no API keys) returns both **add** candidates (missed names) and **remove** candidates (noise). Each proposal is accepted only after deterministic verification:
 
-Each run where the LLM finds or drops names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`).
+- **Adds** must pass verbatim in-text presence, `extractNamesFromCapture` cleaning, junk classifiers, CJK/abbreviated-binomial rejection, and dedup.
+- **Removes** must (a) key-match a name the regex actually captured, (b) carry an allowlisted category (`generic`, `geographic`, `morphological`, `procedural`, `broken-capture`), and (c) stay within `LLM_REJECT_MAX` (default 3) per article. Anything else is ignored (logged in `trace.vetoIgnored`).
+
+A missing/broken model degrades to regex-only; a note is never blocked. Removal is safe because `collectCommonNames` in `src/names.js` merges Wikidata P1843 → GBIF → Wikipedia: any name corroborated by Wikidata/GBIF survives even if the Wikipedia reviewer vetoed it, so cross-source names can't be lost. The LLM can never reorder names.
+
+Each run where the LLM finds names, drops names, or vetoes names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`), with `llmAdded`, `catches`, `dropped`, and `llmRemoved` (each removal carrying `category` and the originating sentence/gate).
 
 **Tally → red test → regex patch loop** (the user of this guide):
 
-1. Run a few species through the normal pipeline (or `--populate`). Every LLM catch is logged.
-2. `npm run tally` — shows recurring caught names with their gate: `skipped` (sentence excluded by `isTaxonomicSentence`) or `parsed-no-capture` (sentence scanned, no rule matched). `skipped` often needs the gating relaxed; `parsed-no-capture` needs a new/patched rule.
-3. `npm run tally -- --regressions=3` — prints ready-to-paste `{ name, extract, expected }` objects for `test/common-names.test.js`.
+1. Run a few species through the normal pipeline (or `--populate`). Every LLM catch and removal is logged.
+2. `npm run tally` — shows recurring caught names with their gate (`skipped` vs `parsed-no-capture`) and recurring removals with their category breakdown. A `skipped` catch needs weaker sentence gating; a `parsed-no-capture` catch needs a new/patched rule. A `broken-capture` removal points at a malformed regex capture; any recurring non-`broken-capture` removal is a **possible false veto** (the model repeatedly drops a name the regex correctly found → consider a "must-keep" guard).
+3. `npm run tally -- --regressions=3` — prints ready-to-paste `{ name, extract, expected }` objects for `test/common-names.test.js`:
+   - `broken-capture` removals → expected excludes the malformed capture (drives the regex-rule fix).
+   - recurring non-broken removals → "must-keep" guards (`expected` includes the name, protecting against regressions and false vetoes).
 4. Paste the top cases as **red** tests, run `npm test` to confirm they fail.
 5. Patch the regex rules in `src/wiki-extract.js`, then run `npm test` until the new tests are green and all existing cases still pass.
-6. Rerun the species to confirm the tally stops recording that catch.
+6. For vetoes, the deterministic guard is the regex — there's no red test to "un-veto", so re-run the species to confirm the name is now captured cleanly by the regex (and the tally shows the removal as non-recurring).
+
+Disable the noise-rejection pass independently with `LLM_REJECT_ENABLED=false` in `.env` (keeps the add-only behavior).
