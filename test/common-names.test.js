@@ -688,6 +688,16 @@ const TESTS = [
     extract: "Sorbaria sorbifolia, the false spiraea, is a species of flowering plant in the family Rosaceae. The common name is also spelled false spirea. Other common names include false goat's beard, sorb-leaved schizonotus, Ural false spirea, and in Chinese: 珍珠梅; pinyin: zhen zhu mei; lit. 'pearl plum'.",
     expected: ['false spiraea', 'false spirea', 'false goat\'s beard', 'sorb-leaved schizonotus', 'Ural false spirea', 'zhen zhu mei', 'pearl plum'],
   },
+  {
+    name: 'Pinus strobiformis (taxonomic rank "subgenus" rejected from appositive)',
+    extract: 'Pinus strobiformis, also known as Chihuahua white pine, is a medium-sized white pine tree. Pinus strobiformis, a member of the white pine group, Pinus subgenus Strobus, is a straight, slender tree.',
+    expected: ['Chihuahua white pine'],
+  },
+  {
+    name: 'Quercus (taxonomic ranks section, subsection, series rejected)',
+    extract: 'Quercus alba, the white oak, is a tree. Quercus section Lobatae is a taxonomic section. Quercus subsection Caninae is a subsection. Quercus series Phacocystis is a series.',
+    expected: ['white oak'],
+  },
 ];
 
 const GBIF_TESTS = [

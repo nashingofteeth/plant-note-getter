@@ -325,6 +325,12 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'rank-prefix' });
       continue;
     }
+    // Reject "Genus subgenus X", "Genus section X", "Genus subsection X", etc.
+    // These are taxonomic classifications, not common names.
+    if (/^[A-ZÀ-Ÿ][a-zà-ÿ]+\s+(?:subgenus|section|subsection|series|subseries|superspecies)\s+/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'taxonomic-rank-infix' });
+      continue;
+    }
 
     const key = segment.toLowerCase();
     if (seenKeys.has(key)) continue;
