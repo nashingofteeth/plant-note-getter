@@ -143,7 +143,9 @@ Use the **actual** Wikipedia extract, not a paraphrase. This makes the test a re
 
 **c. Fix the implementation**
 
-The extraction logic lives in `src/wiki-extract.js` — prefer structural solutions that generalise across many constructions instead of one-off special cases. Its architecture (sentence segmentation → `isTaxonomicSentence` gating → per-sentence capture rules → junk classifiers) is documented in AGENTS.md. Re-run the suite; the new test should now pass (green) and all existing tests must remain green.
+The extraction logic lives in `src/wiki-extract.js` — prefer structural solutions that generalise across many constructions instead of one-off special cases. Its architecture (sentence segmentation → `isTaxonomicSentence` gating → per-sentence capture rules → `addNames` capture-level classifiers (`family-restatement` at `src/wiki-extract.js:445`) → per-segment `extractNamesFromCapture` classifiers → post-process `Post-process: family` at `src/wiki-extract.js:1594`) is documented in AGENTS.md.
+
+Before editing any threshold/terminator/shared-head (`too-long` at `src/wiki-extract.js:318`, `descriptive-of` at `src/wiki-extract.js:200`, `sharedHead` at `src/wiki-extract.js:152`, or any `R#` terminator like `R8`/`R14`), run an impact grep: `rg -n "or citrus family|legume or bean|known as snake|with the common names|or citrus family|rue or citrus" test/common-names.test.js` and note which expects you touch. Prefer a capture-level classifier in `addNames` when a surface form (`X or Y family`) is ambiguous without sentence context — see §8 for when a targeted helper like `isFamilyRestatement` is appropriate (cite both failing `TESTS` entries in the comment). Re-run the full suite with `npm test 2>&1 | grep -E "✖|tests |pass|fail"`; the new test should now pass (green) and all existing tests must remain green.
 
 **d. Verify the fix on the original species**
 
@@ -182,17 +184,19 @@ Debugging decision tree:
      - **Not in `captures`, but in `rejected`**: a rule captured it but a
        classifier rejected it. The `by` reason names the classifier: fix the
        classifier (wrongly rejected) or the capture regex (grabbed the wrong
-       passage).
+       passage). Also check capture-level classifiers in `addNames` (`family-restatement`, `common-name-header`) — they reject before `extractNamesFromCapture` and before the `sharedHead`/`Post-process: family` expansion.
      - **In `captures` with a different `rule` than expected**: an earlier rule
        won and stole the passage (rules fire in order; later rules guard
        against earlier ones with `!r#` checks). Adjust the guard or the winning
        rule's regex.
+   - Check post-process expansion: `X or Y family` is expanded at `Post-process: family` (`src/wiki-extract.js:1594`) and at `sharedHead` inside `extractNamesFromCapture`. Both happen before `isTaxonRankRef` per-name checks, so a `family-restatement` rejection must happen at capture level in `addNames` (not per-name) to avoid the Vicia/Rutaceae clash.
 2. **A junk name IS in `t.names`.** Its `captures` entry shows which rule
    produced it. Add it as a regression case, then fix that rule or route the
-   passage through the correct classifier.
+   passage through the correct classifier. If the junk came from a threshold change (e.g. `too-long >6` at `src/wiki-extract.js:318`) or a terminator change (`R8` `,?\s+`), audit siblings that share the terminator and run `grep -n "known as.*are a" test/common-names.test.js` to list impacted expects.
 3. **A name sits in `t.rejected` with `by: 'duplicate'`.** Expected — it was
    already accepted by an earlier rule. Confirm the `rule` shown is a
    duplicate-prone sibling (e.g. R8 vs R1, R13/R35 vs R12) and move on.
+4. **Length-gate or terminator thrash.** Before editing `too-long`, `descriptive-of` (`src/wiki-extract.js:200`), `sharedHead` (`src/wiki-extract.js:152`), or any `R#` terminator, grep the suite for the phrase you touch: `rg -n "or citrus family|legume or bean|known as snake|with the common names" test/common-names.test.js`. Full-suite `npm test` is required — `reeval` is deprecated (see §7).
 
 ### 5. What NOT to fix
 
@@ -224,9 +228,23 @@ If during refinement you need to import an internal variable or utility that isn
 
 After fixing, verify:
 
-1. `npm test` passes (all regression tests)
+1. Full suite green — run `npm test 2>&1 | grep -E "✖|tests |pass|fail"` and confirm `fail 0`. Do **not** use `tail -50` (hides early failures behind truncation) or custom `reeval` scripts — the repo's `/tmp/opencode/reeval.js` only parsed single-quoted `extract:` fields and missed double-quoted cases like *Photinia* (`test/common-names.test.js:725`), reporting 18/18 while `npm test` failed. Per the adopted option B, `reeval` is deprecated; `npm test` is the single source of truth (fast, ~225 ms).
 2. The original species' Wikipedia extract returns the correct expected names (via `fetchWikipediaCommonNames`)
 3. The extracted names match (or improve upon) the note's existing `aliases`
 4. No junk terms leak through (verify with the flag list from step 3)
 
 For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
+
+### 8. Known Tricky Pairs — reuse these patterns
+
+These pairs share a surface form but require opposite handling; they drove the refinements in this session. Prefer the listed classifier/location over a new regex.
+
+| Pair | Surface | Expected | Pattern to reuse |
+|------|---------|----------|------------------|
+| **Rutaceae vs Vicia** | `X or Y family` | `Rutaceae:457` `rue or citrus family` → `rue family, citrus family` (expand, via `sharedHead:152` + `Post-process: family:1594`); `Vicia:759` `legume or bean family` → `[]` (family-restatement). | `isFamilyRestatement:445` (`family Fabaceae or commonly known as`) checked centrally in `addNames:597` before `extractNamesFromCapture`. Do not add per-rule `R8`/`R14` guards. |
+| **Cecropia vs Photinia vs Kiwifruit** | `, known as Y` / `, also known as Y` | `Cecropia:507` `fruit, known as snake fingers, are...` → `[]`; `Photinia:724` `Photinia × fraseri, known as red tip photinia and Christmas berry, is...` → `[red tip photinia, Christmas berry]`; `Kiwifruit:663` `...cultivar, also known as Oriental Red` → `[Oriental Red]`. | `R10:1086` part-word tail check (`lastIndexOf(',')` + `fruit/leaf/flower…` at `src/wiki-extract.js:1095`) and narrow cultivar subject guard (`src/wiki-extract.js:793`). Broadening `R10` without the tail check leaks `snake fingers`. |
+| **Picea R1 vs R14** | `with the common names X, Y, and Z, is...` | `Picea:257` `with the common names Engelmann spruce...` → `[Engelmann spruce, mountain spruce, silver spruce]`. `R1:802` greedily captures `with the common names...` as appositive. | Segment-level `common-name-header` reject at `src/wiki-extract.js:207` (`/\bcommon\s+names?\b/i`). `R14:1168` must terminate at `applied/used/given` for `Alchemilla:749` `lady's mantle applied...` but not at `,` alone (would truncate Picea list). |
+| **Alchemilla vs others** | `with the common name X applied...` | `Alchemilla:749` `lady's mantle applied generically...` → `[lady's mantle]`. | `R14:1168` terminator `|\s+(?:applied|used|given)\b` — add only this, not unscoped `,`. |
+| **Length gate** | `too-long` | `Maianthemum` `feathery false lily of the valley` (6 words) must pass; `who made numerous botanical collections in the region` (7 words, `Abies:678` `Section:Names`) and `member of the white pine group` (6 words, `Pinus:693` `R1`) must fail. | Keep `>6` at `src/wiki-extract.js:318` and pair with semantic `descriptive-of:200` (`^member/part/kind... of\b`) rather than lowering/raising the number. |
+
+When a surface form is ambiguous without sentence context (`X or Y family` without knowing if the sentence is `family Fabaceae or known as` vs `is a family, known as`), a targeted sentence-level helper like `isFamilyRestatement` is appropriate — cite both failing `TESTS` entries in its comment (per §4c).
