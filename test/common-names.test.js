@@ -795,6 +795,31 @@ const TESTS = [
     extract: 'Gunnera tinctoria, known as giant-rhubarb, Chilean rhubarb, quirusilla or nalca, is a flowering plant species native to southern Chile. In its native Chile, where it is called nalca or pangue, it is used in a similar way to European rhubarb.',
     expected: ['giant-rhubarb', 'Chilean rhubarb', 'quirusilla', 'nalca', 'pangue'],
   },
+  {
+    name: 'Lentil (rejects subspecific scientific names and descriptive "ancestor of" phrase)',
+    extract: 'The primary ancestor of cultivated lentils (Vicia lens, previously Lens culinaris or Lens esculentis) is the wild taxa Lens orientalis. Following reassignment to genus Vicia, they may also be referred to as Vicia lens subsp. culinaris and Vicia lens subsp. orientalis.',
+    expected: [],
+  },
+  {
+    name: 'Lentil (rejects single colour words and "respectively" trait list)',
+    extract: 'Common cotyledon colours are an orange-red colour and a light yellow, usually just called "red" (occasionally "orange") and "yellow" respectively.',
+    expected: [],
+  },
+  {
+    name: 'Lentil (rejects generic "taxa" quoted term)',
+    extract: 'The seven members are often referred to as "taxa" instead of "species" and/or "subspecies", as while it is broadly agreed there are seven of them, whether they constitute distinct species is not broadly agreed on.',
+    expected: [],
+  },
+  {
+    name: 'Lentil (captures "dal" — plant noun + parenthetical + known as + verb)',
+    extract: 'In cuisines of the Indian subcontinent, where lentils are a staple, split lentils (often with their hulls removed) known as dal are often cooked into a thick curry.',
+    expected: ['dal'],
+  },
+  {
+    name: 'Lentil (rejects market/cultivar "-types" classifications)',
+    extract: 'These lentils are sometimes referred to by notable historic cultivars instead of by size, especially in North America: for example, small green lentils may be referred to as Eston-types, large green lentils as Laird-types, and large brown lentils as Brewer-types.',
+    expected: [],
+  },
 ];
 
 const GBIF_TESTS = [

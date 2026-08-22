@@ -113,6 +113,11 @@ function getUnrecognizedClades(rows, segments, allTags, originals) {
     .filter(Boolean);
 }
 
+function unrecognizedCladesToOffer(rows, segments, allTags, originals, firstOnlyChild) {
+  if (!firstOnlyChild) return [];
+  return getUnrecognizedClades(rows, segments, allTags, originals);
+}
+
 function addToLabelMap(labels) {
   const mapPath = LABEL_MAP_PATH;
   const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
@@ -145,39 +150,31 @@ async function checkAndPruneTag(tag, originals, noteName, autoApply, isNew, ance
   const { rows, firstOnlyChild, allTags, segments } = analyzeHierarchy(tag);
   printHierarchyRows(rows, firstOnlyChild, segments, tag, noteName);
 
-  if (!firstOnlyChild || firstOnlyChild.count !== 0 || firstOnlyChild.depth === segments.length - 1) {
+  const unrecognized = unrecognizedCladesToOffer(rows, segments, allTags, originals, firstOnlyChild);
+  if (unrecognized.length === 0) return tag;
+
+  const unique = [...new Set(unrecognized)];
+  console.log(`\nUnrecognized clades: ${unique.join(', ')}`);
+  const shouldPrune = await askYesNo('Add these to label-map.json as null to skip? [y/N] ');
+  if (!shouldPrune) return tag;
+
+  const added = addToLabelMap(unique);
+  if (added === 0) {
+    console.log('All labels already in map.');
     return tag;
   }
 
-  const unrecognized = getUnrecognizedClades(rows, segments, allTags, originals);
-  if (unrecognized.length === 0) return tag;
+  console.log(`✓ Added ${added} entr${added > 1 ? 'ies' : 'y'} to label-map.json`);
+  console.log('Rebuilding tag...\n');
 
-  if (autoApply || isNew) {
-    const unique = [...new Set(unrecognized)];
-    console.log(`\nUnrecognized clades: ${unique.join(', ')}`);
-    const shouldPrune = await askYesNo('Add these to label-map.json as null to skip? [y/N] ');
-    if (!shouldPrune) return tag;
+  const newLabelMap = loadLabelMap(LABEL_MAP_PATH);
+  const newTag = rebuildTag(newLabelMap, ancestors, entityId);
+  console.log(`Rebuilt tag: ${newTag}\n`);
 
-    const added = addToLabelMap(unique);
-    if (added === 0) {
-      console.log('All labels already in map.');
-      return tag;
-    }
+  const recheck = analyzeHierarchy(newTag);
+  printHierarchyRows(recheck.rows, recheck.firstOnlyChild, recheck.segments, newTag, noteName);
 
-    console.log(`✓ Added ${added} entr${added > 1 ? 'ies' : 'y'} to label-map.json`);
-    console.log('Rebuilding tag...\n');
-
-    const newLabelMap = loadLabelMap(LABEL_MAP_PATH);
-    const newTag = rebuildTag(newLabelMap, ancestors, entityId);
-    console.log(`Rebuilt tag: ${newTag}\n`);
-
-    const recheck = analyzeHierarchy(newTag);
-    printHierarchyRows(recheck.rows, recheck.firstOnlyChild, recheck.segments, newTag, noteName);
-
-    return newTag;
-  }
-
-  return tag;
+  return newTag;
 }
 
 async function resolveTagForNote(noteName) {
@@ -219,6 +216,8 @@ async function resolveTagForNote(noteName) {
 module.exports = {
   getPlantNotesWithTags,
   countPrefix,
+  getUnrecognizedClades,
+  unrecognizedCladesToOffer,
   printHierarchy,
   checkAndPruneTag,
   resolveTagForNote

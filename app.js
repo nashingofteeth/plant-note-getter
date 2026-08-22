@@ -81,6 +81,25 @@ async function main() {
   try {
     const { entity, candidateEntities } = await resolveTaxon(input, selectIndex);
 
+    if (!entity.wikipediaUrl && candidateEntities && candidateEntities.length > 0) {
+      const wikiCandidates = candidateEntities.filter(c => c && c.id !== entity.id && c.wikipediaUrl);
+      if (wikiCandidates.length > 0) {
+        let chosen = wikiCandidates[0];
+        if (wikiCandidates.length > 1) {
+          const idx = await askChoice(
+            wikiCandidates.map(c => ({ label: c.scientificName || c.label, description: c.wikipediaUrl })),
+            'No Wikipedia article — which accepted synonym to adopt?'
+          );
+          chosen = wikiCandidates[idx];
+        }
+        if (await askYesNo(`Adopt ${chosen.scientificName || chosen.label} as the accepted synonym for ${entity.scientificName || entity.label} (merging its names and Wikipedia link)? [y/N] `)) {
+          if (!Array.isArray(entity.taxonSynonymIds)) entity.taxonSynonymIds = [];
+          entity.taxonSynonymIds.push(chosen.id);
+          console.log(`  Treating ${chosen.scientificName || chosen.label} as a synonym — merging its data...`);
+        }
+      }
+    }
+
     const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
 
     printSection('Entity');

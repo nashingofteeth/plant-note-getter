@@ -201,6 +201,12 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'descriptive-of' });
       continue;
     }
+    // Relationship/role clauses ("the primary ancestor of X", "a wild relative
+    // of Y") describe genealogy, not a common name.
+    if (/\b(?:ancestor|progenitor|descendant|relative|relation|kin)\s+of\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'relation-of' });
+      continue;
+    }
     // Segments that still carry the "common name(s)" label are list headers,
     // not actual names (e.g. R1 capturing "with the common names Engelmann
     // spruce, ...").
@@ -234,6 +240,10 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
 
     segment = segment.replace(QUOTE_CHARS, '').trim();
     segment = segment.replace(QUOTE_CHARS_END, '').trim();
+    // Strip stray inner double-quotes (capture artifacts, e.g. `"French Green"
+    // lentils` → "French Green lentils") — quotes never belong inside a common
+    // name. Apostrophes are preserved (possessive names like "Adam's needle").
+    segment = segment.replace(/["\u201C\u201D]+/g, '').trim();
     segment = segment.replace(/\.+$/, '').trim();
     segment = segment.replace(/[:;]+$/, '').trim();
 
@@ -315,6 +325,29 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
         }
       }
     }
+    // Reject subspecific/varietal scientific notation ("Vicia lens subsp.
+    // culinaris") that leaks from taxonomic passages — not common names.
+    if (/\b(?:subsp\.|ssp\.|subsp\b|ssp\b|varietas|var\.)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'subspecific-name' });
+      continue;
+    }
+    // A lone colour word (e.g. "red" for cotyledon colour) is a trait, not a
+    // common name.
+    if (segWords.length === 1 && /^(?:red|yellow|green|blue|black|white|brown|grey|gray|orange|purple|pink|tan|maroon|beige|mauve|violet|cream|gold)$/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'single-colour' });
+      continue;
+    }
+    // "respectively" marks a descriptive trait list (cotyledon colours), not a name.
+    if (/\brespectively\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'respectively' });
+      continue;
+    }
+    // Market/cultivar classifications ending in "-type(s)" (e.g. "Eston-types",
+    // "Laird-types") describe classes, not common names.
+    if (/-types?\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'market-type' });
+      continue;
+    }
     if (segment.split(/\s+/).length > 6) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'too-long' });
       continue;
@@ -393,6 +426,7 @@ const GENERIC_JUNK = new Set([
   'dioecious species', 'monoecious species',
   'smoking mixture', 'dried leaves', 'dried bark',
   'spurs', 'landscape', 'garden plant', 'such', 'curd',
+  'taxa', 'taxon',
 ]);
 
 const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
@@ -1145,8 +1179,10 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R11d', capture: capture });
     }
 
-    // R11e: "plants known as X" — extraction for "known as" after descriptive phrase
-    const r11e = sentence.match(/plants?\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s*\.|\s*(?:with|in|that|which|is|are|has|have)\b|$)/i);
+    // R11e: "plants known as X" — extraction for "known as" after a plant/crop
+    // noun subject, allowing an intervening parenthetical (e.g. "split lentils
+    // (often with their hulls removed) known as dal are...").
+    const r11e = sentence.match(/(?:plants?|trees?|lentils?|legumes?|pulses?|beans?|peas?|grains?|cereals?|herbs?|shrubs?|vines?|grasses?|seeds?|fruits?|berries?|crops?)\s+(?:\([^)]*\)\s*)?known\s+as\s+(?:the\s+)?(.+?)(?:\s*\.|\s*(?:with|in|that|which|is|are|has|have)\b|$)/i);
     if (r11e) {
       // Skip "List of plants known as X" see-also titles — not a naming statement.
       if (/^list\s+of\b/i.test(sentence)) continue;
