@@ -22,6 +22,8 @@ const FILLER_SEGMENT_PATTERNS = [
   /^less\s+commonly$/i,
   /^such\s+as\s+mealberry$/i,
   /^depending\s+on\s+region$/i,
+  /^often\s+used\s+to\b/i,
+  /^used\s+to\b/i,
   /^other\s+species\s+of\s+/i,
   /^\w+\s+english\s+(?:regional\s+)?name$/i,
   /^\w+\s+(?:regional|rare\s+regional)\s+name$/i,
@@ -53,6 +55,10 @@ const LEADING_PREFIX_PATTERNS = [
   /^traditional\s+Chinese:\s*/i,
   /^lit\.?\s*/i,
   /^often\s+known\s+as\s+/i,
+  /^commonly\s+called\s+/i,
+  /^commonly\s+named\s+/i,
+  /^the\s+fruit\s+as\s+/i,
+  /^with\s+the\s+flowers\s+as\s+/i,
 ];
 
 const STOPWORD_SEGMENTS = new Set([
@@ -172,6 +178,37 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
 
     if (!segment) continue;
 
+    // "aka X." is a taxonomic author abbreviation, never a common name.
+    if (/^aka\s+/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'aka-author' });
+      continue;
+    }
+    // Hypothetical / narrative phrasing ("Elder Mother would be released")
+    // is not a plant common name.
+    if (/\b(?:would|could|should|might)\s+be\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'hypothetical' });
+      continue;
+    }
+    // Descriptive trait clauses ("with white flowers", "bearing pink fruit")
+    // are not names.
+    if (/^(?:with|having|has|bearing|producing|produces?|grows?|growing)\s+\w[\w\s-]*\s+(?:\w[\w\s-]*)?\s+(?:flowers?|leaves?|fruit|fruits?|seeds?|stems?|bark|roots?|petals?|foliage|branches?)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'descriptive-trait' });
+      continue;
+    }
+    // Descriptive appositives ("a member of the white pine group", "part of the
+    // X family") are taxonomic descriptions, not common names.
+    if (/^(?:a\s+|an\s+|the\s+)?(?:member|part|kind|type|form|sort|version|example|species|genus|group|variety|subspecies|cultivar|hybrid|section)\s+of\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'descriptive-of' });
+      continue;
+    }
+    // Segments that still carry the "common name(s)" label are list headers,
+    // not actual names (e.g. R1 capturing "with the common names Engelmann
+    // spruce, ...").
+    if (/\bcommon\s+names?\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'common-name-header' });
+      continue;
+    }
+
     segment = segment.replace(/\s+in\s+[A-Z][a-zA-Z]*$/, '');
     // Reject segments that are purely geographic qualifiers
     if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/.test(segment)) {
@@ -269,16 +306,16 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       else if (opts.allowBinomialLike) { /* skip binomial check */ }
       // Allow "Proper-name + generic plant noun" compounds like "Fraser fir"
       // (real binomial epithets are never bare English plant nouns).
-      else if (/^(?:fir|spruce|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle|onion|olive)s?$/i.test(segWords[1])) { /* skip binomial check */ }
+      else if (/^(?:fir|spruce|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle|onion|olive|cranesbill|cypress|rhubarb|honeysuckle|mayapple|azalea|photinia|hellebore|willowherb|beautyberry|spiderflower|leadwort|plume|spikenard|mantle|hazel|hazelnut|rhododendron|seal|snow-flower|snowflower)s?$/i.test(segWords[1])) { /* skip binomial check */ }
       else {
-        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|canada|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|allegheny|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|madagascar|cordilleran|caribbean|labrador|scandinavian|alaska|bogori|cornish|madonna|bok|romanesco)/i;
+        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|canada|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|allegheny|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|madagascar|cordilleran|caribbean|labrador|scandinavian|alaska|bogori|cornish|madonna|bok|romanesco|armenian|chilean|taiwan|taiwanese|formosan|alishan)/i;
         if (!englishPrefixes.test(segWords[0])) {
           if (trace) trace.rejected.push({ name: segment, rule, by: 'binomial-lookalike' });
           continue;
         }
       }
     }
-    if (segment.split(/\s+/).length > 5) {
+    if (segment.split(/\s+/).length > 6) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'too-long' });
       continue;
     }
@@ -380,6 +417,33 @@ function isGeographicJunk(name) {
 
 function isProcedural(name) {
   return PROCEDURE_WORDS.test(name.trim());
+}
+
+// Reject names that denote OTHER organisms (insect pests, diseases) rather than
+// the plant itself — e.g. "fruit-tree leafroller", "giant bark aphid".
+function isOtherOrganismJunk(name) {
+  return /\b(?:leaf[- ]?roller|leafroller|aphid|lecanium|caterpillar|larva|larvae|moth|beetle|weevil|mite|sawfly|whitefly|thrips|borer|leafhopper|webworm|looper|loopers|armyworm|scale\s*(?:insect|bug|mite))\b/i.test(name);
+}
+
+// Reject taxonomic-rank references that slipped through (e.g. "legume or bean
+// family") — multiword phrases whose head is a rank word, not a plant common name.
+function isTaxonRankRef(name) {
+  const s = name.trim();
+  if (!/\b(?:family|genus|species|subfamily|tribe|order|class|division)\b/i.test(s)) return false;
+  const words = s.split(/\s+/);
+  // Allow genuine 2-word expanded names (e.g. "coffee family" from a list
+  // expansion); reject 3+ word rank references and any containing "or"/"and".
+  if (words.length >= 3 || /\b(?:or|and)\b/.test(s)) return true;
+  return false;
+}
+
+// A "known as" gloss that merely restates a botanical family name — e.g.
+// "...the flowering plant family Fabaceae or commonly known as legume or bean
+// family" — is a taxonomic synonym of the family, not a species common name,
+// and must be dropped. Detected by a rank word followed by a scientific name,
+// then "or (commonly) known as".
+function isFamilyRestatement(sentence) {
+  return /\b(?:family|families|genus|genera|order|subfamily|tribe|division|class)\s+[A-Z][a-z]+(?:\s+[a-z]+)*\s+or\s+(?:commonly\s+)?known\s+as\b/i.test(sentence);
 }
 
 function isPronunciationNotation(text) {
@@ -490,6 +554,10 @@ function isTaxonomicSentence(sentence, isFirst) {
   // "Southern or annual wild rice (Z. aquatica), also an annual, grows..." —
   // "X or Y (abbreviated binomial)" alternative-name constructions (R59).
   if (/^[A-ZÀ-Ÿ][a-zà-ÿ''\u2019-]+\s+or\s+[a-zà-ÿ][\w''\u2019-]*(?:\s+[a-zà-ÿ][\w''\u2019-]*)*\s*\([A-Z]\.\s+[a-z]+/i.test(sentence)) return true;
+  // "... where it is called X" (Gunnera-style subordinate naming clause)
+  if (/\bwhere\s+it\s+is\s+called\b/i.test(sentence)) return true;
+  // "... (hence the name X)" etymological common-name clauses
+  if (/\b(?:hence|whence|thus|whereby)\s+the\s+name\b/i.test(sentence)) return true;
   return false;
 }
 
@@ -551,6 +619,8 @@ function addNames(captures, results, seenKeys, trace) {
       if (isGenericJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGenericJunk' }); continue; }
       if (isGeographicJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGeographicJunk' }); continue; }
       if (isProcedural(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isProcedural' }); continue; }
+      if (isOtherOrganismJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isOtherOrganismJunk' }); continue; }
+      if (isTaxonRankRef(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isTaxonRankRef' }); continue; }
       if (hasCJK(name)) { if (trace) trace.rejected.push({ name, rule, by: 'hasCJK' }); continue; }
       pushResult(results, seenKeys, name, trace, rule);
     }
@@ -711,7 +781,16 @@ function _extractWikipediaCommonNames(text, trace) {
     // Skip sentences that attribute common names to a specific species rather
     // than to the taxon the note is about (e.g. "The yucca, specifically
     // Yucca gigantea, ... is known as flor de izote").
-    if (/\b(?:specifically|namely)\s+[A-ZÀ-Ÿ][a-zà-ÿ]+\s+[a-zà-ÿ]+/i.test(sentence)) {
+    if (/\b(?:[Ss]pecifically|namely)\s+[A-Z][a-zà-ÿ]*\s+[a-zà-ÿ]+/.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
+    // A sentence whose subject is a cultivar generically ("the most common
+    // cultivar is known as ...", "a cultivar is known as ...") yields cultivar
+    // names, not species common names. Skip those. (Specific "X, a cultivar,
+    // also known as Y" sentences are NOT skipped, so Y is still captured.)
+    if (/\b(?:the\s+most\s+common\s+cultivar|a\s+cultivar\s+is|the\s+cultivar\s+is)\b/i.test(sentence)) {
       if (trace) trace.skippedSentences.push({ sentence });
       continue;
     }
@@ -720,7 +799,7 @@ function _extractWikipediaCommonNames(text, trace) {
 
     // ─── Sentence-open constructions ─────────────────────────────────────
     // R1: Leading appositive — "Genus species, <names>, is/was a..."
-    const r1 = sentence.match(/^([A-ZÀ-Ÿ][\w.''\u2019-]+(?:\s+[\w.''\u2019-]+){0,3}),\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the|some|one)\b)/i);
+    const r1 = sentence.match(/^([A-ZÀ-Ÿ][\w.''\u2019-]+(?:\s+[\w.''\u2019-]+){0,3})(?:\s*\([^)]*\))?,\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the|some|one)\b)/i);
     if (r1) {
       const subject = r1[1];
       const nameList = r1[2];
@@ -874,14 +953,17 @@ function _extractWikipediaCommonNames(text, trace) {
 
     // R6c: Parenthetical bare name list — "(X, Y, Z or W) is a species" (Rosa, Rubus)
     const r6c = sentence.match(/\(\s*([^)]+?)\)\s+(?:is|was|are)\s+(?:a|an|the|some|native|endemic)/i);
-    if (r6c && !r6 && !r6b && !r6b2) {
+     if (r6c && !r6 && !r6b && !r6b2) {
       const content = r6c[1];
-      // Filter out synonym-only, botanical-name, or author-abbreviation content
+      const isBotanicalSeq = /^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content.trim());
+      // Filter out synonym-only, botanical-name, author-abbreviation content,
+      // and pure botanical-name sequences with no comma (these are binomials,
+      // not common-name lists). Comma-containing lists are name lists.
       if (!/^\s*syn\.?\s/i.test(content)
           && !/^\s*botanical\s+name\s/i.test(content)
           && !isAbbreviatedBinomialLike(content)
-          && !/^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content.trim())) {
-        caps.push({ rule: 'R6c', capture: content });
+          && !(isBotanicalSeq && !content.includes(','))) {
+        caps.push({ rule: 'R6c', capture: content.split(';')[0].trim() });
       }
     }
 
@@ -931,8 +1013,13 @@ function _extractWikipediaCommonNames(text, trace) {
     // explanatory "because" clause, or end
     const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety))\b|\s+because\b|$)/i);
     if (r8) {
-      const capture = finalizeCapture(r8[1], 300);
-      if (capture) caps.push({ rule: 'R8', capture: capture });
+      // Drop family-name restatements (e.g. "Fabaceae or commonly known as
+      // legume or bean family") — these are taxonomic synonyms, not names.
+      if (isFamilyRestatement(sentence)) { /* skip */ }
+      else {
+        const capture = finalizeCapture(r8[1], 300);
+        if (capture) caps.push({ rule: 'R8', capture: capture });
+      }
     }
 
     // R8b: "known as the X" — without commonly/generally, only match in taxonomic context
@@ -955,13 +1042,57 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R9', capture: capture });
     }
 
-    // R10: "also known as" / "also called" — at sentence start ("It is...") or
-    // mid-sentence (after a comma) — stop at copula
-    const r10 = sentence.match(/(?:\s*,\s+also\s+|^It\s+(?:is|was)\s+also\s+)(?:known\s+as|called)\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any)\b|\s+(?:has|have)\b|$)/i);
+    // R9b: Parenthetical literal-gloss — "(lit. 'Alishan azalea')" yields the
+    // translated common name.
+    const r9b = sentence.match(/lit\.?\s*['"“]([^'"]+)['"”]/i);
+    if (r9b) {
+      const capture = finalizeCapture(r9b[1], 200);
+      if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R9b', capture: capture });
+    }
+
+    // R9c: "hence the name X" / "whence the name X" — etymological common name
+    // inside a parenthetical or clause (e.g. "May (hence the name mayapple)").
+    const r9c = sentence.match(/(?:hence|whence|thus|whereby)\s+the\s+name\s+([A-Za-z][\w''\u2019-]+(?:\s+[\w''\u2019-]+)*?)\b/i);
+    if (r9c) {
+      const capture = finalizeCapture(r9c[1], 200);
+      if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R9c', capture: capture });
+    }
+
+    // R9d: "Other common names [recorded] include X, Y, and Z" — explicit list.
+    // Restricted to forms with "recorded" or an "Other" lead so it does not
+    // overlap with R12 ("Common names include ..."), which is already labeled R12.
+    const r9d = sentence.match(/(?:(?:other\s+)?common\s+names?\s+recorded|other\s+common\s+names?)\s+(?:include|are)\s+(.+?)(?:\.|$)/i);
+    if (r9d) {
+      const capture = finalizeCapture(r9d[1], 300);
+      if (capture) caps.push({ rule: 'R9d', capture: capture });
+    }
+
+    // R9e: Genus common-name from free text — "Xs are plants of the genus Y"
+    // (X is the plural vernacular; strip trailing 's' to singular) and
+    // "the fruit of the X is the Y" (both X and Y are vernacular names).
+    const r9e = sentence.match(/^([A-Za-zÀ-ÿ]+s)\s+are\s+(?:plants?|trees?|shrubs?|species)\s+of\s+the\s+genus\b/i);
+    if (r9e) {
+      const singular = r9e[1].replace(/s$/i, '');
+      if (singular.length > 2 && !isGenericJunk(singular)) caps.push({ rule: 'R9e', capture: singular.toLowerCase() });
+    }
+    const r9f = sentence.match(/\bthe\s+fruit\s+of\s+the\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)\s+is\s+(?:the\s+)?([A-Za-zÀ-ÿ][\w''\u2019-]*)/i);
+    if (r9f) {
+      if (!isGenericJunk(r9f[1])) caps.push({ rule: 'R9f', capture: r9f[1] });
+      if (!isGenericJunk(r9f[2])) caps.push({ rule: 'R9f', capture: r9f[2] });
+    }
+
+    // R10: "known as" / "called" — at sentence start ("It is...") or
+    // mid-sentence (after a comma, with or without "also") — stop at copula
+    const r10 = sentence.match(/(?:\s*,\s+(?:also\s+)?(?:known\s+as|called)\s+|^It\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+)(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any)\b|\s+(?:has|have)\b|$)/i);
     if (r10) {
+      const r10Prologue = sentence.slice(0, r10.index);
       // Reject attribution sentences naming a people/nation/tribe ("...Anishinaabe
       // people, also known as the Chippewa, Ojibwa and Ojibwe.")
-      if (/\b(?:people|nation|tribes?|tribal)\b/i.test(sentence.slice(0, r10.index))) { /* skip */ }
+      // Also reject when "known as" modifies a plant PART (fruit/leaf/flower/...)
+      // rather than the whole plant — the gloss is about the part, not a species
+      // common name (e.g. "Cecropia fruit, known as snake fingers, ...").
+      if (/\b(?:people|nation|tribes?|tribal)\b/i.test(r10Prologue)
+          || /\b(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|stem|stems|wood|branch|branches|foliage|nut|nuts|cone|cones|petal|petals|sap|tuber|bulb|thorn|spine|husk|peel|rind|grain|kernel)\b/i.test(r10Prologue.slice(r10Prologue.lastIndexOf(',') + 1))) { /* skip */ }
       else {
         let capture = truncateAtDescriptiveClause(r10[1].replace(/\s*[.,]\s*$/, ''));
         // Reject attribution context: "by the indigenous people", "by the Cahuilla"
@@ -1009,6 +1140,8 @@ function _extractWikipediaCommonNames(text, trace) {
     // R11e: "plants known as X" — extraction for "known as" after descriptive phrase
     const r11e = sentence.match(/plants?\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s*\.|\s*(?:with|in|that|which|is|are|has|have)\b|$)/i);
     if (r11e) {
+      // Skip "List of plants known as X" see-also titles — not a naming statement.
+      if (/^list\s+of\b/i.test(sentence)) continue;
       const capture = finalizeCapture(r11e[1], 200);
       if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R11e', capture: capture });
     }
@@ -1032,10 +1165,13 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R14: "with the common name[s]"
-    const r14 = sentence.match(/with\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b)/i);
+    const r14 = sentence.match(/with\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|\s+(?:applied|used|given)\b)/i);
     if (r14) {
-      const capture = finalizeCapture(r14[1], 200);
-      if (capture) caps.push({ rule: 'R14', capture: capture });
+      if (isFamilyRestatement(sentence)) { /* skip family restatement */ }
+      else {
+        const capture = finalizeCapture(r14[1], 200);
+        if (capture) caps.push({ rule: 'R14', capture: capture });
+      }
     }
 
     // R15: "known commonly as" — capture to copula or end
@@ -1146,7 +1282,7 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R46: "where it is called X" / "called X" in subordinate clause (Farfugium "tsuwabuki")
-    const r46 = sentence.match(/(?:where|in)\s+(?:it|this|the)(?:\s+(?:plant|species|tree))?\s+is\s+called\s+(.+?)(?:\s+\(|\s*[.,]\s*$)/i);
+    const r46 = sentence.match(/(?:where|in)\s+(?:it|this|the)(?:\s+(?:plant|species|tree))?\s+is\s+called\s+(.+?)(?:\s*[.,;]|$)/i);
     if (r46) {
       let capture = r46[1].replace(/\s*[(),].*$/, '').trim();
       if (capture && capture.length < 200 && !hasCJK(capture) && !isInsideParens(sentence, r46.index)) {

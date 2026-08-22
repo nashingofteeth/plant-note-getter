@@ -698,6 +698,103 @@ const TESTS = [
     extract: 'Quercus alba, the white oak, is a tree. Quercus section Lobatae is a taxonomic section. Quercus subsection Caninae is a subsection. Quercus series Phacocystis is a series.',
     expected: ['white oak'],
   },
+  /* === REFINEMENT BATCH (28 species) — red tests; engine NOT yet fixed === */
+
+  {
+    name: 'Sambucus (commonly referred to as elder / elderflower / elderberry)',
+    extract: 'Sambucus is a genus of between 20 and 30 species of flowering plants in the family Viburnaceae. The various species are commonly referred to as elder, with the flowers as elderflower, and the fruit as elderberry. Native to Europe and West Asia, the plant is distributed to northwest Africa.',
+    expected: ['elder', 'elderflower', 'elderberry'],
+  },
+  {
+    name: 'Sambucus (folklore "Elder Mother" is not a common name)',
+    extract: 'If an elder tree was cut down, a spirit known as the Elder Mother would be released and take her revenge.',
+    expected: [],
+  },
+  {
+    name: 'Rhododendron pseudochrysanthum (lit. gloss "Alishan azalea" + appositive "false-gold-flower rhododendron")',
+    extract: 'Rhododendron pseudochrysanthum (Chinese: 阿里山杜鵑; pinyin: Ālǐshān dùjuān; lit. \'Alishan azalea\'), the false-gold-flower rhododendron, is a species of flowering plant in the heath family Ericaceae, native to Taiwan.',
+    expected: ['Alishan azalea', 'false-gold-flower rhododendron'],
+  },
+  {
+    name: 'Podophyllum delavayi (appositive "Chinese mayapple" + standalone "mayapple")',
+    extract: 'Podophyllum delavayi, the Chinese mayapple, is a herbaceous perennial plant in the family Berberidaceae native to South-Central China. Deep red flowers appear in May (hence the name mayapple) and are somewhat foul-scented to attract its pollinators.',
+    expected: ['Chinese mayapple', 'mayapple'],
+  },
+  {
+    name: 'Photinia × fraseri (known as X and Y — hybrid × not blocking)',
+    extract: 'Photinia × fraseri, known as red tip photinia and Christmas berry, is a nothospecies in the rose family, Rosaceae. It is a hybrid between Photinia glabra and Photinia serratifolia.',
+    expected: ['red tip photinia', 'Christmas berry'],
+  },
+  {
+    name: 'Phlox carolina (cultivar clause "as known as wedding phlox, with white flowers" is not a species common name)',
+    extract: "The most common cultivar is known as the 'Miss Lingard,' as known as wedding phlox, with white flowers and is a popular floral arrangement used for weddings.",
+    expected: [],
+  },
+  {
+    name: 'Onoclea sensibilis ("aka Maxim." taxonomic abbreviation is not a common name)',
+    extract: 'Onoclea sensibilis has two geographically disjunctive varieties. Onoclea sensibilis var. sensibilis is native to North America. Onoclea sensibilis var. interrupta Maximowicz (aka Maxim.) is native to Southeast Siberia, Japan and China.',
+    expected: [],
+  },
+  {
+    name: 'Lonicera ligustrina (appositive "privet-like honeysuckle")',
+    extract: 'Lonicera ligustrina (女贞叶忍冬, nü zhen ye ren dong), the privet-like honeysuckle, is a species of honeysuckle found in the central and eastern Himalayas of Bhutan, India, Nepal, and in southern and central China.',
+    expected: ['privet-like honeysuckle'],
+  },
+  {
+    name: 'Chamaecyparis formosensis (parenthetical "Formosan cypress, Taiwan cypress, Taiwan red cypress")',
+    extract: 'Chamaecyparis formosensis (Formosan cypress, Taiwan cypress, Taiwan red cypress; Chinese: 紅檜/红桧 hóngguì, Taiwan pron. hóngkuài) is a species of large conifer, endemic to Taiwan, where it grows in the central mountains at moderate to high altitudes of 1000–2900 m.',
+    expected: ['Formosan cypress', 'Taiwan cypress', 'Taiwan red cypress'],
+  },
+  {
+    name: 'Alchemilla (genus common name "lady\'s mantle")',
+    extract: 'Alchemilla is a genus of herbaceous perennial plants in the family Rosaceae, with the common name lady\'s mantle applied generically as well as specifically to Alchemilla mollis when referred to as a garden plant.',
+    expected: ['lady\'s mantle'],
+  },
+  {
+    name: 'Corylus (genus common names "hazel" / "hazelnut")',
+    extract: 'Hazels are plants of the genus Corylus of deciduous trees and large shrubs native to the temperate Northern Hemisphere. The fruit of the hazel is the hazelnut; the trees are also grown as ornaments in hedges or gardens.',
+    expected: ['hazel', 'hazelnut'],
+  },
+  {
+    name: 'Vicia lens (family "commonly known as legume or bean family" is not a common name)',
+    extract: 'The genus Vicia is part of the subfamily Faboideae which is contained in the flowering plant family Fabaceae or commonly known as legume or bean family, of the order Fabales in the kingdom Plantae.',
+    expected: [],
+  },
+  {
+    name: 'Helleborus viridis (appositive + "Other common names include" list)',
+    extract: 'Helleborus viridis, commonly called green hellebore, is a species of flowering plant in the buttercup family Ranunculaceae, native to central and western Europe, including southern England. All parts of the plant are poisonous. Other common names recorded include bastard hellebore, bear\'s foot, and boar\'s foot.',
+    expected: ['green hellebore', 'bastard hellebore', 'bear\'s foot', 'boar\'s foot'],
+  },
+  {
+    name: 'Geranium psilostemon ("commonly called Armenian cranesbill" prefix stripped)',
+    extract: 'Geranium psilostemon, commonly called Armenian cranesbill, is a species of hardy flowering herbaceous perennial plant in the genus Geranium, family Geraniaceae.',
+    expected: ['Armenian cranesbill'],
+  },
+  {
+    name: 'Carya tomentosa (insect pests "fruit-tree leafroller" etc. are not the plant\'s common names)',
+    extract: 'The fruit-tree leafroller (Archips argyrospila) and the hickory leafroller (Argyrotaenia juglandana) are the most common leaf feeders. The giant bark aphid (Longistigma caryae) is common on hickory bark. The European fruit lecanium (Parthnolecanium corni) is common on hickories.',
+    expected: [],
+  },
+  {
+    name: 'Cardamine flexuosa ("known as chaantruk ... often used to garnish eromba" trailing junk)',
+    extract: 'In the Northeast Indian state of Manipur, where it is known as chaantruk, C. flexuosa is eaten as an aromatic herb, often used to garnish eromba.',
+    expected: ['chaantruk'],
+  },
+  {
+    name: 'Amaryllis belladonna ("List of plants known as lily" see-also yields bare "lily" junk)',
+    extract: '== See also ==\nList of plants known as lily\nA Jersey Lily, an 1878 painting by John Everett Millais',
+    expected: [],
+  },
+  {
+    name: 'Maianthemum racemosum (appositive list "feathery false lily of the valley" missed)',
+    extract: 'Maianthemum racemosum, the treacleberry, feathery false lily of the valley, false Solomon\'s seal, Solomon\'s plume or false spikenard, is a species of flowering plant native to North America.',
+    expected: ['treacleberry', 'feathery false lily of the valley', 'false Solomon\'s seal', 'Solomon\'s plume', 'false spikenard'],
+  },
+  {
+    name: 'Gunnera tinctoria (misses "Chilean rhubarb"/"pangue"; wrongly keeps "nalqueros" people)',
+    extract: 'Gunnera tinctoria, known as giant-rhubarb, Chilean rhubarb, quirusilla or nalca, is a flowering plant species native to southern Chile. In its native Chile, where it is called nalca or pangue, it is used in a similar way to European rhubarb.',
+    expected: ['giant-rhubarb', 'Chilean rhubarb', 'quirusilla', 'nalca', 'pangue'],
+  },
 ];
 
 const GBIF_TESTS = [
