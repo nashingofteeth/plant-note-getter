@@ -96,6 +96,15 @@
       "asparagales",
       "asparagaceae",
       "maianthemum"
+    ],
+    "sciadopityaceae": [
+      "tracheophytes",
+      "spermatophytes",
+      "gymnospermae",
+      "pinophyta",
+      "pinopsida",
+      "pinales",
+      "sciadopityaceae"
     ]
   },
   "non-protein amino acid-accumulating clade": null,
