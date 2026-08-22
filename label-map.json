@@ -73,6 +73,18 @@
     "cupressaceae": [
       "pinopsida",
       "cupressales"
+    ],
+    "taxaceae": [
+      "pinopsida",
+      "cupressales"
+    ],
+    "araucariaceae": [
+      "pinopsida",
+      "araucariales"
+    ],
+    "podocarpaceae": [
+      "pinopsida",
+      "araucariales"
     ]
   },
   "_overrides": {
