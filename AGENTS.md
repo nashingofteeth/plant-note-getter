@@ -47,7 +47,8 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 
 1. **Maps labels to canonical segments** (e.g., `"coniferae": "pinophyta"`)
 2. **Injects missing nodes** via `_inject` (e.g., `"gymnospermae": ["tracheophytes", "spermatophytes"]` adds before the node)
-3. `buildTagSegments` (src/taxonomy.js): starts with `['life', 'eukaryota', 'plantae']`, then for each ancestor (highest to lowest rank): skip if `null` mapping/excluded rank/Q-code, map via `labelMap`, inject any `_inject` entries, append segment (deduped with `.includes()` against all segments, not just last).
+3. **Overrides a corrupted lineage** via `_overrides`: when a taxon's canonical segment matches an `_overrides` key, the whole path accumulated so far is replaced with the explicit value (a full path from the base up to and including that taxon). Used to work around known-bad Wikidata P171 chains (e.g. `"sciadopityaceae"` routed through equisetophyta, `"maianthemum"` through Solanaceae). Processing continues so narrower ancestors (genus/species) still append.
+4. `buildTagSegments` (src/taxonomy.js): starts with `['life', 'eukaryota', 'plantae']`, then for each ancestor (highest to lowest rank): skip if `null` mapping/excluded rank/Q-code, map via `labelMap`, apply `_overrides`/`_inject` entries, append segment (deduped with `.includes()` against all segments, not just last). Two guards in src/taxonomy-guard.js run here too: `findExclusiveCladeViolations` drops a later mutually-exclusive major clade (e.g. both monocots and eudicots), and `findRankInversions` drops an ancestor that jumps back up the hierarchy (a broader rank after a specific one).
 
 ## Common name extraction (src/wiki-extract.js)
 
