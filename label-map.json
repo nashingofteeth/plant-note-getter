@@ -75,6 +75,17 @@
       "cupressales"
     ]
   },
+  "_overrides": {
+    "maianthemum": [
+      "tracheophytes",
+      "spermatophytes",
+      "angiosperms",
+      "monocots",
+      "asparagales",
+      "asparagaceae",
+      "maianthemum"
+    ]
+  },
   "non-protein amino acid-accumulating clade": null,
   "anthemidodae": null,
   "hologalegina": null,
