@@ -594,9 +594,20 @@ function pushResult(results, seenKeys, name, trace, rule) {
 // `captures` is an array of { rule, capture } tuples (one per pushed capture,
 // including whole sentences for section-based extraction). Runs each capture
 // through the junk classifiers and records every decision on the trace.
-function addNames(captures, results, seenKeys, trace) {
+// `sentence` is the source sentence for sentence-level caps (null for section
+// callers that already pass the sentence as capture); used for capture-level
+// classifiers like family-restatement that need sentence context.
+function addNames(captures, results, seenKeys, trace, sentence = null) {
   for (const { rule, capture, allowBinomialLike } of captures) {
     if (!capture || !capture.trim()) continue;
+    // Capture-level: family-name restatements (e.g. "family Fabaceae or commonly
+    // known as legume or bean family") are taxonomic synonyms of the family,
+    // not species common names. Centralized here so R8/R14/etc don't each need
+    // a guard; covers the Vicia/Rutaceae clash.
+    if (sentence && isFamilyRestatement(sentence)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'family-restatement' });
+      continue;
+    }
     // Whole-capture pronunciation check: reject only when the capture has no
     // commas, so comma-separated native-language name lists like "manoomin,
     // mnomen, psíŋ, Canada rice, Indian rice, or water oats" survive to the
@@ -728,7 +739,7 @@ function _extractWikipediaCommonNames(text, trace) {
           pushResult(results, seenKeys, name, trace, 'Section:Common names:cjk');
         }
       } else {
-        addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace);
+        addNames([{ rule: 'Section:Common names', capture: s }], results, seenKeys, trace, s);
       }
     }
   }
@@ -755,7 +766,7 @@ function _extractWikipediaCommonNames(text, trace) {
             pushResult(results, seenKeys, name, trace, 'Section:Names:cjk');
           }
         } else {
-          addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace);
+          addNames([{ rule: 'Section:Names', capture: s }], results, seenKeys, trace, s);
         }
       }
     }
@@ -1011,15 +1022,12 @@ function _extractWikipediaCommonNames(text, trace) {
     // ─── "known as / called / referred to as" ────────────────────────────
     // R8: "commonly known as" / "generally known as" — stop at copula, an
     // explanatory "because" clause, or end
+    // Note: family-restatement filtering (e.g. "Fabaceae or commonly known as
+    // legume or bean family") is centralized in addNames via isFamilyRestatement.
     const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety))\b|\s+because\b|$)/i);
     if (r8) {
-      // Drop family-name restatements (e.g. "Fabaceae or commonly known as
-      // legume or bean family") — these are taxonomic synonyms, not names.
-      if (isFamilyRestatement(sentence)) { /* skip */ }
-      else {
-        const capture = finalizeCapture(r8[1], 300);
-        if (capture) caps.push({ rule: 'R8', capture: capture });
-      }
+      const capture = finalizeCapture(r8[1], 300);
+      if (capture) caps.push({ rule: 'R8', capture: capture });
     }
 
     // R8b: "known as the X" — without commonly/generally, only match in taxonomic context
@@ -1165,13 +1173,11 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R14: "with the common name[s]"
+    // Note: family-restatement filtering is centralized in addNames.
     const r14 = sentence.match(/with\s+the\s+common\s+names?\s+(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|\s+(?:applied|used|given)\b)/i);
     if (r14) {
-      if (isFamilyRestatement(sentence)) { /* skip family restatement */ }
-      else {
-        const capture = finalizeCapture(r14[1], 200);
-        if (capture) caps.push({ rule: 'R14', capture: capture });
-      }
+      const capture = finalizeCapture(r14[1], 200);
+      if (capture) caps.push({ rule: 'R14', capture: capture });
     }
 
     // R15: "known commonly as" — capture to copula or end
@@ -1582,7 +1588,7 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R60', capture: r60[2] });
     }
 
-    addNames(caps, results, seenKeys, trace);
+    addNames(caps, results, seenKeys, trace, sentence);
   }
 
   // --- Post-process: expand "the X or Y family" → "X family, Y family" ---
