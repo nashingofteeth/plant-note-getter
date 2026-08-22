@@ -16,11 +16,9 @@ if (!fs.existsSync(NOTE_ROOT)) {
   process.exit(1);
 }
 
-const UPDATES_FILE_PATH = path.join(__dirname, '..', '.plant-note-updates.json');
 const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 
 module.exports = {
   NOTE_ROOT,
-  UPDATES_FILE_PATH,
   LABEL_MAP_PATH
 };

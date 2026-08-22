@@ -23,7 +23,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 
 | File | Role |
 |------|------|
-| `app.js` | CLI entry, orchestrates pipeline, supports `--populate` and `--check` modes |
+| `app.js` | CLI entry, orchestrates pipeline, supports `--check` mode |
 | `src/wikidata.js` | Wikidata search, entity data, SPARQL parent chain, synonym data |
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
@@ -32,7 +32,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
-| `src/notes.js` | Filesystem operations: read/write notes, bulk populate |
+| `src/notes.js` | Filesystem operations: read/write notes |
 | `src/config.js` | Paths from `.env`: NOTE_ROOT, LABEL_MAP_PATH |
 | `src/utils.js` | Shared helpers (filename sanitize, date, label-map loading, stripArticle, normalizeNameKey) |
 | `label-map.json` | Single source of truth for tag remaps and hierarchy injections |

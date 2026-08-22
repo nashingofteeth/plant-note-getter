@@ -233,8 +233,6 @@ After fixing, verify:
 3. The extracted names match (or improve upon) the note's existing `aliases`
 4. No junk terms leak through (verify with the flag list from step 3)
 
-For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
-
 ### 8. Known Tricky Pairs — reuse these patterns
 
 These pairs share a surface form but require opposite handling; they drove the refinements in this session. Prefer the listed classifier/location over a new regex.

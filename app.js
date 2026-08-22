@@ -8,7 +8,7 @@ const { resolveTaxon, getParentChain } = require('./src/wikidata');
 const { collectCommonNames } = require('./src/names');
 const { buildTagSegmentsWithOriginals } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
-const { createNoteFile, populateMissingProperties } = require('./src/notes');
+const { createNoteFile } = require('./src/notes');
 const { checkAndPruneTag, printHierarchy, resolveTagForNote } = require('./src/tagcheck');
 const { askYesNo } = require('./src/prompt');
 
@@ -28,7 +28,6 @@ async function main() {
 
   if (args.length === 0) {
     console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N]');
-    console.error('       plant-note --populate [--apply]');
     console.error('       plant-note --check "Note Name"');
     console.error('');
     console.error('Options:');
@@ -40,16 +39,8 @@ async function main() {
     console.error('  plant-note "Populus"');
     console.error('  plant-note "Populus" --apply');
     console.error('  plant-note "Eschscholzia californica" --select=2');
-    console.error('  plant-note --populate');
-    console.error('  plant-note --populate --apply');
     console.error('  plant-note --check "Lysimachia borealis"');
     process.exit(1);
-  }
-
-  if (args.includes('--populate')) {
-    const applyChanges = args.includes('--apply');
-    await populateMissingProperties(applyChanges);
-    return;
   }
 
   if (args.includes('--check')) {

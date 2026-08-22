@@ -7,7 +7,6 @@ A CLI tool that generates [Obsidian](https://obsidian.md/) markdown notes for pl
 - **Note generation** — Creates an Obsidian markdown note with tags, aliases, rank, Wikipedia link, and dates from a plant name.
 - **Tag hierarchy** — Builds an Obsidian tag path from the full taxonomic lineage (e.g. `#life/eukaryota/plantae/angiosperms/...`).
 - **Label normalization** — Uses `label-map.json` to skip generic clades or normalize Wikidata labels to consistent tags.
-- **`--populate` mode** — Scans an existing vault for plant-tagged notes and backfills missing front matter properties from Wikidata.
 - **`--check` mode** — Analyzes tag hierarchies in existing notes to detect sparse branches or unrecognized clades, with interactive suggestions for `label-map.json` updates.
 - **`--apply` flag** — Skips dry-run prompts and writes/updates notes directly.
 - **Automatic alias collection** — Merges common names from Wikidata, GBIF, and Wikipedia into note aliases.
@@ -52,12 +51,6 @@ node app.js "Eschscholzia californica"
 
 # Create a note and write it
 node app.js "Eschscholzia californica" --apply
-
-# Scan vault and show missing front matter
-node app.js --populate
-
-# Scan vault and apply missing front matter
-node app.js --populate --apply
 
 # Check tag hierarchy of an existing note
 node app.js --check "Lysimachia borealis"
