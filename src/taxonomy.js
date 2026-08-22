@@ -33,15 +33,21 @@ function buildTagSegmentsRaw(ancestors, ownId, labelMap) {
 
     const seg = label.toLowerCase().replace(/\s+/g, '_');
 
-    // Per-taxon parent-chain override: replace the whole lineage with an
-    // explicit canonical path. Used to work around known-bad Wikidata P171
-    // chains (e.g. Maianthemum routed through Solanaceae). The override value
-    // is the full path from the base up to and including this taxon.
+    // Per-taxon parent-chain override: replace the whole lineage accumulated so
+    // far with an explicit canonical path. Used to work around known-bad
+    // Wikidata P171 chains (e.g. Maianthemum routed through Solanaceae,
+    // Sciadopitys through equisetophyta/cupressales). The value is the full
+    // path from the base up to and including this taxon; processing continues
+    // so narrower ancestors (genus, species) still append.
     const override = overrides[seg];
     if (override) {
-      const newSegments = [...PLANT_TAG_BASE, ...override];
-      const newOriginals = [...PLANT_TAG_BASE.map(() => ''), ...override];
-      return { segments: newSegments, originals: newOriginals };
+      const path = [...PLANT_TAG_BASE, ...override];
+      const pathOriginals = [...PLANT_TAG_BASE.map(() => ''), ...override];
+      segments.length = 0;
+      segments.push(...path);
+      originals.length = 0;
+      originals.push(...pathOriginals);
+      continue;
     }
 
     if (injections[seg]) {
