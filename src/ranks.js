@@ -55,4 +55,16 @@ const RANK_LABELS = {
   Q1425109: 'no rank'
 };
 
-module.exports = { SKIP_RANKS, RANK_PREFERENCE, RANK_LABELS };
+// Breadth ordering for rank-monotonicity guards: lower = more specific.
+// As we walk from species toward kingdom/domain, breadth must be non-decreasing.
+const RANK_BREADTH = {
+  species: 0, nothospecies: 0, infraspecies: 0, subspecies: 0,
+  variety: 0, form: 0, forma: 0, section: 0, series: 0, strain: 0,
+  subgenus: 5, genus: 10, subtribe: 15, tribe: 15, subfamily: 20,
+  family: 30, suborder: 35, order: 40, subclass: 45, class: 50,
+  subphylum: 55, subdivision: 55, phylum: 60, division: 60,
+  subkingdom: 65, kingdom: 70, infrakingdom: 68,
+  domain: 80, superdomain: 85, superkingdom: 90,
+};
+
+module.exports = { SKIP_RANKS, RANK_PREFERENCE, RANK_LABELS, RANK_BREADTH };
