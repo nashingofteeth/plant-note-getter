@@ -3,6 +3,23 @@ const { stripArticle, normalizeNameKey, TAXON_Q_IDS } = require('./utils');
 const { RANK_LABELS, RANK_PREFERENCE } = require('./ranks');
 const { askChoice } = require('./prompt');
 
+const MAX_FALLBACK_DEPTH = 8;
+
+const GBIF_MATCH_PARENT = {
+  species: 'genus',
+  nothospecies: 'genus',
+  subspecies: 'species',
+  subgenus: 'genus',
+  genus: 'family',
+  subfamily: 'family',
+  tribe: 'subfamily',
+  family: 'order',
+  order: 'class',
+  class: 'phylum',
+  phylum: 'kingdom',
+  kingdom: null
+};
+
 async function searchTaxon(name) {
   await rateLimit();
   const params = new URLSearchParams({
@@ -226,7 +243,51 @@ function pickBestParent(parentIds, ancestorMap) {
   return ranked[0].id;
 }
 
-async function getParentChain(id) {
+async function gbifFallback(id, depth) {
+  let entity;
+  try {
+    entity = await getEntityData(id);
+  } catch {
+    return null;
+  }
+  if (!entity || !entity.scientificName) return null;
+
+  let match;
+  try {
+    await rateLimit();
+    match = await fetchJSON(`${GBIF_API}/match?name=${encodeURIComponent(entity.scientificName)}`);
+  } catch {
+    return null;
+  }
+  if (!match || match.matchType === 'NONE') return null;
+
+  const ownRank = entity.rankLabel || 'species';
+  const parentRankKey = GBIF_MATCH_PARENT[ownRank] || 'genus';
+  if (!parentRankKey) return null;
+  const parentName = match[parentRankKey];
+  if (!parentName || typeof parentName !== 'string') return null;
+
+  let results;
+  try {
+    results = await searchTaxon(parentName);
+  } catch {
+    return null;
+  }
+  if (!results || results.length === 0) return null;
+
+  let parentEntity;
+  try {
+    parentEntity = await getEntityData(results[0].id);
+  } catch {
+    return null;
+  }
+  if (!parentEntity) return null;
+  if (!parentEntity.instanceOf.some(x => TAXON_Q_IDS.includes(x))) return null;
+
+  return getParentChain(parentEntity.id, depth + 1);
+}
+
+async function getParentChain(id, depth = 0) {
   await rateLimit();
   const query = `SELECT ?taxon ?taxonLabel ?rank ?rankLabel ?parent WHERE {
   wd:${id} wdt:P171* ?taxon.
@@ -277,6 +338,11 @@ async function getParentChain(id) {
     const validParents = [...info.parentIds].filter(pid => ancestors.has(pid));
     if (validParents.length === 0) break;
     currentId = validParents.length === 1 ? validParents[0] : pickBestParent(validParents, ancestors);
+  }
+
+  if (chain.length <= 1 && depth < MAX_FALLBACK_DEPTH) {
+    const fallback = await gbifFallback(id, depth);
+    if (fallback && fallback.length > chain.length) return fallback;
   }
 
   return chain;

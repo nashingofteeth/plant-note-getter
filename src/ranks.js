@@ -23,6 +23,7 @@ const RANK_LABELS = {
   Q35409: 'family',
   Q34740: 'genus',
   Q7432: 'species',
+  Q1306176: 'nothospecies',
   Q19858692: 'superkingdom',
   Q14592334: 'phylum',
   Q105019: 'subspecies',
