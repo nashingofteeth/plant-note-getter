@@ -4,7 +4,7 @@ CLI tool: takes a scientific plant name, queries Wikidata/GBIF/Wikipedia, and wr
 
 ## Prompt convention
 
-If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus sylvestris") with no other instructions, treat it as the selection for the refinement guide ([`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md)) and proceed with the full pipeline: search Wikidata → get entity data → synonyms → GBIF/Wikipedia common names → build tag chain → create note file.
+If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus sylvestris", "Cladrastis kentukea") with no other instructions, treat it as a request to run the **refinement pipeline** as described in [`REFINEMENT-GUIDE.md`](./REFINEMENT-GUIDE.md). This means: pick the taxon's existing note in `NOTE_ROOT`, fetch its Wikipedia extract, run `fetchWikipediaCommonNames`, hand-enumerate the article's stated common names, diff against the extraction, and fix any gaps/false positives via a regression test (red first, then green), then `npm test`. Do **not** merely create/regenerate the note — refinement is about improving common-name extraction, not re-running `app.js`. The bare taxon-name trigger is distinct from an explicit request to create a note (e.g. "make a note for X" or running `app.js`).
 
 ## Data flow
 

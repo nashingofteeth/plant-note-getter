@@ -1513,8 +1513,9 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R51: "often/sometimes/frequently called (the) X" — "often called the Cape heaths"
-    const r51 = sentence.match(/(?:often|sometimes|frequently)\s+called\s+(?:the\s+)?(.+?)(?:\s*[,.;]\s*|$)/i);
+    // R51: "often/sometimes/frequently (also) called (the) X" — "often called the Cape heaths",
+    // "sometimes also called Virgilia" (adverb and "called" may be separated by "also")
+    const r51 = sentence.match(/(?:often|sometimes|frequently)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s*[,.;]\s*|$)/i);
     if (r51) {
       const capture = finalizeCapture(r51[1], 200);
       if (capture) caps.push({ rule: 'R51', capture: capture });

@@ -820,6 +820,11 @@ const TESTS = [
     extract: 'These lentils are sometimes referred to by notable historic cultivars instead of by size, especially in North America: for example, small green lentils may be referred to as Eston-types, large green lentils as Laird-types, and large brown lentils as Brewer-types.',
     expected: [],
   },
+  {
+    name: 'Cladrastis kentukea ("sometimes also called" with adverb+also insert; appositive or-pair)',
+    extract: 'Cladrastis kentukea, the Kentucky yellowwood or American yellowwood (syn. C. lutea, C. tinctoria), is a species of Cladrastis native to the Southeastern United States. The tree is sometimes also called Virgilia.',
+    expected: ['Kentucky yellowwood', 'American yellowwood', 'Virgilia'],
+  },
 ];
 
 const GBIF_TESTS = [
