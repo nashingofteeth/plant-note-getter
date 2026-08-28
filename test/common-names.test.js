@@ -326,7 +326,7 @@ const TESTS = [
   {
     name: 'Yucca brevifolia (language qualifier "Spanish" filtered from parenthetical)',
     extract: 'Yucca brevifolia (also known as the Joshua tree, yucca palm, tree yucca, and palm tree yucca) is a plant species belonging to the genus Yucca. It is tree-like in appearance, which is reflected in its common names.\n\nIt is also called izote de desierto (Spanish, "desert dagger"). It is also called hunuvat chiy\'a or humwichawa by the indigenous Cahuilla.',
-    expected: ['Joshua tree', 'yucca palm', 'tree yucca', 'palm tree yucca', 'izote de desierto'],
+    expected: ['Joshua tree', 'yucca palm', 'tree yucca', 'palm tree yucca', 'izote de desierto', "hunuvat chiy'a", 'humwichawa'],
   },
   {
     name: 'Pinus attenuata (scientific name in apposition rejected; parenthetical synonym rejected)',
@@ -879,6 +879,16 @@ const TESTS = [
     name: 'Brassica (informally known as cruciferous vegetables etc. — reject etymology)',
     extract: 'Brassica () is a genus of plants in the cabbage and mustard family (Brassicaceae). The members of the genus are informally known as cruciferous vegetables, cabbages, mustard plants, or simply brassicas. Crops from this genus are sometimes called cole crops—derived from the Latin caulis, denoting the stem or stalk of a plant.',
     expected: ['cruciferous vegetables', 'cabbages', 'mustard plants', 'brassicas', 'cole crops'],
+  },
+  {
+    name: 'Valeriana officinalis (Other names include garden valerian etc. — reject "often grown in gardens"/"but"/"red valerian")',
+    extract: 'Valeriana officinalis is an herbaceous perennial flowering plant in the family Caprifoliaceae, native to Europe and southwestern Asia. Other names used for this plant include garden valerian (to distinguish it from other Valeriana species), garden heliotrope (although not related to Heliotropium), setwall (though this originally meant zedoary, from which it is etymologically derived) and all-heal (which is also used for plants in the genus Stachys). Valeriana rubra, red valerian, often grown in gardens, is also sometimes referred to as "valerian", but is a different species. Valerian is also called cat\'s love due to its catnip-like effects.',
+    expected: ['garden valerian', 'garden heliotrope', 'setwall', 'all-heal', "cat's love"],
+  },
+  {
+    name: 'Spiraea douglasii (Douglas\' spirea with possessive apostrophe)',
+    extract: 'Spiraea douglasii is a species of flowering plant in the rose family. Common names include hardhack, hardhack steeplebush, Douglas\' spirea, douglasspirea, steeplebush, and rose spirea.',
+    expected: ['hardhack', 'hardhack steeplebush', "Douglas' spirea", 'douglasspirea', 'steeplebush', 'rose spirea'],
   },
 ];
 

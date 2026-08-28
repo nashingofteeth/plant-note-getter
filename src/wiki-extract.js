@@ -69,7 +69,8 @@ const STOPWORD_SEGMENTS = new Set([
   'tree', 'shrub', 'herb', 'plant', 'trees', 'shrubs', 'herbs', 'plants',
   'possibly', 'perhaps',
   'it', 'its', 'they', 'them', 'he', 'she', 'we', 'you',
-  'this', 'that', 'these', 'those', 'which', 'what', 'a', 'an'
+  'this', 'that', 'these', 'those', 'which', 'what', 'a', 'an',
+  'but'
 ]);
 
 const QUOTE_CHARS = /^['"\u2018\u2019\u201C\u201D]+/g;
@@ -334,8 +335,8 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     if (segWords.length === 2 && /^[A-ZÀ-Ÿ]/.test(segWords[0]) && /^[a-z]/.test(segWords[1])) {
       // Allow names with non-ASCII characters (accented letters are common in foreign-language common names)
       if (/[^\x00-\x7F]/.test(segment)) { /* skip binomial check */ }
-      // Allow possessive common names like "Adam's needle"
-      else if (/^[A-ZÀ-Ÿ][\w.''\u2019-]*['\u2019]s$/i.test(segWords[0])) { /* skip binomial check */ }
+      // Allow possessive common names like "Adam's needle" and "Douglas' spirea" (with or without s)
+      else if (/^[A-ZÀ-Ÿ][\w.''\u2019-]*['\u2019]s?$/i.test(segWords[0])) { /* skip binomial check */ }
       // Allow hyphenated proper-name compounds like "Joe-Pye weeds" (genera never have hyphens)
       else if (/^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*-[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]*$/.test(segWords[0])) { /* skip binomial check */ }
       // Allow quoted common-name captures (R7 "known by the common name(s) X")
@@ -458,7 +459,7 @@ const GENERIC_JUNK = new Set([
 
 const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
 
-const PROCEDURE_WORDS = /^(?:consists|grows|ranging|occurs|includes|especially|within|found|cultivated|grown|harvested|used|produced|distributed|sold|shipped|marketed|selected|applied|obtained|derived|extracted|processed|manufactured|imported|exported|introduced|naturalized|endemic|originating|hailing|coming|native\s+to|referred\s+to\s+as\s+a|of\s+flowering\s+plants|of\s+plants|denoting)/i;
+const PROCEDURE_WORDS = /^(?:consists|grows|ranging|occurs|includes|especially|within|found|cultivated|grown|harvested|used|produced|distributed|sold|shipped|marketed|selected|applied|obtained|derived|extracted|processed|manufactured|imported|exported|introduced|naturalized|endemic|originating|hailing|coming|native\s+to|referred\s+to\s+as\s+a|of\s+flowering\s+plants|of\s+plants|denoting|often)/i;
 
 function isGenericJunk(name) {
   const lower = name.toLowerCase().trim();
@@ -685,6 +686,13 @@ function addNames(captures, results, seenKeys, trace, sentence = null) {
     // a guard; covers the Vicia/Rutaceae clash.
     if (sentence && isFamilyRestatement(sentence)) {
       if (trace) trace.rejected.push({ name: capture, rule, by: 'family-restatement' });
+      continue;
+    }
+    // Sentences that explicitly state the names belong to a different taxon
+    // (e.g. "Valeriana rubra, red valerian, ... is also sometimes referred to as ... but is a different species.")
+    // should not contribute names to the current taxon's alias list.
+    if (sentence && /but\s+is\s+a\s+different\s+species/i.test(sentence)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'different-species' });
       continue;
     }
     // Whole-capture pronunciation check: reject only when the capture has no
@@ -1576,6 +1584,13 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r51) {
       const capture = finalizeCapture(r51[1], 200);
       if (capture) caps.push({ rule: 'R51', capture: capture });
+    }
+
+    // R51b: "is also called X" — e.g. "Valerian is also called cat's love due to..."
+    const r51b = sentence.match(/is\s+also\s+called\s+(?:the\s+)?(.+?)(?:\s+by\s+the\b|\s+due\s+to\b|\s*\.\s*|$)/i);
+    if (r51b) {
+      const capture = finalizeCapture(r51b[1], 200);
+      if (capture) caps.push({ rule: 'R51b', capture: capture });
     }
 
     // R52: native-script name paired with romanized transliteration in a naming
