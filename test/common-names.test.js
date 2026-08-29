@@ -4,6 +4,11 @@ const { extractWikipediaCommonNames, parseGbifVernacularName } = require('../src
 
 const TESTS = [
   {
+    name: 'Lavandula latifolia (appositive "known as" list with "or" connector, demonym "Portuguese" prefix)',
+    extract: 'Lavandula latifolia, known as broadleaved lavender, spike lavender, aspic lavender or Portuguese lavender, is a flowering plant in the family Lamiaceae, native to the western Mediterranean basin.',
+    expected: ['broadleaved lavender', 'spike lavender', 'aspic lavender', 'Portuguese lavender'],
+  },
+  {
     name: 'Eschscholzia californica (appositive with article, or connector)',
     extract: 'Eschscholzia californica, the California poppy, golden poppy, Mexican poppy, California sunlight or cup of gold, is a species of flowering plant in the family Papaveraceae, native to the United States and Mexico.',
     expected: ['California poppy', 'golden poppy', 'Mexican poppy', 'California sunlight', 'cup of gold'],
