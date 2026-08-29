@@ -9,6 +9,11 @@ const TESTS = [
     expected: ['broadleaved lavender', 'spike lavender', 'aspic lavender', 'Portuguese lavender'],
   },
   {
+    name: 'Callicarpa (genus Selected species names filtered — species-level names not genus aliases)',
+    extract: 'Callicarpa, commonly known as beautyberry, is a genus of shrubs and small trees in the family Lamiaceae.\n\n== Selected species ==\n\nCallicarpa americana (American beautyberry) is native to the southeastern United States.\nCallicarpa japonica (Japanese beautyberry), native to Japan, is also cultivated in gardens. It is called Murasakishikibu in Japanese, in honor of Murasaki Shikibu.\nCallicarpa dichotoma (Purple beautyberry), native to Japan, China, and Korea.',
+    expected: ['beautyberry'],
+  },
+  {
     name: 'Eschscholzia californica (appositive with article, or connector)',
     extract: 'Eschscholzia californica, the California poppy, golden poppy, Mexican poppy, California sunlight or cup of gold, is a species of flowering plant in the family Papaveraceae, native to the United States and Mexico.',
     expected: ['California poppy', 'golden poppy', 'Mexican poppy', 'California sunlight', 'cup of gold'],

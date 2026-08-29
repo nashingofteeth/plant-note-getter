@@ -865,6 +865,17 @@ function _extractWikipediaCommonNames(text, trace) {
     }
   }
 
+  // "Selected species" lists individual species with their own common names
+  // (e.g., "Callicarpa japonica (Japanese beautyberry)"). Those names are
+  // species-level, not genus-level, so skip sentences that fall inside that
+  // section to avoid polluting genus aliases (e.g., "Murasakishikibu" for
+  // C. japonica should not become a Callicarpa genus alias). Do NOT skip
+  // generic "Species" sections — e.g., Zizania's "Species" section lists
+  // Northern/Southern/Manchurian wild rice which ARE expected as genus-level
+  // aliases in the test suite (wild rice types).
+  const selectedSpeciesSection = extractSection(processed, 'Selected species');
+  const selectedSpeciesSentences = selectedSpeciesSection ? new Set(getSentences(selectedSpeciesSection)) : new Set();
+
   // --- Sentence-by-sentence pattern matching ---
   // ─── RULE INDEX (construction → rule; category banners below) ─────────────
   // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44, R53, R56, R57, R59, R60
@@ -876,6 +887,11 @@ function _extractWikipediaCommonNames(text, trace) {
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
+    // Skip species-list sections for genus alias extraction
+    if (selectedSpeciesSentences.has(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
     const first = isFirst.has(sentence);
     if (!isTaxonomicSentence(sentence, first)) {
       if (trace) trace.skippedSentences.push({ sentence });
