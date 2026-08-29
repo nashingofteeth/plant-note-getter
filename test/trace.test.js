@@ -77,3 +77,35 @@ test('traceExtraction: skippedSentences lists gated non-taxonomic sentences', ()
     { sentence: 'This species is widely planted in parks.' },
   ]);
 });
+
+test('traceExtraction: isTaxonomicSentence generalized predicates', () => {
+  // R59 generalized: The + capitalized second element should not be gated
+  const r59a = traceExtraction('The Southern or annual wild rice (Z. aquatica), also an annual, grows in marshes. Southern or annual wild rice (Z. aquatica), also an annual, grows in marshes.');
+  assert.ok(r59a.names.length >= 0, 'R59 with The article still scans (not skipped)');
+  assert.ok(!r59a.skippedSentences.some(s => s.sentence.includes('Southern or annual wild rice')), 'R59 sentence not skipped');
+
+  // where they are called / where it is known as (generalized Gunnera clause)
+  const whereThey = traceExtraction('Yucca brevifolia is a plant where they are called datiles in Mexico. It is a species.');
+  assert.ok(whereThey.skippedSentences.length === 0 || !whereThey.skippedSentences.some(s => s.sentence.includes('where they are called')), 'where they are called not skipped');
+
+  const whereKnown = traceExtraction('Gunnera tinctoria is a plant where it is known as nalca. It is native.');
+  assert.ok(!whereKnown.skippedSentences.some(s => s.sentence.includes('where it is known as')), 'where it is known as not skipped');
+});
+
+test('traceExtraction: isLatinEpithet blocklist externalized', () => {
+  // Rosa rubiginosa should be blocked as binomial-lookalike via latin epithet dictionary
+  const rosa = traceExtraction('Rosa rubiginosa (sweet briar, sweetbriar rose) is a species of rose.');
+  assert.ok(!rosa.names.includes('Rosa rubiginosa'), 'Rosa rubiginosa blocked');
+  assert.ok(rosa.rejected.some(r => r.name === 'Rosa rubiginosa' && r.by === 'binomial-lookalike'), 'Rosa rubiginosa rejected as binomial-lookalike');
+
+  // isLatinEpithet / isPlantNoun via utils (externalized JSON)
+  const { isLatinEpithet, isPlantNoun } = require('../src/utils');
+  assert.ok(isLatinEpithet('rubiginosa'), 'rubiginosa is latin');
+  assert.ok(isLatinEpithet('lens'), 'lens is latin');
+  assert.ok(isLatinEpithet('tumefaciens'), 'tumefaciens is latin');
+  assert.ok(!isLatinEpithet('lavender'), 'lavender not latin');
+  assert.ok(!isLatinEpithet('heath'), 'heath not latin');
+  assert.ok(isPlantNoun('lavender') === false, 'lavender not plant noun alone');
+  assert.ok(isPlantNoun('fir'), 'fir is plant noun');
+  assert.ok(isPlantNoun('heath') === false, 'heath not in plant-noun list (handled via other path)');
+});

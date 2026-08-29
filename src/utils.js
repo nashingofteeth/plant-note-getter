@@ -60,6 +60,56 @@ function normalizeNameKey(name) {
   return stripArticle(name).toLowerCase().replace(/'s\b/g, '');
 }
 
+// ——— Plant noun / Latin epithet helpers (externalized) ———
+let _plantNouns = null;
+let _latinEpithets = null;
+
+function loadPlantNouns() {
+  if (_plantNouns) return _plantNouns;
+  try {
+    const p = path.join(__dirname, '..', 'data', 'plant-nouns.json');
+    const arr = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    _plantNouns = new Set(arr.map(s => s.toLowerCase()));
+  } catch { _plantNouns = new Set(); }
+  return _plantNouns;
+}
+
+function loadLatinEpithets() {
+  if (_latinEpithets) return _latinEpithets;
+  try {
+    const p = path.join(__dirname, '..', 'data', 'latin-epithets.json');
+    const arr = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    _latinEpithets = new Set(arr.map(s => s.toLowerCase()));
+  } catch { _latinEpithets = new Set(); }
+  return _latinEpithets;
+}
+
+function isPlantNoun(word) {
+  if (!word) return false;
+  const lower = word.toLowerCase();
+  // strip plural s for check (e.g., "oaks" -> "oak")
+  const singular = lower.endsWith('s') ? lower.slice(0, -1) : lower;
+  const set = loadPlantNouns();
+  return set.has(lower) || set.has(singular);
+}
+
+// Suffix heuristics for Latin epithets that are uncommon in English common names.
+// Conservative: only distinctive Latin suffixes; short -us/-a excluded to avoid false positives.
+// Includes -osa (rubiginosa), -ens/-faciens (tumefaciens) for bacterial/binomial leaks.
+const LATIN_SUFFIX_RE = /(ensis|ense|anus|iana|ianum|ensis|oides|ifolia|iflora|icola|ifera|flora|issima|ismus|ellus|atus|ata|atum|icus|ica|icum|alis|aris|ensis|oides|osa|ens|faciens|ii|iae)$/i;
+
+function isLatinEpithet(word) {
+  if (!word) return false;
+  const lower = word.toLowerCase();
+  if (isPlantNoun(lower)) return false;
+  const latinSet = loadLatinEpithets();
+  if (latinSet.has(lower)) return true;
+  if (LATIN_SUFFIX_RE.test(lower) && lower.length >= 6) return true;
+  // Patronymic -ii/-iae with length >=5 (e.g., douglasii, hallii, brownii)
+  if ((/ii$/i.test(lower) || /iae$/i.test(lower)) && lower.length >= 6) return true;
+  return false;
+}
+
 module.exports = {
   getCurrentDate,
   sanitizeFilename,
@@ -73,5 +123,9 @@ module.exports = {
   PLANT_TAG_PREFIX,
   PLANT_TAG_BASE,
   cleanName,
-  normalizeNameKey
+  normalizeNameKey,
+  loadPlantNouns,
+  loadLatinEpithets,
+  isPlantNoun,
+  isLatinEpithet
 };

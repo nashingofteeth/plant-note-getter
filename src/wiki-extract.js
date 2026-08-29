@@ -1,4 +1,4 @@
-const { stripArticle, isAbbreviatedBinomial } = require('./utils');
+const { stripArticle, isAbbreviatedBinomial, isPlantNoun, isLatinEpithet } = require('./utils');
 
 // Parse a single GBIF vernacular-name string into zero or more common names.
 function parseGbifVernacularName(raw) {
@@ -344,10 +344,13 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       else if (opts.allowBinomialLike) { /* skip binomial check */ }
       // Allow "Proper-name + generic plant noun" compounds like "Fraser fir"
       // (real binomial epithets are never bare English plant nouns).
-      else if (/^(?:fir|spruce|pine|oak|elm|maple|palm|ivy|rose|lily|poplar|birch|cedar|willow|ash|beech|cherry|apple|pear|plum|fig|grape|berry|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo|grass|fern|moss|algae|flower|tree|shrub|herb|plant|vine|bush|cactus|orchid|tulip|daisy|iris|lilac|jasmine|magnolia|eucalyptus|acacia|thistle|onion|olive|cranesbill|cypress|rhubarb|honeysuckle|mayapple|azalea|photinia|hellebore|willowherb|beautyberry|spiderflower|leadwort|plume|spikenard|mantle|hazel|hazelnut|rhododendron|seal|snow-flower|snowflower)s?$/i.test(segWords[1])) { /* skip binomial check */ }
+      else if (isPlantNoun(segWords[1])) { /* skip binomial check */ }
       else {
-        const englishPrefixes = /^(?:european|american|african|asian|australian|canadian|canada|mexican|chinese|japanese|indian|common|wild|red|white|black|blue|yellow|green|golden|silver|northern|southern|eastern|western|coastal|mountain|cape|alpine|tropical|arctic|boreal|mediterranean|greater|lesser|false|true|large|small|dwarf|giant|old|new|king|queen|prince|princess|lady|lord|baby|desert|river|garden|forest|rock|sea|ocean|island|swamp|meadow|prairie|steppe|tundra|coral|ivy|star|sun|moon|dragon|ghost|devil|angel|fairy|witch|flying|creeping|climbing|trailing|weeping|california|siskiyou|sweet|bitter|sour|stinging|dwarf|great|lesser|greater|spanish|italian|french|german|english|scottish|irish|welsh|greek|roman|celtic|portuguese|himalayan|andean|amazon|alaskan|christmas|lent|iceland|caucasian|dakriet|pará|sharinga|seringueira|texas|oregon|washington|virginia|florida|dakota|nevada|colorado|montana|idaho|wyoming|utah|arizona|kansas|nebraska|missouri|illinois|indiana|michigan|ohio|kentucky|tennessee|georgia|carolina|maine|massachusetts|connecticut|rhode|vermont|hampshire|antarctic|subarctic|subtropical|creeping|trailing|balsam|sand|verbena|cliff|maids|squash|moose|moosomin|moosewood|pembina|pimina|highbush|lowbush|siskiyou|water|white|american|scots|pine|cretan|mississippi|allegheny|atlantic|swamp|pot|marjoram|regal|royal|lily|daffodil|sasanqua|plymouth|plumeless|cladophora|marimo|ball|pet|confederate|dixie|gladwin|short|pacific|joshua|engelmann|channel|shasta|vancouver|amur|siberian|korean|madagascar|cordilleran|caribbean|labrador|scandinavian|alaska|bogori|cornish|madonna|bok|romanesco|armenian|chilean|taiwan|taiwanese|formosan|alishan)/i;
-        if (!englishPrefixes.test(segWords[0])) {
+        // Inverted: reject only if second word looks like a Latin epithet
+        // (externalized list + suffix heuristics). Otherwise allow — this
+        // replaces the unbounded englishPrefixes allowlist (206 entries) that
+        // required per-taxon patches (Portuguese, Cornish, etc.).
+        if (isLatinEpithet(segWords[1])) {
           if (trace) trace.rejected.push({ name: segment, rule, by: 'binomial-lookalike' });
           continue;
         }
@@ -551,9 +554,9 @@ function isSubjectBinomial(subject) {
     const w = words[i].replace(/^[\s\(\)\[\]\{\}"']/, '');
     if (!/^[a-z]/.test(w)) return false;
   }
-  const epithetBlocklist = /^(?:fruit|leaf|tree|bark|root|seed|flower|wood|plant|cone|berry|pine|oak|elm|maple|palm|ivy|vine|grass|shrub|herb|moss|reed|rush|sedge|brush|wood|apple|orange|cherry|pear|grape|plum|fig|nut|bean|pea|corn|rice|wheat|barley|oat|rye|cane|reed|bamboo)$/i;
   for (let i = 1; i < words.length; i++) {
-    if (epithetBlocklist.test(words[i].replace(/[.,;:)]/g, ''))) return false;
+    const clean = words[i].replace(/[.,;:)]/g, '');
+    if (isPlantNoun(clean)) return false;
   }
   return true;
 }
@@ -627,15 +630,15 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/name\s+.+\s+is\s+(?:often|also|commonly|frequently|widely)\s+applied\s+to/i.test(sentence)) return true;
   if (/commonly\s+known\s+as/i.test(sentence)) return true;
   if (/known\s+(?:by|as)\s/i.test(sentence)) return true;
-  if (/known\s+by\s+various/i.test(sentence)) return true;
   if (/\balso\s+called\b/i.test(sentence)) return true;
   if (/\b(?:is|are)\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
   if (/\b(?:often|sometimes|frequently)\s+called\b/i.test(sentence)) return true;
   // "Southern or annual wild rice (Z. aquatica), also an annual, grows..." —
   // "X or Y (abbreviated binomial)" alternative-name constructions (R59).
-  if (/^[A-ZÀ-Ÿ][a-zà-ÿ''\u2019-]+\s+or\s+[a-zà-ÿ][\w''\u2019-]*(?:\s+[a-zà-ÿ][\w''\u2019-]*)*\s*\([A-Z]\.\s+[a-z]+/i.test(sentence)) return true;
-  // "... where it is called X" (Gunnera-style subordinate naming clause)
-  if (/\bwhere\s+it\s+is\s+called\b/i.test(sentence)) return true;
+  // Generalized to allow optional article "The" and capitalized second element (e.g., "Northern wild rice (Z. palustris) is ...").
+  if (/^(?:The\s+)?[A-ZÀ-Ÿ][a-zà-ÿ''\u2019-]+(?:\s+[A-ZÀ-Ÿa-zà-ÿ][\w''\u2019-]*)*\s+or\s+[A-ZÀ-Ÿa-zà-ÿ][\w''\u2019-]*(?:\s+[A-ZÀ-Ÿa-zà-ÿ][\w''\u2019-]*)*\s*\([A-Z]\.\s+[a-z]+/i.test(sentence)) return true;
+  // "... where it is called X" (Gunnera-style subordinate naming clause) — generalized to they/are and known as variant
+  if (/\bwhere\s+(?:it|they)\s+(?:is|are)\s+(?:called|known\s+as)\b/i.test(sentence)) return true;
   // "... (hence the name X)" etymological common-name clauses
   if (/\b(?:hence|whence|thus|whereby)\s+the\s+name\b/i.test(sentence)) return true;
   return false;
