@@ -526,6 +526,20 @@ function isFamilyRestatement(sentence) {
   return /\b(?:family|families|genus|genera|order|subfamily|tribe|division|class)\s+[A-Z][a-z]+(?:\s+[a-z]+)*\s+or\s+(?:commonly\s+)?known\s+as\b/i.test(sentence);
 }
 
+// A sentence that defines a biological mechanism/process rather than naming the
+// taxon — "<Term> ( <gloss> ) is a characteristic of ...", "is a mechanism of",
+// "is a mode of", etc. The parenthetical gloss is a definition of the term (e.g.
+// "Anemophily (wind pollination) is a characteristic of some members this genus"
+// in Thalictrum), so R5/R6c captures from it (the term and the gloss) are biology
+// vocabulary, not plant common names. Detected by a closing paren followed by a
+// copula, an article, a mechanism noun, and "of". The mechanism nouns are
+// deliberately limited so plant-descriptor predicates ("is a green cruciferous
+// vegetable", "is a type of Chinese cabbage", "is a vegetable belonging to") are
+// NOT rejected. Drives the Thalictrum regression test.
+function isMechanismDefinition(sentence) {
+  return /\)\s+(?:is|was|are|were)\s+(?:a|an)\s+(?:characteristic|process|mechanism|mode|means|strategy|adaptation|phenomenon)\s+of\b/i.test(sentence);
+}
+
 function isPronunciationNotation(text) {
   return /\b(?:PLAT|THEW)\b/i.test(text) || /[əɛɪɒʊʌæɑɔɵʃʒθðŋɾɻɹɭɭɹɺɹɻ]/.test(text);
 }
@@ -650,7 +664,10 @@ function isTaxonomicSentence(sentence, isFirst) {
 // Truncate a capture at the first comma that introduces a descriptive/explanatory
 // clause ("also known as X, gives the tree...", "..., since this...", "..., because...").
 // Descriptive continuations introduce non-name content (verbs, "the", articles+descriptors).
-const DESCRIPTIVE_CONTINUATION = /,\s+(?:gives|since|because|where|tastes|in\s+which|such\s+as|as\s+the|as\s+a|which\s+|that\s+the)/i;
+// A pronoun+verb continuation (", it includes ...", ", they are ...") also marks a
+// new independent clause after a name — e.g. "referred to as sage, it includes two
+// widely used herbs, Salvia officinalis ..." — so the name capture stops at the comma.
+const DESCRIPTIVE_CONTINUATION = /,\s+(?:gives|since|because|where|tastes|in\s+which|such\s+as|as\s+the|as\s+a|which\s+|that\s+the|(?:and\s+)?(?:it|they|these|those)\s+(?:includes?|include|contains?|contain|produces?|produce|gives?|give|yields?|yield|has|have|is|are|was|were)\b)/i;
 function truncateAtDescriptiveClause(capture) {
   const m = capture.match(DESCRIPTIVE_CONTINUATION);
   if (m) return capture.slice(0, m.index).trim();
@@ -699,6 +716,12 @@ function addNames(captures, results, seenKeys, trace, sentence = null) {
     // should not contribute names to the current taxon's alias list.
     if (sentence && /but\s+is\s+a\s+different\s+species/i.test(sentence)) {
       if (trace) trace.rejected.push({ name: capture, rule, by: 'different-species' });
+      continue;
+    }
+    // Sentences that define a biological mechanism ("X (gloss) is a
+    // characteristic of ...") yield biology vocabulary, not plant common names.
+    if (sentence && isMechanismDefinition(sentence)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'mechanism-definition' });
       continue;
     }
     // Whole-capture pronunciation check: reject only when the capture has no
@@ -1243,7 +1266,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // R11: "referred to as" mid-sentence — capture to end
     const r11 = sentence.match(/referred\s+to\s+as\s+(?:a\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
     if (r11) {
-      const capture = finalizeCapture(r11[1], 300);
+      const capture = finalizeCapture(truncateAtDescriptiveClause(r11[1]), 300);
       // Reject anatomical structures, lumber-industry jargon, and provenance
       if (capture
           && !/\b(?:structures?|anatomical|spurs|peduncles?|stamens?|pistils?|stigma|ovary|ovules?|anthers?|filaments?|petals?|sepals?|leaves?|roots?|stems?|bark|wood|tissues?|cells?|organs?)\b/i.test(sentence)
@@ -1391,7 +1414,14 @@ function _extractWikipediaCommonNames(text, trace) {
     const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s*[.,]\s*$)/i);
     if (r24) {
       const capture = finalizeCapture(r24[1], 200);
-      if (capture) caps.push({ rule: 'R24', capture: capture });
+      // Reject historical/etymological attribution: "called Salvia by the Romans"
+      // is the Latin name used by an ancient people, not a common name. The bare
+      // "by the <People>" (no "indigenous"/"people" qualifier) is a Latin-name
+      // marker; indigenous-name attributions ("by the indigenous Cahuilla") are
+      // preserved by R10/R25 elsewhere.
+      if (capture && !/\s+by\s+the?\s+[A-Z][a-z]+\b/.test(capture)) {
+        caps.push({ rule: 'R24', capture: capture });
+      }
     }
 
     // R25: "is known as X" — passive form. The tail terminates the capture at
@@ -1609,7 +1639,13 @@ function _extractWikipediaCommonNames(text, trace) {
       const beforeMatch = sentence.slice(0, r50.index);
       const otherTaxonAlias = /\([^()]*$/.test(beforeMatch)
         && /\b[A-Z][a-z]+\s+[a-z]+\s*\($/.test(beforeMatch);
-      if (!(isSingleWord && isExplanatory) && !hasJargon && !otherTaxonAlias) {
+      // Reject historical/etymological attribution after the quote: 'called
+      // "Salvia" by the Romans' — the quoted name is the Latin name used by an
+      // ancient people, not a common name. Bare "by the <People>" (no
+      // "indigenous"/"people" qualifier) signals Latin-name usage; indigenous
+      // attributions ("by the indigenous Cahuilla") use bare/qualified forms.
+      const isPeopleAttribution = /\s+by\s+the?\s+[A-Z][a-z]+\b/.test(sentence.slice(nameEnd));
+      if (!(isSingleWord && isExplanatory) && !hasJargon && !otherTaxonAlias && !isPeopleAttribution) {
         // Expand "winter (or spring) heather" → "winter heather", "spring heather"
         const alt = inner.match(/^(.+?)\s+\(\s*(?:also\s+)?(?:or|and)\s+(.+?)\s*\)\s+(.+)$/i);
         if (alt) {

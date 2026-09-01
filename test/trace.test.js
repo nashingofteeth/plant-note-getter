@@ -92,6 +92,15 @@ test('traceExtraction: isTaxonomicSentence generalized predicates', () => {
   assert.ok(!whereKnown.skippedSentences.some(s => s.sentence.includes('where it is known as')), 'where it is known as not skipped');
 });
 
+test('traceExtraction: mechanism-definition sentences rejected as such', () => {
+  const thalictrum = traceExtraction('Thalictrum ( ) is a genus of herbaceous perennial flowering plants in the buttercup family, Ranunculaceae, native mostly to temperate regions. Meadow-rue is a common name for plants in this genus.\n\n== Ecology ==\nAnemophily (wind pollination) is a characteristic of some members this genus, as seen in Thalictrum fendleri and Thalictrum dioicum.');
+  assert.deepStrictEqual(thalictrum.names, ['Meadow-rue']);
+  assert.ok(
+    thalictrum.rejected.some((r) => r.by === 'mechanism-definition'),
+    'Anemophily/wind pollination rejected as mechanism-definition'
+  );
+});
+
 test('traceExtraction: isLatinEpithet blocklist externalized', () => {
   // Rosa rubiginosa should be blocked as binomial-lookalike via latin epithet dictionary
   const rosa = traceExtraction('Rosa rubiginosa (sweet briar, sweetbriar rose) is a species of rose.');
