@@ -94,6 +94,20 @@ function stripOuterParens(text) {
   return result;
 }
 
+// Split slash-variant names sharing a head into separate names, e.g.
+// "Rocky Mountain beeplant/beeweed" -> ["Rocky Mountain beeplant",
+// "Rocky Mountain beeweed"] (both halves carry the shared head), and a bare
+// "X/Y" -> ["X", "Y"]. Non-variant clauses (spaces around the slash,
+// "and/or", digits, etc.) are returned unchanged.
+function splitSlashVariants(clause) {
+  if (!clause.includes('/')) return [clause];
+  const sharedHead = clause.match(/^(.+?)\s+([\w'\u2019-]+)\/([\w'\u2019-]+)$/);
+  if (sharedHead) return [`${sharedHead[1]} ${sharedHead[2]}`, `${sharedHead[1]} ${sharedHead[3]}`];
+  const bare = clause.match(/^([\w'\u2019-]+)\/([\w'\u2019-]+)$/);
+  if (bare) return [bare[1], bare[2]];
+  return [clause];
+}
+
 function extractNamesFromCapture(captured, trace, rule, opts = {}) {
   if (!captured || !captured.trim()) return [];
 
@@ -169,7 +183,7 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
   const results = [];
   const seenKeys = new Set();
 
-  for (let raw of text.split(',')) {
+  for (let raw of text.split(',').flatMap(splitSlashVariants)) {
     let segment = raw.trim();
     if (!segment) continue;
 
