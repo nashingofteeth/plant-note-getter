@@ -1174,10 +1174,15 @@ function _extractWikipediaCommonNames(text, trace) {
 
     // ─── "known as / called / referred to as" ────────────────────────────
     // R8: "commonly known as" / "generally known as" — stop at copula, an
-    // explanatory "because" clause, or end
+    // explanatory "because" clause, or end. The comma-terminator list also
+    // stops at a comma followed by a bare copula (is/are/was/were), so a name
+    // list like "rosinweeds, are herbaceous perennial plants growing to ..."
+    // (Silphium genus) terminates at "rosinweeds," instead of swallowing the
+    // whole descriptive tail ("with yellow flowerheads that resemble
+    // sunflowers").
     // Note: family-restatement filtering (e.g. "Fabaceae or commonly known as
     // legume or bean family") is centralized in addNames via isFamilyRestatement.
-    const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety))\b|\s+because\b|$)/i);
+    const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety)|is|are|was|were)\b|\s+because\b|$)/i);
     if (r8) {
       const capture = finalizeCapture(r8[1], 300);
       if (capture) caps.push({ rule: 'R8', capture: capture });

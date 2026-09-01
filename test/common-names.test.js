@@ -479,6 +479,11 @@ const TESTS = [
     expected: ['coffee family', 'madder family', 'bedstraw family'],
   },
   {
+    name: 'Silphium (genus) ("commonly known as rosinweeds, are herbaceous..." — R8 must stop at the comma+copula, not swallow the descriptive tail)',
+    extract: 'Silphium is a genus of North American plants in the tribe Heliantheae within the family Asteraceae.\nMembers of the genus, commonly known as rosinweeds, are herbaceous perennial plants growing to 0.2 m (8 in) to more than 2.5 m (8 ft 2 in) tall, with yellow (rarely white) flowerheads that resemble sunflowers. In the rosinweeds, the ray florets in the head are female and the disc florets are male; this differs from sunflowers, where ray florets are sterile and disc florets are perfect, capable of producing both pollen and seeds.\nThe name of the genus comes from the Ancient Greek word for a North African plant whose identity has been lost, though it is known its gum or juice was prized by the ancients as a medicine and a condiment.',
+    expected: ['rosinweeds'],
+  },
+  {
     name: 'Cyperaceae ("a family of ... plants known as sedges" with no true-sedges leak)',
     extract: 'The Cyperaceae () are a family of  graminoid (grass-like), monocotyledonous flowering plants known as sedges. The family contains around 5,500 described species in about 90 genera \u2013 the largest being the "true sedges" (Carex), with over 2,000 species.',
     expected: ['sedges'],
