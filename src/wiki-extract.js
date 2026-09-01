@@ -220,6 +220,9 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       continue;
     }
 
+    // Strip a trailing language qualifier ("in the Igbo language",
+    // "in the French language") — the name is the word before it.
+    segment = segment.replace(/\s+in\s+(?:the\s+)?[A-Za-z][A-Za-z-]*\s+language\b/i, '').trim();
     segment = segment.replace(/\s+in\s+(?:the\s+)?[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*$/, '');
     // Reject segments that are purely geographic qualifiers
     if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/.test(segment)) {
@@ -906,6 +909,24 @@ function _extractWikipediaCommonNames(text, trace) {
       continue;
     }
 
+    // A naming sentence whose subject is an abbreviated binomial ("V. condensata
+    // is commonly known as X") attributes those names to that specific species,
+    // not to the broader taxon (e.g. genus) the note describes. Claytonia's
+    // "C. perfoliata is called 'piyada̠'" is unaffected — it is captured by the
+    // section-based quoted-language extractor, not this loop.
+    if (/(?:^|,\s*)[A-Z]\.\s+[a-z][a-z-]*\s+(?:is|are|was|were)\s+(?:commonly|generally|widely)?\s+known\s+as\b/i.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
+    // "Common names for these/those species" uses a deictic reference to species
+    // enumerated earlier in the article, so the names are species-scoped, not
+    // genus-scoped (e.g. "Common names for these species include bitterleaf...").
+    if (/common\s+names?\s+for\s+(?:these|those)\s+species\b/i.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
     // A sentence whose subject is a cultivar generically ("the most common
     // cultivar is known as ...", "a cultivar is known as ...") yields cultivar
     // names, not species common names. Skip those. (Specific "X, a cultivar,
@@ -1240,8 +1261,11 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture.length < 200) caps.push({ rule: 'R11b', capture: capture });
     }
 
-    // R11c: "Members are commonly known as X, Y, or Z" — plural subject with naming pattern
-    const r11c = sentence.match(/(?:members|species|plants?|trees?|shrubs?)\s+(?:are|is)\s+commonly\s+known\s+as\s+(.+?)(?:\s*\.|$)/i);
+    // R11c: "Members are commonly known as X, Y, or Z" and "Some species of
+    // this genus are known as ironweeds" — plural subject with naming pattern.
+    // "commonly" is optional ("are known as" alone), and an "of this/the genus"
+    // qualifier may sit between the subject noun and the copula.
+    const r11c = sentence.match(/(?:members|species|plants?|trees?|shrubs?)\s+(?:of\s+(?:this|the)\s+genus\s+)?(?:are|is)\s+(?:commonly\s+)?known\s+as\s+(.+?)(?:\s*\.|$)/i);
     if (r11c) {
       const capture = finalizeCapture(r11c[1], 300);
       if (capture) caps.push({ rule: 'R11c', capture: capture });

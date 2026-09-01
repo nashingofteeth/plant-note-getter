@@ -900,6 +900,21 @@ const TESTS = [
     extract: 'Spiraea douglasii is a species of flowering plant in the rose family. Common names include hardhack, hardhack steeplebush, Douglas\' spirea, douglasspirea, steeplebush, and rose spirea.',
     expected: ['hardhack', 'hardhack steeplebush', "Douglas' spirea", 'douglasspirea', 'steeplebush', 'rose spirea'],
   },
+  {
+    name: 'Vernonia (intro plural passive "are known as ironweeds" + "in the Igbo language" list qualifier; species-scoped names excluded)',
+    extract: 'Vernonia is a genus of about 350 species of forbs and shrubs in the family Asteraceae. Some species of this genus are known as ironweeds. Some species are edible and of economic value.\n\n== Uses ==\n\n=== Food, medicine and oilseed ===\nSeveral species of Vernonia, including V. calvoana, V. amygdalina, and V. colorata, are eaten as leaf vegetables. Common names for these species include bitterleaf, onugbu in the Igbo language, ewuro and ndole. In Brazil, V. condensata is commonly known as "figatil" or "necroton" and used in local traditional medicine.',
+    expected: ['ironweeds'],
+  },
+  {
+    name: 'Vernonia (plural subject "are known as" passive naming statement)',
+    extract: 'Some species of this genus are known as ironweeds.',
+    expected: ['ironweeds'],
+  },
+  {
+    name: 'Vernonia (species-scoped names excluded — "Common names for these species" + abbreviated-binomial subject)',
+    extract: 'Several species of Vernonia, including V. calvoana, V. amygdalina, and V. colorata, are eaten as leaf vegetables. Common names for these species include bitterleaf, onugbu, ewuro and ndole. In Brazil, V. condensata is commonly known as "figatil" or "necroton" and used in local traditional medicine.',
+    expected: [],
+  },
 ];
 
 const GBIF_TESTS = [
