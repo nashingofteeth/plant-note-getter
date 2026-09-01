@@ -555,6 +555,15 @@ function isEtiologyParen(text) {
   return /\b(?:named\s+(?:after|for)|honour|homage|commemorat|eponym|in\s+reference\s+to|allusion\s+to)\b/i.test(text);
 }
 
+// Etymology-notation glosses of the form "'word'=gloss" (e.g. Delosperma
+// ('delos'=evident, 'sperma'=seed)) — dictionary-style definitions of the
+// name's parts, not common names. R6c captures the parenthetical as a bare
+// name list; the leading quote is stripped by the pipeline, so match an
+// optional leading quote before the word.
+function isEtymologyGloss(name) {
+  return /^[''\u2018\u2019]?[\w''\u2019-]+[''\u2018\u2019]?\s*=\s*\S+/.test(name.trim());
+}
+
 function isAbbreviatedBinomialLike(text) {
   return /^[A-Z]\.\s+[a-z]+/.test(text.trim());
 }
@@ -756,6 +765,7 @@ function addNames(captures, results, seenKeys, trace, sentence = null) {
       if (isHumanJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isHumanJunk' }); continue; }
       if (isClimateJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isClimateJunk' }); continue; }
       if (isLatinJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isLatinJunk' }); continue; }
+      if (isEtymologyGloss(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isEtymologyGloss' }); continue; }
       if (hasCJK(name)) { if (trace) trace.rejected.push({ name, rule, by: 'hasCJK' }); continue; }
       pushResult(results, seenKeys, name, trace, rule);
     }

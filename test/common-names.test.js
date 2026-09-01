@@ -69,6 +69,11 @@ const TESTS = [
     expected: ['ice poppy'],
   },
   {
+    name: 'Delosperma (etymology gloss parenthetical "(\'delos\'=evident, \'sperma\'=seed)" not common names)',
+    extract: "Delosperma ('delos'=evident, 'sperma'=seed) is a genus of around 170 species of succulent plants, formerly included in Mesembryanthemum in the family Aizoaceae.",
+    expected: [],
+  },
+  {
     name: 'Viburnum edule (appositive with article, long list, no comma before verb)',
     extract: 'Viburnum edule, the squashberry, mooseberry, moosomin, moosewood viburnum, pembina, pimina, highbush cranberry, or lowbush cranberry is a species of shrub.',
     expected: ['squashberry', 'mooseberry', 'moosomin', 'moosewood viburnum', 'pembina', 'pimina', 'highbush cranberry', 'lowbush cranberry'],
