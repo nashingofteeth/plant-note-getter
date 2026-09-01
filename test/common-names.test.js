@@ -946,6 +946,11 @@ const TESTS = [
     expected: ['desert willow', 'desert-willow'],
   },
   {
+    name: 'Echinocereus (R41 "sometimes known as X, a term also used for Y and Z" — trailing shared-term clause must not leak Y/Z as names)',
+    extract: 'Echinocereus is a genus of ribbed, usually small to medium-sized, cylindrical shaped cacti, comprising about 70 species native to the southern United States and Mexico in very sunny, rocky places. Usually the flowers are large and the fruit edible.\nThe name comes from the Ancient Greek ἐχῖνος (echinos), meaning "sea urchin", and the Latin cereus meaning "candle". They are sometimes known as hedgehog cacti, a term also used for the Pediocactus and Echinopsis.',
+    expected: ['hedgehog cacti'],
+  },
+  {
     name: 'Cleomella serrulata (unquoted indigenous "called X in the <Lang> language" list; intro + Navajo/Hopi/Zuni names)',
     extract: "Cleomella serrulata (syns. Cleome serrulata and Peritoma serrulata), commonly known as Rocky Mountain beeplant/beeweed, stinking-clover, bee spider-flower, skunk weed, Navajo spinach, and guaco, is a species of annual plant in the genus Cleomella. Many species of insects are attracted to it, especially bees, which helps in the pollination of nearby plants. It is native to southern Canada and the western and central United States. The plant has often been used for food, to make dyes for paint, and as a treatment in traditional medicine.\n\n\n== Description ==\nThe plant is called waaʼ in the Navajo language, tumi in the Hopi language, and both aʼpilalu and ado꞉we in the Zuni language.",
     expected: ['Rocky Mountain beeplant/beeweed', 'stinking-clover', 'bee spider-flower', 'skunk weed', 'Navajo spinach', 'guaco', 'waaʼ', 'tumi', 'aʼpilalu', 'ado꞉we'],

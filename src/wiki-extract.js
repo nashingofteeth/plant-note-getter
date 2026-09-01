@@ -1625,7 +1625,10 @@ function _extractWikipediaCommonNames(text, trace) {
     // Match "known as" with or without preceding comma, but NOT when preceded
     // by a copula (is/are/was/were) which would indicate explanatory context
     // like "It is known as X because..." rather than a naming context.
-    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|$)/i);
+    // The ",\s+a\s+term..." terminator stops a trailing shared-term clause from
+    // leaking other genera as names (Echinocereus: "known as hedgehog cacti,
+    // a term also used for the Pediocactus and Echinopsis" -> [hedgehog cacti]).
+    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
       if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
