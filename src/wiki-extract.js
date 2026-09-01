@@ -61,6 +61,7 @@ const LEADING_PREFIX_PATTERNS = [
   /^commonly\s+named\s+/i,
   /^the\s+fruit\s+as\s+/i,
   /^with\s+the\s+flowers\s+as\s+/i,
+  /^both\s+/i,
 ];
 
 const STOPWORD_SEGMENTS = new Set([
@@ -658,6 +659,10 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/\bwhere\s+(?:it|they)\s+(?:is|are)\s+(?:called|known\s+as)\b/i.test(sentence)) return true;
   // "... (hence the name X)" etymological common-name clauses
   if (/\b(?:hence|whence|thus|whereby)\s+the\s+name\b/i.test(sentence)) return true;
+  // Multilingual/indigenous naming list: "The plant is called waaʼ in the Navajo
+  // language, tumi in the Hopi language, and both aʼpilalu and ado꞉we in the Zuni
+  // language." — unquoted "called X in the <Lang> language" (Cleomella serrulata).
+  if (/called\s+.+?\s+in\s+(?:the\s+)?[A-Za-z-]+\s+language\b/i.test(sentence)) return true;
   return false;
 }
 
@@ -1461,6 +1466,20 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r26) {
       const capture = finalizeCapture(r26[1], 200);
       if (capture) caps.push({ rule: 'R26', capture: capture });
+    }
+
+    // R-lang: unquoted multilingual/indigenous naming list — "called X in the
+    // <Lang> language, Y in the <Lang2> language, and both Z and W in the <Lang3>
+    // language" (e.g. Cleomella serrulata: "The plant is called waaʼ in the Navajo
+    // language, tumi in the Hopi language, and both aʼpilalu and ado꞉we in the Zuni
+    // language."). extractNamesFromCapture strips each "in the <Lang> language"
+    // qualifier per clause; the "both" lead-in is dropped via LEADING_PREFIX_PATTERNS.
+    if (/(?:is|are|was|were)\s+called\s+.+?\s+in\s+(?:the\s+)?[A-Z][A-Za-z-]+\s+language\b/i.test(sentence)) {
+      const rLang = sentence.match(/(?:is|are|was|were)\s+called\s+(.+?)\s*\.\s*$/i);
+      if (rLang) {
+        const capture = finalizeCapture(rLang[1], 300);
+        if (capture) caps.push({ rule: 'R-lang', capture: capture });
+      }
     }
 
     // R46: "where it is called X" / "called X" in subordinate clause (Farfugium "tsuwabuki")

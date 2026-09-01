@@ -940,6 +940,11 @@ const TESTS = [
     extract: 'Chilopsis is a monotypic genus of flowering plants containing the single species Chilopsis linearis. It is known commonly as desert willow or desert-willow because of its willow-like leaves, but it is not a true willow – being instead a member of the catalpa family.',
     expected: ['desert willow', 'desert-willow'],
   },
+  {
+    name: 'Cleomella serrulata (unquoted indigenous "called X in the <Lang> language" list; intro + Navajo/Hopi/Zuni names)',
+    extract: "Cleomella serrulata (syns. Cleome serrulata and Peritoma serrulata), commonly known as Rocky Mountain beeplant/beeweed, stinking-clover, bee spider-flower, skunk weed, Navajo spinach, and guaco, is a species of annual plant in the genus Cleomella. Many species of insects are attracted to it, especially bees, which helps in the pollination of nearby plants. It is native to southern Canada and the western and central United States. The plant has often been used for food, to make dyes for paint, and as a treatment in traditional medicine.\n\n\n== Description ==\nThe plant is called waaʼ in the Navajo language, tumi in the Hopi language, and both aʼpilalu and ado꞉we in the Zuni language.",
+    expected: ['Rocky Mountain beeplant/beeweed', 'stinking-clover', 'bee spider-flower', 'skunk weed', 'Navajo spinach', 'guaco', 'waaʼ', 'tumi', 'aʼpilalu', 'ado꞉we'],
+  },
 ];
 
 const GBIF_TESTS = [
