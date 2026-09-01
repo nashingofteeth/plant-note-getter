@@ -36,6 +36,18 @@ function buildAliases(entity) {
   return aliases.length > 0 ? aliases : null;
 }
 
+async function resolveWikipediaArticle(entity) {
+  const titles = [];
+  if (entity.wikipediaTitle) titles.push(entity.wikipediaTitle);
+  const sci = entity.scientificName || entity.label;
+  if (sci) titles.push(sci);
+  for (const title of titles) {
+    const article = await commonNamesModule.fetchWikipediaArticle(title);
+    if (article) return article;
+  }
+  return null;
+}
+
 async function collectCommonNames(entity, candidateEntities) {
   const synonymData = await collectSynonymData(entity, candidateEntities);
   entity.wikipediaUrl = synonymData.wikipediaUrl;
@@ -68,9 +80,15 @@ async function collectCommonNames(entity, candidateEntities) {
     bySource.gbif = [...gbifNamesRaw];
   }
 
-  let wikiNamesRaw = [];
-  if (entity.wikipediaTitle) {
-    wikiNamesRaw = await commonNamesModule.fetchWikipediaCommonNames(entity.wikipediaTitle);
+  const wikiArticle = await resolveWikipediaArticle(entity);
+  if (wikiArticle) {
+    if (!entity.wikipediaTitle || entity.wikipediaTitle !== wikiArticle.wikipediaTitle) {
+      entity.wikipediaTitle = wikiArticle.wikipediaTitle;
+    }
+    if (!entity.wikipediaUrl) {
+      entity.wikipediaUrl = wikiArticle.wikipediaUrl;
+    }
+    const wikiNamesRaw = wikiArticle.names;
     const wikiSeen = new Set();
     for (const name of wikiNamesRaw) {
       const normalized = cleanName(name);
@@ -94,5 +112,6 @@ async function collectCommonNames(entity, candidateEntities) {
 
 module.exports = {
   buildAliases,
-  collectCommonNames
+  collectCommonNames,
+  resolveWikipediaArticle
 };

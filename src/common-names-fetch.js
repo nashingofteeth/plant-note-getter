@@ -32,21 +32,32 @@ async function fetchGbifCommonNames(gbifId) {
   return names;
 }
 
-async function fetchWikipediaCommonNames(wikipediaTitle) {
-  if (!wikipediaTitle) return [];
+async function fetchWikipediaArticle(wikipediaTitle) {
+  if (!wikipediaTitle) return null;
 
   await rateLimit();
   const url = `${WIKIPEDIA_MEDIAWIKI_API}?action=query&prop=extracts&explaintext=&redirects=&titles=${encodeURIComponent(wikipediaTitle)}&format=json`;
   const data = await fetchJSON(url);
   const pages = data?.query?.pages;
-  if (!pages) return [];
-  const extract = Object.values(pages)[0]?.extract;
-  if (!extract) return [];
+  if (!pages) return null;
+  const page = Object.values(pages)[0];
+  if (!page || page.missing || !page.extract) return null;
 
-  return extractWikipediaCommonNames(extract);
+  const title = page.title || wikipediaTitle;
+  return {
+    wikipediaTitle: title,
+    wikipediaUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+    names: extractWikipediaCommonNames(page.extract)
+  };
+}
+
+async function fetchWikipediaCommonNames(wikipediaTitle) {
+  const article = await fetchWikipediaArticle(wikipediaTitle);
+  return article ? article.names : [];
 }
 
 module.exports = {
   fetchGbifCommonNames,
+  fetchWikipediaArticle,
   fetchWikipediaCommonNames
 };

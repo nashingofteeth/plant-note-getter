@@ -5,18 +5,21 @@ const assert = require('node:assert');
 // point at the stubs (deterministic, no API calls).
 const commonNames = require('../src/common-names-fetch');
 commonNames.fetchGbifCommonNames = async () => [];
-commonNames.fetchWikipediaCommonNames = async () => [];
+commonNames.fetchWikipediaArticle = async () => null;
 const GBIF_STUB = commonNames.fetchGbifCommonNames;
-const WIKI_STUB = commonNames.fetchWikipediaCommonNames;
+const WIKI_STUB = commonNames.fetchWikipediaArticle;
 
 function stubCommonNames({ gbif = [], wikipedia = [] } = {}) {
   commonNames.fetchGbifCommonNames = async () => [...gbif];
-  commonNames.fetchWikipediaCommonNames = async () => [...wikipedia];
+  commonNames.fetchWikipediaArticle = async (title) =>
+    wikipedia.length > 0
+      ? { wikipediaTitle: title, wikipediaUrl: `https://en.wikipedia.org/wiki/${title.replace(/ /g, '_')}`, names: [...wikipedia] }
+      : null;
 }
 
 function resetStubs() {
   commonNames.fetchGbifCommonNames = GBIF_STUB;
-  commonNames.fetchWikipediaCommonNames = WIKI_STUB;
+  commonNames.fetchWikipediaArticle = WIKI_STUB;
 }
 
 const { collectCommonNames, buildAliases } = require('../src/names');
@@ -137,17 +140,32 @@ test('collectCommonNames: no GBIF fetch when gbifId missing', async () => {
   resetStubs();
 });
 
-test('collectCommonNames: no Wikipedia fetch when wikipediaTitle missing', async () => {
+test('collectCommonNames: no Wikipedia fetch when no wikipediaTitle and no scientific name to fall back to', async () => {
   stubCommonNames({ wikipedia: ['should not appear'] });
   const entity = {
     id: 'Q1',
-    scientificName: 'Test thing',
     commonNames: ['wikidata name'],
     aliases: []
   };
   const { names, bySource } = await collectCommonNames(entity, []);
   assert.deepStrictEqual(names, ['wikidata name']);
   assert.strictEqual(bySource.wikipedia, undefined);
+  resetStubs();
+});
+
+test('collectCommonNames: falls back to scientific name when wikipediaTitle missing', async () => {
+  stubCommonNames({ wikipedia: ['Baker cypress'] });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Hesperocyparis bakeri',
+    commonNames: [],
+    aliases: []
+  };
+  const { names, bySource } = await collectCommonNames(entity, []);
+  assert.strictEqual(entity.wikipediaTitle, 'Hesperocyparis bakeri');
+  assert.strictEqual(entity.wikipediaUrl, 'https://en.wikipedia.org/wiki/Hesperocyparis_bakeri');
+  assert.deepStrictEqual(bySource.wikipedia, ['Baker cypress']);
+  assert.deepStrictEqual(names, ['Baker cypress']);
   resetStubs();
 });
 
