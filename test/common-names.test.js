@@ -930,6 +930,16 @@ const TESTS = [
     extract: 'Salvia () is the largest genus of plants in the sage family Lamiaceae, with just under 1,000 species of shrubs, herbaceous perennials, and annuals. Within the Lamiaceae, Salvia is part of the tribe Mentheae within the subfamily Nepetoideae.  One of several genera commonly referred to as sage, it includes two widely used herbs, Salvia officinalis (common sage, or just "sage") and Salvia rosmarinus (rosemary, formerly Rosmarinus officinalis). \nThe genus is distributed throughout the Old World and the Americas (over 900 total species), with three distinct regions of diversity: Central America and South America (approximately 600 species); Central Asia and the Mediterranean (250 species); Eastern Asia (90 species).\n\n== Etymology ==\nThe name Salvia derives from Latin salvia (sage), from salvus (safe, secure, healthy), an adjective related to salūs (health, well-being, prosperity or salvation), and salvēre (to feel healthy, to heal). Pliny the Elder was the first author known to describe a plant called "Salvia" by the Romans, likely describing the type species for the genus Salvia, Salvia officinalis.\nThe common modern English name sage derives from Middle English sawge, which was borrowed from Old French sauge, from Latin salvia (the source of the botanical name). When used without modifiers, the name "sage" generally refers to Salvia officinalis ("common sage" or "culinary sage"), although it is used with modifiers to refer to any member of the genus. The ornamental species are commonly referred to by their genus name Salvia.',
     expected: ['sage'],
   },
+  {
+    name: 'Arnoglossum (genus) ("They have the common name X because..." — plural-subject have-variant of R19)',
+    extract: 'Arnoglossum is a North American genus of plants in the family Asteraceae, described as a genus in 1817. They have the common name Indian plantain because they resemble the unrelated common plantain (Plantago spp.).',
+    expected: ['Indian plantain'],
+  },
+  {
+    name: 'Chilopsis (R15 "known commonly as X or Y because of..." — R15 must stop at "because", mirroring R8)',
+    extract: 'Chilopsis is a monotypic genus of flowering plants containing the single species Chilopsis linearis. It is known commonly as desert willow or desert-willow because of its willow-like leaves, but it is not a true willow – being instead a member of the catalpa family.',
+    expected: ['desert willow', 'desert-willow'],
+  },
 ];
 
 const GBIF_TESTS = [

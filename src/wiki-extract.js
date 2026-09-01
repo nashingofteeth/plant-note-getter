@@ -1343,8 +1343,11 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R14', capture: capture });
     }
 
-    // R15: "known commonly as" — capture to copula or end
-    const r15 = sentence.match(/known\s+commonly\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
+    // R15: "known commonly as" — capture to copula, "because" clause, or end.
+    // The `because` terminator mirrors R8 (line 1185): the Chilopsis intro "known
+    // commonly as desert willow or desert-willow because of its willow-like leaves"
+    // must stop at "because" so the explanatory tail doesn't leak as a name.
+    const r15 = sentence.match(/known\s+commonly\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s+because\b|$)/i);
     if (r15) {
       const capture = finalizeCapture(r15[1], 300);
       if (capture) caps.push({ rule: 'R15', capture: capture });
@@ -1376,8 +1379,11 @@ function _extractWikipediaCommonNames(text, trace) {
       if (capture) caps.push({ rule: 'R18', capture: capture });
     }
 
-    // R19: "has the common names X and Y" — capture full list
-    const r19 = sentence.match(/has\s+the\s+common\s+names?\s+(.+)/i);
+    // R19: "has/have the common names X and Y" — capture full list; terminate at
+    // an explanatory "because" clause (e.g. Arnoglossum "They have the common
+    // name Indian plantain because they resemble the unrelated common plantain")
+    // so the gloss tail isn't swallowed as part of the name.
+    const r19 = sentence.match(/(?:has|have)\s+the\s+common\s+names?\s+(.+?)(?:\s+because\b|$)/i);
     if (r19) {
       const capture = finalizeCapture(r19[1], 300);
       if (capture) caps.push({ rule: 'R19', capture: capture });
