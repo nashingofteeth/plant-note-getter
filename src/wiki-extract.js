@@ -31,10 +31,11 @@ const FILLER_SEGMENT_PATTERNS = [
 
 const LEADING_PREFIX_PATTERNS = [
   /^common\s+names?\s+/i,
-  /^other\s+names?\s+include\s+/i,
+  /^(?:other|additional)\s+(?:english\s+)?names?\s+include\s+/i,
   /^other\s+names?\s+/i,
   /^as\s+/i,
   /^also\s+/i,
+  /^sometimes\s+/i,
   /^by\s+the\s+names?\s+/i,
   /^simply\s+/i,
   /^the\s+name\s+/i,
@@ -61,6 +62,11 @@ const LEADING_PREFIX_PATTERNS = [
   /^commonly\s+named\s+/i,
   /^the\s+fruit\s+as\s+/i,
   /^with\s+the\s+flowers\s+as\s+/i,
+  // Location-headed "in <Place> ... as X" (e.g. Lunaria "in Dutch-speaking
+  // countries as judaspenning") — the place phrase is a qualifier, the name
+  // follows "as". Requires a capitalized place word so lowercase descriptive
+  // phrases ("in bloom as ...") are untouched.
+  /^[Ii]n\s+[A-Z\u00C0-\u024F][^,]*?\s+as\s+/,
   /^both\s+/i,
 ];
 
@@ -239,8 +245,10 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     // "in the French language") — the name is the word before it.
     segment = segment.replace(/\s+in\s+(?:the\s+)?[A-Za-z][A-Za-z-]*\s+language\b/i, '').trim();
     segment = segment.replace(/\s+in\s+(?:the\s+)?[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*$/, '');
-    // Reject segments that are purely geographic qualifiers
-    if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/.test(segment)) {
+    // Reject segments that are purely geographic qualifiers (case-insensitive
+    // so sentence-initial "In French" from comma-splits is caught too —
+    // Lunaria "In French, it is known as monnaie du pape").
+    if (/^in\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*$/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'geographic-qualifier' });
       continue;
     }
@@ -414,9 +422,11 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       continue;
     }
     // Reject pronoun-subject descriptive clauses (e.g. "it contains two seeds",
-    // "they produce fruit") left after a comma-split — they describe the plant
-    // rather than name it.
-    if (/^(?:it|they|these|those|which|that)\s+(?:contains?|contain|produces?|produce|gives?|give|yields?|yield|bears?|bear|grows?|grow|forms?|form|has|have|is|are|was|were)\b/i.test(segment)) {
+    // "they produce fruit", Lunaria 'which "truthfully" reveal their contents')
+    // left after a comma-split — they describe the plant rather than name it.
+    // An optional -ly adverb may sit between subject and verb, and disclosure
+    // verbs (reveal/show/display) join the production verbs.
+    if (/^(?:it|they|these|those|which|that)\s+(?:\w+ly\s+)?(?:contains?|contain|produces?|produce|gives?|give|yields?|yield|bears?|bear|grows?|grow|forms?|form|reveals?|shows?|displays?|has|have|is|are|was|were)\b/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'descriptive-clause' });
       continue;
     }
@@ -472,6 +482,9 @@ const GENERIC_JUNK = new Set([
   'seeds', 'fruit', 'fruits', 'leaves', 'bark', 'roots', 'stems',
   'wood', 'lumber', 'timber', 'cross', 'hybrid',
   'terminal bud', 'cabbage', 'alpines',
+  // Fruit-type botanical vocabulary, not plant common names (Lunaria "called a
+  // sillicle"; cf. 'curd' above for cauliflower).
+  'sillicle', 'silicle', 'silique', 'silicula',
   'dioecious species', 'monoecious species',
   'smoking mixture', 'dried leaves', 'dried bark',
   'spurs', 'landscape', 'garden plant', 'such', 'curd',
