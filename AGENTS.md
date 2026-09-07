@@ -11,9 +11,9 @@ If the user provides only a scientific plant name (e.g., "Quercus robur", "Pinus
 ```
 app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → names.js (collectCommonNames: merges Wikidata P1843 + aliases, GBIF, Wikipedia; buildAliases)
-       → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch)
+       → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch + deterministic extraction)
        → wiki-extract.js (pure text extraction, no API)
-       → llm-reviewer.js (advisory LLM second pass over Wikipedia extracts; deterministic verification)
+       → llm-reviewer.js (end-of-Wikipedia LLM review in names.js: add/remove vs the deterministic list, applied verbatim)
        → llm-backend.js (Ollama daemon completer; null-completer fallback keeps regex-only)
        → review-log.js (JSONL review-gap tally; consumed by scripts/review-tally.js)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
@@ -29,13 +29,13 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `app.js` | CLI entry, orchestrates pipeline, supports `--check` mode |
 | `src/wikidata.js` | Wikidata search, entity data, SPARQL parent chain, synonym data |
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
-| `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, `buildAliases` produces final list |
-| `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaCommonNames` |
-| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. Exports `getSentences`, `isGenericJunk`, `isGeographicJunk`, `isProcedural`, `isAbbreviatedBinomialLike`, `hasCJK` for the LLM reviewer. |
-| `src/llm-reviewer.js` | Advisory second pass: runs regex extraction unchanged, then LLM proposes **missed names** (add) and **noise in the regex output** (remove); deterministic verification (in-text, `extractNamesFromCapture` cleaning, junk classifiers, dedup, base-name match, allowlisted category cap) decides acceptance. Cross-source merge (names.js) protects names corroborated by Wikidata/GBIF from any removal. Pure, DI of the completer. Exports `reviewExtractWikipediaNames`, `parseReviewJson`, `parseNamesJson`, `verifyCandidate`, `verifyVeto`, `REJECT_CATEGORIES`, `REVIEWER_JSON_SCHEMA` (grammar-constrained `{add, remove}` shape passed to the completer). |
+| `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, runs the end-of-Wikipedia LLM review (when `LLM_ENABLED`), `buildAliases` produces final list |
+| `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaArticle` (deterministic: extract + `extractWikipediaCommonNames`), `fetchWikipediaCommonNames` |
+| `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. |
+| `src/llm-reviewer.js` | End-of-Wikipedia LLM review: receives the extract plus the deterministic base list, proposes **missed names** (add) and **noise in the list** (remove, with an informational category). Decisions are applied verbatim — trim, empty-filter, case-insensitive dedup for adds and base-name key-match for removes; **no junk classifiers or other deterministic gates after the LLM**. Only Wikipedia-derived names are in scope. Pure, DI of the completer; missing/broken completer degrades to the deterministic list. Exports `reviewWikipediaNames`, `parseReviewJson`, `parseNamesJson`, `buildPrompt`, `SYSTEM_PROMPT`, `REVIEWER_JSON_SCHEMA` (grammar-constrained `{add, remove}` shape passed to the completer). |
 | `src/llm-backend.js` | Ollama daemon completer (greedy decoding) via `LLM_SERVER_URL`/`LLM_MODEL`: native `/api/chat` with `format: REVIEWER_JSON_SCHEMA`, `temperature: 0`, `num_predict: 2048`, `think: false`. Lazy singleton; any load failure yields a null completer so regex-only extraction keeps working. |
-| `src/review-log.js` | `appendReviewRecord` JSONL writer for `.review-data/review-gaps.jsonl` (gitignored). Records include `llmAdded`, `catches`, `dropped`, and `llmRemoved` (with category). |
-| `scripts/review-tally.js` | `npm run tally` — tallies LLM catches and removals by gate (`skipped` vs `parsed-no-capture`) and by removal category (`broken-capture`, `generic`, `geographic`, `morphological`, `procedural`); `--regressions=N` prints copy-paste test snippets. |
+| `src/review-log.js` | `appendReviewRecord` JSONL writer for `.review-data/review-gaps.jsonl` (gitignored). Records include `baseNames`, `llmAdded`, and `llmRemoved` (with informational category). |
+| `scripts/review-tally.js` | `npm run tally` — tallies LLM additions and removals across taxa and by removal category; `--regressions=N` prints copy-paste test snippets. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
 | `src/tagcheck.js` | Validates hierarchy consistency, prunes unknown clades |
 | `src/frontmatter.js` | Generates/parses/updates YAML front matter |
@@ -105,9 +105,9 @@ and verify with `npm test` after any change.
 - `npm test` runs all test suite files.
 - `test/common-names.test.js` — regression tests using hardcoded Wikipedia extracts (no API calls, instant, deterministic). Calls `extractWikipediaCommonNames(text)` — a pure function exported from `src/wiki-extract.js`.
 - `test/hierarchy.test.js` — tag generation tests with mocked ancestor chains (no live Wikidata).
-- `test/names.test.js` — `collectCommonNames` merge order/dedup/provenance (stubbed fetches, no API calls).
+- `test/names.test.js` — `collectCommonNames` merge order/dedup/provenance + end-of-Wikipedia LLM review wiring (stubbed fetches/completer, no API calls).
 - `test/trace.test.js` — `traceExtraction` parity/rule-label/rejection tests (no API calls).
-- `test/reviewer.test.js` — `reviewExtractWikipediaNames` add/reject gauntlet, `parseReviewJson`/`parseNamesJson`, `verifyVeto`, REJECT_CATEGORIES, REVIEWER_JSON_SCHEMA passthrough (stubbed completer, no API calls).
+- `test/reviewer.test.js` — `reviewWikipediaNames` add/remove application, dedup, fallbacks, `parseReviewJson`/`parseNamesJson`, REVIEWER_JSON_SCHEMA passthrough (stubbed completer, no API calls).
 - `test/llm-backend.test.js` — Ollama completer request shape (`/api/chat`, `format` schema, greedy options), env overrides, probe/connection failure → null completer (stubbed fetch, no API calls).
 - `test/review-log.test.js` — `appendReviewRecord` JSONL write/append/no-op/null-path/no-throw (no API calls).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first. When modifying `collectCommonNames` in `src/names.js`, run names tests first.

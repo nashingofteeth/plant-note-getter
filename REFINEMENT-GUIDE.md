@@ -224,8 +224,6 @@ Debugging decision tree:
 
 If during refinement you need to import an internal variable or utility that isn't exported, ask the user for permission before adding it to `module.exports`. Do not add exports unilaterally.
 
-Approved exports (for the hybrid LLM reviewer, see §8): `getSentences`, `isGenericJunk`, `isGeographicJunk`, `isProcedural`, `isAbbreviatedBinomialLike`, `hasCJK`.
-
 ### 7. Verification checklist
 
 After fixing, verify:
@@ -249,28 +247,28 @@ These pairs share a surface form but require opposite handling; they drove the r
 
 When a surface form is ambiguous without sentence context (`X or Y family` without knowing if the sentence is `family Fabaceae or known as` vs `is a family, known as`), a targeted sentence-level helper like `isFamilyRestatement` is appropriate — cite both failing `TESTS` entries in its comment (per §4c).
 
-### 9. Hybrid LLM reviewer & review-gap tally
+### 9. End-of-Wikipedia LLM reviewer & review-gap tally
 
 For bulk processing across multiple notes, see `--populate` mode in `app.js` (via `populateMissingProperties` in `src/notes.js`).
 
-The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extractor. `fetchWikipediaCommonNames` additionally runs an advisory LLM second pass (`src/llm-reviewer.js`): it keeps the regex output unchanged for any name a regex rule captured, then a single call to a local instruct model returns both **add** candidates (missed names) and **remove** candidates (noise). The completer is an external Ollama daemon (`LLM_SERVER_URL`, model `LLM_MODEL` in `.env`, `src/llm-backend.js`, no API keys, no in-process ML stack). The Ollama backend sends the reviewer's `REVIEWER_JSON_SCHEMA` as the request `format`, forcing grammar-constrained `{add, remove}` output (categories limited to the allowlist enum) — free-form completers fall back to tolerant `parseReviewJson` parsing. Each proposal is accepted only after deterministic verification:
+The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extractor. The LLM reviewer (`src/llm-reviewer.js`) sits **at the end of the Wikipedia step**, inside `collectCommonNames` (src/names.js): `fetchWikipediaArticle` returns the raw extract plus the deterministic base list, and the reviewer receives both and decides what to **add** (missed names) and what to **remove** (noise). It runs only when there is a Wikipedia extract — sources with standardized structures (Wikidata, GBIF) don't need it. The completer is an external Ollama daemon (`LLM_SERVER_URL`, model `LLM_MODEL` in `.env`, `src/llm-backend.js`, no API keys, no in-process ML stack). The Ollama backend sends the reviewer's `REVIEWER_JSON_SCHEMA` as the request `format`, forcing grammar-constrained `{add, remove}` output — free-form completers fall back to tolerant `parseReviewJson` parsing.
 
-- **Adds** must pass verbatim in-text presence, `extractNamesFromCapture` cleaning, junk classifiers, CJK/abbreviated-binomial rejection, and dedup.
-- **Removes** must (a) key-match a name the regex actually captured, (b) carry an allowlisted category (`generic`, `geographic`, `morphological`, `procedural`, `broken-capture`), and (c) stay within `LLM_REJECT_MAX` (default 3) per article. Anything else is ignored (logged in `trace.vetoIgnored`).
+**No deterministic layer sits after the LLM.** Decisions are applied verbatim with only trivial hygiene: trim + empty-filter + case-insensitive dedup for adds; case-insensitive key-match against the base list for removes (so a remove can't invent a name that isn't there). Removal categories are informational metadata for the log, not enforced. Whatever the model returns shows up in the CLI output for human review: `names.js` attaches `bySource.llmAdded` / `bySource.llmRemoved`, and `app.js` prints an `(LLM review): + ...; - ...` line under the aliases. The changes are auto-applied to the note's aliases.
 
-A missing/broken model degrades to regex-only; a note is never blocked. Removal is safe because `collectCommonNames` in `src/names.js` merges Wikidata P1843 → GBIF → Wikipedia: any name corroborated by Wikidata/GBIF survives even if the Wikipedia reviewer vetoed it, so cross-source names can't be lost. The LLM can never reorder names.
+A missing/broken model degrades to the deterministic list unchanged; a note is never blocked. Removal stays scoped to the Wikipedia list: `collectCommonNames` merges Wikidata P1843 → GBIF → Wikipedia, and the review happens on the Wikipedia list only, so names corroborated by Wikidata/GBIF are never lost.
 
-Each run where the LLM finds names, drops names, or vetoes names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`), with `llmAdded`, `catches`, `dropped`, and `llmRemoved` (each removal carrying `category` and the originating sentence/gate). The stored `extract` is capped at 2000 chars (`extractLength` preserves the full size) so `--regressions` snippets stay paste-sized.
+Each run where the LLM adds or removes names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`), with `baseNames`, `llmAdded`, and `llmRemoved` (each removal carrying its informational `category`). The stored `extract` is capped at 2000 chars (`extractLength` preserves the full size) so `--regressions` snippets stay paste-sized.
 
 **Tally → red test → regex patch loop** (the user of this guide):
 
-1. Run a few species through the normal pipeline (or `--populate`). Every LLM catch and removal is logged.
-2. `npm run tally` — shows recurring caught names with their gate (`skipped` vs `parsed-no-capture`) and recurring removals with their category breakdown. A `skipped` catch needs weaker sentence gating; a `parsed-no-capture` catch needs a new/patched rule. A `broken-capture` removal points at a malformed regex capture; any recurring non-`broken-capture` removal is a **possible false veto** (the model repeatedly drops a name the regex correctly found → consider a "must-keep" guard).
+1. Run a few species through the normal pipeline (or `--populate`). Every LLM addition and removal is logged.
+2. `npm run tally` — shows recurring LLM additions (names the regex keeps missing) and recurring removals with their category breakdown. A `broken-capture` removal points at a malformed regex capture; any recurring non-`broken-capture` removal is a **possible false veto** (the model repeatedly drops a name the regex correctly found → consider a prompt tweak or "must-keep" guard).
 3. `npm run tally -- --regressions=3` — prints ready-to-paste `{ name, extract, expected }` objects for `test/common-names.test.js`:
-   - `broken-capture` removals → expected excludes the malformed capture (drives the regex-rule fix).
+   - recurring additions → expected includes the LLM-caught name (drives the regex-rule fix).
+   - `broken-capture` removals → expected excludes the malformed capture.
    - recurring non-broken removals → "must-keep" guards (`expected` includes the name, protecting against regressions and false vetoes).
 4. Paste the top cases as **red** tests, run `npm test` to confirm they fail.
 5. Patch the regex rules in `src/wiki-extract.js`, then run `npm test` until the new tests are green and all existing cases still pass.
 6. For vetoes, the deterministic guard is the regex — there's no red test to "un-veto", so re-run the species to confirm the name is now captured cleanly by the regex (and the tally shows the removal as non-recurring).
 
-Both passes are disabled by default. Enable the add pass with `LLM_ENABLED=true` in `.env`, and the noise-rejection pass additionally with `LLM_REJECT_ENABLED=true` (add-only when the latter is unset).
+The reviewer is disabled by default. Enable it with `LLM_ENABLED=true` in `.env`.

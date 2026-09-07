@@ -1,6 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
+// Enable the LLM reviewer for the wiring test below. config.js is loaded
+// lazily inside collectCommonNames, so this must be set before the first
+// call (stubs without `extract` never reach the reviewer, so the rest of
+// the suite is unaffected).
+process.env.LLM_ENABLED = 'true';
+
 // Stub the API functions BEFORE names.js loads, so its destructured refs
 // point at the stubs (deterministic, no API calls).
 const commonNames = require('../src/common-names-fetch');
@@ -9,17 +15,31 @@ commonNames.fetchWikipediaArticle = async () => null;
 const GBIF_STUB = commonNames.fetchGbifCommonNames;
 const WIKI_STUB = commonNames.fetchWikipediaArticle;
 
-function stubCommonNames({ gbif = [], wikipedia = [] } = {}) {
+// Pre-require the lazy LLM modules so the stubs replace the cached exports
+// names.js will pick up at call time.
+const llmBackend = require('../src/llm-backend');
+const reviewLog = require('../src/review-log');
+const LLM_COMPLETER_STUB = llmBackend.getCompleter;
+const REVIEW_LOG_STUB = reviewLog.appendReviewRecord;
+
+function stubCommonNames({ gbif = [], wikipedia = [], extract = null } = {}) {
   commonNames.fetchGbifCommonNames = async () => [...gbif];
   commonNames.fetchWikipediaArticle = async (title) =>
-    wikipedia.length > 0
-      ? { wikipediaTitle: title, wikipediaUrl: `https://en.wikipedia.org/wiki/${title.replace(/ /g, '_')}`, names: [...wikipedia] }
+    wikipedia.length > 0 || extract
+      ? {
+          wikipediaTitle: title,
+          wikipediaUrl: `https://en.wikipedia.org/wiki/${title.replace(/ /g, '_')}`,
+          extract,
+          names: [...wikipedia]
+        }
       : null;
 }
 
 function resetStubs() {
   commonNames.fetchGbifCommonNames = GBIF_STUB;
   commonNames.fetchWikipediaArticle = WIKI_STUB;
+  llmBackend.getCompleter = LLM_COMPLETER_STUB;
+  reviewLog.appendReviewRecord = REVIEW_LOG_STUB;
 }
 
 const { collectCommonNames, buildAliases } = require('../src/names');
@@ -252,5 +272,70 @@ test('collectCommonNames: populate and interactive paths use same function (pari
   const second = await collectCommonNames(entity2, []);
   assert.deepStrictEqual(first.names, second.names);
   assert.deepStrictEqual(first.bySource, second.bySource);
+  resetStubs();
+});
+
+// ─── end-of-Wikipedia LLM review wiring ─────────────────────────────────────
+
+test('collectCommonNames: LLM review applied to Wikipedia list only; diff and log recorded', async () => {
+  const logged = [];
+  reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
+  llmBackend.getCompleter = async () =>
+    async () =>
+      JSON.stringify({
+        add: ['llm catch'],
+        remove: [{ name: 'regex noise', category: 'morphological' }]
+      });
+  stubCommonNames({ wikipedia: ['regex noise', 'keeper'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: ['wikidata name'],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { names, bySource } = await collectCommonNames(entity, []);
+  // Diff reported per source.
+  assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
+  assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);
+  assert.deepStrictEqual(bySource.llmRemoved, ['regex noise']);
+  assert.deepStrictEqual(bySource.wikipedia, ['keeper', 'llm catch']);
+  // Wikidata names untouched by the review; final list reflects the diff.
+  assert.deepStrictEqual(names, ['wikidata name', 'keeper', 'llm catch']);
+  // Review-gap log record written with the capped extract.
+  assert.strictEqual(logged.length, 1);
+  assert.deepStrictEqual(logged[0].record.llmAdded, ['llm catch']);
+  assert.deepStrictEqual(logged[0].record.llmRemoved, [
+    { name: 'regex noise', category: 'morphological' }
+  ]);
+  assert.deepStrictEqual(logged[0].record.baseNames, ['regex noise', 'keeper']);
+  assert.ok(logged[0].record.extract.startsWith('Wiki text'));
+  assert.ok(logged[0].logPath);
+  resetStubs();
+});
+
+test('collectCommonNames: no LLM review without extract (stubs stay deterministic)', async () => {
+  let completerCalled = false;
+  reviewLog.appendReviewRecord = () => {
+    throw new Error('should not log without extract');
+  };
+  llmBackend.getCompleter = async () =>
+    async () => {
+      completerCalled = true;
+      return '[]';
+    };
+  stubCommonNames({ wikipedia: ['wiki name'] });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: [],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { names, bySource } = await collectCommonNames(entity, []);
+  assert.strictEqual(completerCalled, false);
+  assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
+  assert.strictEqual(bySource.llmAdded, undefined);
+  assert.deepStrictEqual(names, ['wiki name']);
   resetStubs();
 });

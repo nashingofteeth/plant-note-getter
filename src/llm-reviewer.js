@@ -1,39 +1,18 @@
-// Hybrid LLM reviewer: runs the deterministic regex extraction unchanged,
-// then asks a local model for missed common names (add pass) and for noise in
-// the regex output (reject pass). LLM proposals are only honored if they pass
-// the same deterministic gauntlet as regex captures: additions need verbatim
-// in-text presence + cleaning + junk classifiers + dedup; removals must
-// key-match a name the regex actually captured and carry an allowlisted
-// category. The LLM can never reorder regex names, and a missing/broken
-// completer degrades to regex-only.
+// End-of-Wikipedia LLM reviewer: sits after the deterministic regex
+// extraction, receives the Wikipedia extract plus the deterministic base
+// list, and decides what to add or remove. The LLM's decisions are applied
+// verbatim (trim + empty-filter + case-insensitive dedup only) — there is no
+// deterministic junk-classifier layer after the model. Corrections are logged
+// (see review-log.js) so the deterministic pipeline can be patched later.
+//
+// Only Wikipedia-derived names are in scope: other sources (Wikidata, GBIF)
+// have standardized structures where an LLM adds no value. A missing/broken
+// completer degrades to the deterministic list unchanged.
 
-const {
-  extractWikipediaCommonNames,
-  extractNamesFromCapture,
-  traceExtraction,
-  getSentences,
-  isGenericJunk,
-  isGeographicJunk,
-  isProcedural,
-  isAbbreviatedBinomialLike,
-  isOtherOrganismJunk,
-  hasCJK
-} = require('./wiki-extract');
-const { stripArticle, normalizeNameKey } = require('./utils');
+const { normalizeNameKey } = require('./utils');
 
-const REJECT_CATEGORIES = new Set([
-  'generic',
-  'geographic',
-  'morphological',
-  'procedural',
-  'broken-capture'
-]);
-
-// JSON schema for grammar-constrained decoding (Ollama `format`, or any
-// backend honoring options.jsonSchema). Mirrors parseReviewJson's {add,
-// remove} contract; the category enum mirrors REJECT_CATEGORIES so the model
-// cannot invent categories. Deterministic verifyCandidate/verifyVeto gates
-// still decide acceptance — this only guarantees syntactic shape.
+// Categories are informational only (recorded in the log to guide future
+// regex patches). They are not enforced — any string is accepted.
 const REVIEWER_JSON_SCHEMA = {
   type: 'object',
   properties: {
@@ -44,9 +23,9 @@ const REVIEWER_JSON_SCHEMA = {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          category: { type: 'string', enum: [...REJECT_CATEGORIES] }
+          category: { type: 'string' }
         },
-        required: ['name', 'category']
+        required: ['name']
       }
     }
   },
@@ -152,180 +131,86 @@ function buildPrompt(text, base) {
   );
 }
 
-function findEnclosingSentence(text, name) {
-  const idx = text.toLowerCase().indexOf(name.toLowerCase());
-  if (idx === -1) return '';
-  let start = 0;
-  for (const sentence of getSentences(text)) {
-    const rel = text.indexOf(sentence, start);
-    if (rel === -1) continue;
-    const end = rel + sentence.length;
-    if (idx >= rel && idx < end) return sentence;
-    start = rel + sentence.length;
-  }
-  return '';
-}
+// End-of-Wikipedia review.
+//   input.extract       full Wikipedia extract text
+//   input.baseNames     deterministic extraction output (Wikipedia-only)
+//   options.completer   async (system, user, { jsonSchema }) => string (from
+//                       llm-backend); null disables.
+//   options.maxInputChars cap for the extract sent to the model (default 16000)
+// Returns { names, added, removed, reason } where names is the final
+// Wikipedia list (base minus removals plus additions, order preserved),
+// added/removed are applied LLM decisions for CLI display and logging.
+async function reviewWikipediaNames(input = {}, options = {}) {
+  const extract = input.extract || '';
+  const base = [...(input.baseNames || [])];
+  const completer = options.completer || input.completer || null;
+  const result = { names: [...base], added: [], removed: [], reason: 'llm-disabled' };
 
-// Map each kept name to its originating sentence, and whether that sentence
-// was gated out of the regex scan ('skipped') or scanned but missed by every
-// rule ('parsed-no-capture').
-function attributeCatches(text, kept, skippedSentences) {
-  const skipped = new Set(
-    (skippedSentences || traceExtraction(text).skippedSentences).map((s) => s.sentence)
-  );
-  return kept.map((name) => {
-    const sentence = findEnclosingSentence(text, name);
-    return { name, sentence, gate: skipped.has(sentence) ? 'skipped' : 'parsed-no-capture' };
-  });
-}
-
-// Verify one LLM-proposed candidate against the deterministic gauntlet.
-// Returns { name } on success or { dropped: reason } on failure.
-function verifyCandidate(candidate, extractLower, seenKeys) {
-  const cleaned = extractNamesFromCapture(candidate, null, 'LLM');
-  const target = (cleaned && cleaned[0]) || stripArticle(candidate).trim();
-  if (!target) return { dropped: 'empty' };
-  if (isAbbreviatedBinomialLike(target)) return { dropped: 'abbreviated-binomial' };
-  if (hasCJK(target)) return { dropped: 'hasCJK' };
-  if (!extractLower.includes(target.toLowerCase())) return { dropped: 'not-in-text' };
-  if (isGenericJunk(target)) return { dropped: 'isGenericJunk' };
-  if (isGeographicJunk(target)) return { dropped: 'isGeographicJunk' };
-  if (isProcedural(target)) return { dropped: 'isProcedural' };
-  if (isOtherOrganismJunk(target)) return { dropped: 'other-organism' };
-  const key = normalizeNameKey(target);
-  if (seenKeys.has(key)) return { dropped: 'duplicate' };
-  seenKeys.add(key);
-  return { name: target };
-}
-
-// Verify one LLM-proposed removal against the deterministic veto gauntlet.
-// The name must key-match a name the regex actually captured, and the category
-// must be allowlisted. Returns { vetoed: true } on success or
-// { ignored: reason } on failure.
-function verifyVeto(candidate, baseKeys) {
-  if (!candidate || typeof candidate !== 'object' || !candidate.name) {
-    return { ignored: 'malformed' };
-  }
-  const key = normalizeNameKey(candidate.name);
-  if (!baseKeys.has(key)) return { ignored: 'not-a-base-name' };
-  if (!REJECT_CATEGORIES.has(candidate.category)) {
-    return { ignored: `unknown-category:${candidate.category}` };
-  }
-  return { vetoed: true };
-}
-
-// Advisory second pass over a Wikipedia extract.
-//   options.completer     async (system, user, { jsonSchema }) => string (from
-//                         llm-backend); null disables. Backends that ignore the
-//                         third argument keep working (free-form + tolerant parse).
-//   options.maxInputChars  cap for the extract sent to the model (default 16000)
-//   options.gate          'always' (default) or 'auto' (skip when base list is already long)
-//   options.autoGateMinBase  base-name count above which 'auto' gates out the LLM
-//   options.rejectEnabled if false, no removal is applied (add-only)
-//   options.rejectMax     max removals applied per article (default 3)
-// Returns { names, trace } where trace mirrors traceExtraction plus:
-//   trace.reason   why the LLM pass did/didn't run or what it found
-//   trace.proposed raw LLM candidates, trace.kept accepted, trace.dropped rejected
-//   trace.vetoed applied removals, trace.vetoIgnored ignored removal candidates
-//   trace.catches  [{ name, sentence, gate }] for the review-gap tally log
-//   trace.removals [{ name, sentence, gate, category }] applied removals for the log
-async function reviewExtractWikipediaNames(text, options = {}) {
-  const trace = { reason: 'llm-disabled' };
-  const base = extractWikipediaCommonNames(text);
-  const result = { names: [...base], trace };
-
-  const completer = options.completer || null;
   if (!completer) return result;
+  if (!extract) return result;
 
-  if (options.gate === 'auto' && base.length >= (options.autoGateMinBase || 4)) {
-    trace.reason = 'gated-auto';
-    return result;
-  }
-
-  const extract = capInput(text, options.maxInputChars || 16000);
-  const prompt = buildPrompt(extract, base);
+  const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
+  const prompt = buildPrompt(capped, base);
   let response;
   try {
     response = await completer(SYSTEM_PROMPT, prompt, { jsonSchema: REVIEWER_JSON_SCHEMA });
   } catch (err) {
-    trace.reason = `completer-error: ${err && err.message ? err.message : err}`;
+    result.reason = `completer-error: ${err && err.message ? err.message : err}`;
     return result;
   }
 
   const parsed = parseReviewJson(response);
-  trace.reason =
-    parsed.add.length || parsed.remove.length ? 'llm-reviewed' : 'llm-empty';
-  trace.proposed = parsed.add;
+  if (!parsed.add.length && !parsed.remove.length) {
+    result.reason = 'llm-empty';
+    return result;
+  }
+  result.reason = 'llm-reviewed';
 
-  const extractLower = text.toLowerCase();
-  const baseKeys = new Set(base.map(normalizeNameKey));
-  const seenKeys = new Set(baseKeys);
-  const kept = [];
-  const dropped = [];
+  // Adds: trim + drop empties + case-insensitive dedup against base and
+  // among themselves. No junk classifiers — the LLM decides.
+  const seenKeys = new Set(base.map(normalizeNameKey));
+  const added = [];
   for (const candidate of parsed.add) {
-    const outcome = verifyCandidate(candidate, extractLower, seenKeys);
-    if (outcome.dropped) {
-      dropped.push({ name: candidate, reason: outcome.dropped });
-    } else {
-      kept.push(outcome.name);
-    }
+    const name = String(candidate).trim();
+    if (!name) continue;
+    const key = normalizeNameKey(name);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    added.push(name);
   }
 
-  const rejectEnabled = options.rejectEnabled !== false;
-  const vetoed = [];
-  const vetoIgnored = [];
-  if (rejectEnabled) {
-    const rejectMax = options.rejectMax || 3;
-    const vetoedKeys = new Set();
-    for (const candidate of parsed.remove) {
-      if (vetoed.length >= rejectMax) {
-        vetoIgnored.push({ name: candidate.name, reason: 'over-cap' });
-        continue;
-      }
-      const outcome = verifyVeto(candidate, baseKeys);
-      if (outcome.vetoed) {
-        if (vetoedKeys.has(normalizeNameKey(candidate.name))) {
-          vetoIgnored.push({ name: candidate.name, reason: 'duplicate' });
-          continue;
-        }
-        vetoedKeys.add(normalizeNameKey(candidate.name));
-        vetoed.push(candidate.name);
-      } else {
-        vetoIgnored.push({ name: candidate.name, reason: outcome.ignored });
-      }
-    }
+  // Removes: key-match against the base list so the LLM can only veto
+  // Wikipedia-derived names it was shown. Unknown names are ignored.
+  // Categories are kept as informational metadata for the log.
+  const baseKeys = new Set(base.map(normalizeNameKey));
+  const removed = [];
+  const removedKeys = new Set();
+  for (const candidate of parsed.remove) {
+    const key = normalizeNameKey(candidate.name);
+    if (!baseKeys.has(key)) continue;
+    if (removedKeys.has(key)) continue;
+    removedKeys.add(key);
+    removed.push({ name: candidate.name, category: candidate.category || '' });
   }
 
-  const vetoSet = new Set(vetoed.map(normalizeNameKey));
-  const namesAfterVeto = base.filter((n) => !vetoSet.has(normalizeNameKey(n)));
-  const removed = base.filter((n) => vetoSet.has(normalizeNameKey(n)));
+  const removedKeySet = new Set(removed.map((r) => normalizeNameKey(r.name)));
+  const baseNameByKey = new Map(base.map((n) => [normalizeNameKey(n), n]));
+  const removedNames = removed.map((r) => baseNameByKey.get(normalizeNameKey(r.name)));
 
-  trace.kept = kept;
-  trace.dropped = dropped;
-  trace.vetoed = vetoed;
-  trace.vetoIgnored = vetoIgnored;
-  // Single trace pass feeds both attributions (kept + removed).
-  const skippedSentences =
-    kept.length || removed.length ? traceExtraction(text).skippedSentences : [];
-  trace.catches = kept.length ? attributeCatches(text, kept, skippedSentences) : [];
-  trace.removals = removed.length ? attributeCatches(text, removed, skippedSentences) : [];
-  trace.removals = trace.removals.map((r) => {
-    const cat =
-      parsed.remove.find((c) => normalizeNameKey(c.name) === normalizeNameKey(r.name)) || {};
-    return { ...r, category: cat.category || '' };
-  });
-  result.names = [...namesAfterVeto, ...kept];
+  result.added = added;
+  result.removed = removedNames.map((name, i) => ({
+    name,
+    category: removed[i].category
+  }));
+  result.names = [...base.filter((n) => !removedKeySet.has(normalizeNameKey(n))), ...added];
   return result;
 }
 
 module.exports = {
-  reviewExtractWikipediaNames,
+  reviewWikipediaNames,
   parseNamesJson,
   parseReviewJson,
-  verifyCandidate,
-  verifyVeto,
   buildPrompt,
   SYSTEM_PROMPT,
-  REVIEWER_JSON_SCHEMA,
-  REJECT_CATEGORIES
+  REVIEWER_JSON_SCHEMA
 };

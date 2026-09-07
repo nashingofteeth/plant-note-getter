@@ -44,58 +44,15 @@ async function fetchWikipediaArticle(wikipediaTitle) {
   if (!page || page.missing || !page.extract) return null;
 
   const title = page.title || wikipediaTitle;
-  const baseNames = extractWikipediaCommonNames(page.extract);
-  let names = [...baseNames];
 
-  // Hybrid LLM reviewer (advisory second pass). Lazy requires keep module
-  // load cheap and allow tests to stub fetchWikipediaCommonNames offline.
-  const config = require('./config');
-  if (config.LLM_ENABLED) {
-    const { getCompleter } = require('./llm-backend');
-    const { reviewExtractWikipediaNames } = require('./llm-reviewer');
-    const { appendReviewRecord } = require('./review-log');
-
-    const completer = await getCompleter();
-    const { names: reviewed, trace } = await reviewExtractWikipediaNames(page.extract, {
-      completer,
-      maxInputChars: config.LLM_MAX_INPUT_CHARS,
-      gate: config.LLM_GATE,
-      rejectEnabled: config.LLM_REJECT_ENABLED,
-      rejectMax: config.LLM_REJECT_MAX
-    });
-    if (
-      (trace.kept && trace.kept.length) ||
-      (trace.removals && trace.removals.length)
-    ) {
-      names = reviewed;
-    }
-
-    const hasCatches = trace.catches && trace.catches.length;
-    const hasDrops = trace.dropped && trace.dropped.length;
-    const hasRemovals = trace.removals && trace.removals.length;
-    if (config.REVIEW_LOG_ALL || hasCatches || hasDrops || hasRemovals) {
-      appendReviewRecord(
-        {
-          taxon: wikipediaTitle,
-          wikipediaTitle,
-          date: new Date().toISOString(),
-          extract: page.extract.slice(0, 2000),
-          extractLength: page.extract.length,
-          baseNames,
-          llmAdded: trace.kept || [],
-          catches: trace.catches || [],
-          dropped: trace.dropped || [],
-          llmRemoved: trace.removals || []
-        },
-        config.REVIEW_LOG_PATH
-      );
-    }
-  }
-
+  // Pure deterministic extraction. The LLM reviewer (if enabled) runs later
+  // at the end of the Wikipedia step in names.js, where it receives the
+  // extract plus this base list.
   return {
     wikipediaTitle: title,
     wikipediaUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
-    names
+    extract: page.extract,
+    names: extractWikipediaCommonNames(page.extract)
   };
 }
 

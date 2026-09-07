@@ -88,7 +88,42 @@ async function collectCommonNames(entity, candidateEntities) {
     if (!entity.wikipediaUrl) {
       entity.wikipediaUrl = wikiArticle.wikipediaUrl;
     }
-    const wikiNamesRaw = wikiArticle.names;
+    // End-of-Wikipedia LLM review (Wikipedia-only). Skipped when there is
+    // no extract, when disabled, or when the daemon is unreachable — the
+    // deterministic list then stands unchanged.
+    let wikiNamesRaw = wikiArticle.names || [];
+    bySource.wikipediaBase = [...wikiNamesRaw];
+    const config = require('./config');
+    if (wikiArticle.extract && config.LLM_ENABLED) {
+      const { getCompleter } = require('./llm-backend');
+      const { reviewWikipediaNames } = require('./llm-reviewer');
+      const { appendReviewRecord } = require('./review-log');
+      const completer = await getCompleter();
+      const reviewed = await reviewWikipediaNames(
+        { extract: wikiArticle.extract, baseNames: wikiNamesRaw },
+        { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
+      );
+      if (reviewed.added.length || reviewed.removed.length) {
+        wikiNamesRaw = reviewed.names;
+      }
+      bySource.llmAdded = [...reviewed.added];
+      bySource.llmRemoved = reviewed.removed.map((r) => r.name);
+      if (reviewed.added.length || reviewed.removed.length) {
+        appendReviewRecord(
+          {
+            taxon: entity.scientificName || entity.wikipediaTitle,
+            wikipediaTitle: wikiArticle.wikipediaTitle,
+            date: new Date().toISOString(),
+            extract: wikiArticle.extract.slice(0, 2000),
+            extractLength: wikiArticle.extract.length,
+            baseNames: bySource.wikipediaBase,
+            llmAdded: reviewed.added,
+            llmRemoved: reviewed.removed
+          },
+          config.REVIEW_LOG_PATH
+        );
+      }
+    }
     const wikiSeen = new Set();
     for (const name of wikiNamesRaw) {
       const normalized = cleanName(name);

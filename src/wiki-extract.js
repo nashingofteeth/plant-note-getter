@@ -1945,13 +1945,5 @@ module.exports = {
   parseGbifVernacularName,
   extractNamesFromCapture,
   extractWikipediaCommonNames,
-  traceExtraction,
-  getSentences,
-  isGenericJunk,
-  isGeographicJunk,
-  isProcedural,
-  isAbbreviatedBinomialLike,
-  isSubjectBinomial,
-  isOtherOrganismJunk,
-  hasCJK
+  traceExtraction
 };

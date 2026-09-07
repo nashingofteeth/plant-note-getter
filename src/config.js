@@ -18,24 +18,15 @@ if (!fs.existsSync(NOTE_ROOT)) {
 
 const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 
-// Hybrid LLM reviewer (advisory second pass over Wikipedia extracts) via an
-// external Ollama daemon (no in-process ML stack). Disabled by default;
-// set LLM_ENABLED=true to enable.
+// End-of-Wikipedia LLM reviewer (advisory second pass; see src/llm-reviewer.js)
+// via an external Ollama daemon. Disabled by default; set LLM_ENABLED=true.
 const LLM_ENABLED = process.env.LLM_ENABLED === 'true';
 const LLM_SERVER_URL = process.env.LLM_SERVER_URL || 'http://localhost:11434';
 const LLM_MODEL = process.env.LLM_MODEL || 'qwen3:4b-instruct-2507-q4_K_M';
 const LLM_MAX_INPUT_CHARS = parseInt(process.env.LLM_MAX_INPUT_CHARS || '16000', 10);
-const LLM_GATE = process.env.LLM_GATE || 'always'; // 'always' | 'auto'
 
-// Noise-rejection pass: LLM may remove regex names that are not genuine common
-// names (allowlisted categories + cap applied by the reviewer). Disabled by
-// default; set LLM_REJECT_ENABLED=true to enable alongside LLM_ENABLED=true.
-const LLM_REJECT_ENABLED = process.env.LLM_REJECT_ENABLED === 'true';
-const LLM_REJECT_MAX = parseInt(process.env.LLM_REJECT_MAX || '3', 10);
-
-// Review-gap tally log (catches later become red tests → regex patches).
+// Review-gap tally log (LLM corrections later become red tests → regex patches).
 const REVIEW_LOG_PATH = process.env.REVIEW_LOG_PATH || path.join(__dirname, '..', '.review-data', 'review-gaps.jsonl');
-const REVIEW_LOG_ALL = process.env.REVIEW_LOG_ALL === 'true';
 
 module.exports = {
   NOTE_ROOT,
@@ -44,9 +35,5 @@ module.exports = {
   LLM_SERVER_URL,
   LLM_MODEL,
   LLM_MAX_INPUT_CHARS,
-  LLM_GATE,
-  LLM_REJECT_ENABLED,
-  LLM_REJECT_MAX,
-  REVIEW_LOG_PATH,
-  REVIEW_LOG_ALL
+  REVIEW_LOG_PATH
 };
