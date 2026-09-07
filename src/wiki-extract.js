@@ -125,6 +125,16 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     return ', ' + spellings;
   });
 
+  // Expand a TRAILING parenthetical single-alternative gloss before stripping
+  // parens, e.g. "witloof (or witlof)" -> "witloof, witlof". Anchored to the
+  // end of the capture: mid-phrase "X (or Y) head" alternatives (the Erica
+  // test's "winter (or spring) heather") are distributed by R50 instead, and
+  // expanding them here would leak the bare qualifier ("winter"). Likewise
+  // multi-item glosses like the Abies test's "(or Picea rubens, the red
+  // spruce)" still drop via stripOuterParens instead of leaking the contrast
+  // taxon's name ("red spruce").
+  text = text.replace(/\(\s*or\s+([^(),]+?)\)\s*[.,]?\s*$/gi, ', $1');
+
   text = stripOuterParens(text);
 
   text = text
@@ -231,6 +241,13 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     // of Y") describe genealogy, not a common name.
     if (/\b(?:ancestor|progenitor|descendant|relative|relation|kin)\s+of\b/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'relation-of' });
+      continue;
+    }
+    // Preparation-manner clauses ("mainly boiled", "usually eaten fresh") leaking
+    // from an "and"-split name list (e.g. the Chicory article's "known as radiki
+    // and mainly boiled in salads") describe how the plant is cooked, not a name.
+    if (/^(?:mainly|mostly|usually|often|typically|generally|commonly|frequently|traditionally|primarily|predominantly)\s+(?:boiled|fried|baked|roasted|grilled|steamed|stewed|saut[ée]ed|eaten|consumed|served|cooked|prepared|blanched|pickled|fermented|dried)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'preparation-manner' });
       continue;
     }
     // Segments that still carry the "common name(s)" label are list headers,
@@ -636,6 +653,20 @@ function sentenceEnds(text) {
   const parenRe = /\.\)\s+(?=[A-Z])/g;
   while ((m = parenRe.exec(text)) !== null) {
     ends.push(m.index + 1); // +1 to point after the dot (before the paren)
+  }
+  // Also split at ". (" — a parenthetical sentence following a period (e.g.
+  // the Cichorium test's '...regional names. ("Cornflower" is also commonly
+  // applied to Centaurea cyanus.)'). Without this, the parenthetical merges
+  // into the preceding naming sentence and R25's end-anchored terminators
+  // ([.;]$) never match, dropping the whole name list. Same abbreviation
+  // guard as the main split so citations like "et al. (2004)" stay intact.
+  const parenSentRe = /(?<=[.!?])\s+(?=\()/g;
+  while ((m = parenSentRe.exec(text)) !== null) {
+    const before = text.slice(Math.max(0, m.index - 40), m.index + 1);
+    if (!/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|approx|ca|cf|e\.g|i\.e|viz|al|fig|vol|no|pp|pg|ed|rev|subsp|ssp|var|f|sp|syn|L)\.\s*$/.test(before)
+        && !/\b[A-Z]\.[A-Z]\.\s*$/.test(before)) {
+      ends.push(m.index);
+    }
   }
   ends.sort((a, b) => a - b);
   // Deduplicate
@@ -1289,9 +1320,14 @@ function _extractWikipediaCommonNames(text, trace) {
       if (!isGenericJunk(r9f[2])) caps.push({ rule: 'R9f', capture: r9f[2] });
     }
 
-    // R10: "known as" / "called" — at sentence start ("It is...") or
-    // mid-sentence (after a comma, with or without "also") — stop at copula
-    const r10 = sentence.match(/(?:\s*,\s+(?:also\s+)?(?:known\s+as|called)\s+|^It\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+)(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any)\b|\s+(?:has|have)\b|$)/i);
+    // R10: "known as" / "called" — at sentence start ("It is..." or any named
+    // subject, e.g. the Cichorium test's "Common chicory is also known as
+    // blue daisy, ...") or mid-sentence (after a comma, with or without
+    // "also") — stop at copula. Sentence-initial only (not bare "is also
+    // known as" anywhere): subordinate "where it is also known as"
+    // cultivar clauses like the Valencia test's 'Italy (where it is also
+    // known as "Liscio")' stay silent, as do R51b's "is also called" cases.
+    const r10 = sentence.match(/(?:\s*,\s+(?:also\s+)?(?:known\s+as|called)\s+|^(?:It|[A-ZÀ-Ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*){0,3})\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+)(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any)\b|\s+(?:has|have)\b|$)/i);
     if (r10) {
       const r10Prologue = sentence.slice(0, r10.index);
       // Reject attribution sentences naming a people/nation/tribe ("...Anishinaabe
