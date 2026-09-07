@@ -4,8 +4,10 @@ const {
   reviewWikipediaNames,
   parseNamesJson,
   parseReviewJson,
-  buildPrompt,
-  SYSTEM_PROMPT,
+  buildAddPrompt,
+  buildRemovePrompt,
+  ADD_SYSTEM_PROMPT,
+  REMOVE_SYSTEM_PROMPT,
   REVIEWER_JSON_SCHEMA
 } = require('../src/llm-reviewer');
 
@@ -197,29 +199,64 @@ test('reviewWikipediaNames: maxInputChars caps the extract sent to the model', a
   assert.ok(sent.includes('pedunculate oak'), 'base list reaches the model');
 });
 
-test('reviewWikipediaNames: passes the JSON schema and taxon to the completer', async () => {
+test('reviewWikipediaNames: two passes, both with schema and taxon grounding', async () => {
   const seen = [];
   const completer = async (system, user, options) => {
     seen.push({ system, user, options });
     return '{"add":[],"remove":[]}';
   };
   await reviewWikipediaNames(
-    { extract: EXTRACT, baseNames: [], taxon: 'Quercus robur' },
+    { extract: EXTRACT, baseNames: BASE, taxon: 'Quercus robur' },
     { completer }
   );
-  assert.strictEqual(seen.length, 1);
-  assert.strictEqual(seen[0].system, SYSTEM_PROMPT);
-  assert.ok(seen[0].user.includes('boundary oak'));
+  assert.strictEqual(seen.length, 2);
+  // Pass 1: remove, over the full base list.
+  assert.strictEqual(seen[0].system, REMOVE_SYSTEM_PROMPT);
+  assert.ok(seen[0].user.includes('pedunculate oak'));
   assert.ok(seen[0].user.includes('Quercus robur'));
-  assert.deepStrictEqual(seen[0].options, { jsonSchema: REVIEWER_JSON_SCHEMA });
+  // Pass 2: add, over the (unchanged) list.
+  assert.strictEqual(seen[1].system, ADD_SYSTEM_PROMPT);
+  assert.ok(seen[1].user.includes('boundary oak'));
+  assert.ok(seen[1].user.includes('Quercus robur'));
+  for (const call of seen) {
+    assert.deepStrictEqual(call.options, { jsonSchema: REVIEWER_JSON_SCHEMA });
+  }
 });
 
-test('buildPrompt: includes taxon, extract, and the base list', () => {
-  const prompt = buildPrompt('Some wiki text.', ['oak', 'pine'], 'Quercus robur');
-  assert.ok(prompt.includes('Quercus robur'));
-  assert.ok(prompt.includes('Some wiki text.'));
-  assert.ok(prompt.includes('oak, pine'));
-  const empty = buildPrompt('Some wiki text.', [], 'Quercus robur');
+test('reviewWikipediaNames: add pass sees the base list (no pass-contradiction)', async () => {
+  const users = [];
+  const completer = async (system, user) => {
+    users.push(user);
+    if (system === REMOVE_SYSTEM_PROMPT) {
+      return JSON.stringify({ add: [], remove: [{ name: 'junk', category: 'generic' }] });
+    }
+    return '["fresh name"]';
+  };
+  const { names, added, removed } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: ['keeper', 'junk'] },
+    { completer }
+  );
+  assert.strictEqual(users.length, 2);
+  assert.ok(users[0].includes('keeper, junk'));
+  // The add pass is shown the original list, so a removed name cannot be
+  // re-proposed through dedup.
+  assert.ok(users[1].includes('keeper, junk'));
+  assert.deepStrictEqual(removed, [{ name: 'junk', category: 'generic' }]);
+  assert.deepStrictEqual(added, ['fresh name']);
+  assert.deepStrictEqual(names, ['keeper', 'fresh name']);
+});
+
+test('buildAddPrompt / buildRemovePrompt: taxon, extract, base list, and task line', () => {
+  const add = buildAddPrompt('Some wiki text.', ['oak', 'pine'], 'Quercus robur');
+  assert.ok(add.includes('Quercus robur'));
+  assert.ok(add.includes('Some wiki text.'));
+  assert.ok(add.includes('oak, pine'));
+  assert.match(add, /"add"/);
+  assert.match(add, /leave "remove" empty/);
+  const remove = buildRemovePrompt('Some wiki text.', ['oak'], 'Quercus robur');
+  assert.match(remove, /"remove"/);
+  assert.match(remove, /leave "add" empty/);
+  const empty = buildAddPrompt('Some wiki text.', [], 'Quercus robur');
   assert.ok(empty.includes('none'));
 });
 
@@ -277,17 +314,28 @@ test('REVIEWER_JSON_SCHEMA: {add, remove} contract; category is a free string', 
   assert.strictEqual(removeItems.properties.category.enum, undefined);
 });
 
-test('SYSTEM_PROMPT describes the contract, scope rules, and veto guardrails', () => {
-  assert.match(SYSTEM_PROMPT, /'add'/);
-  assert.match(SYSTEM_PROMPT, /'remove'/);
-  assert.match(SYSTEM_PROMPT, /scientific Latin names/);
-  assert.match(SYSTEM_PROMPT, /fo\., var\., subsp\./);
-  // Scope: names for this taxon, not member species or crops.
-  assert.match(SYSTEM_PROMPT, /FOR this\s+taxon itself/);
-  assert.match(SYSTEM_PROMPT, /Fabaceae/);
-  // Veto guardrails: family names and the best-known name stay.
-  assert.match(SYSTEM_PROMPT, /Never remove genuine family or genus names/);
-  assert.match(SYSTEM_PROMPT, /best-known name/);
-  // Broken captures must be removed.
-  assert.match(SYSTEM_PROMPT, /Always remove these/);
+test('ADD_SYSTEM_PROMPT: scope, head-noun, and exclusion rules', () => {
+  assert.match(ADD_SYSTEM_PROMPT, /FOR this\s+taxon itself/);
+  assert.match(ADD_SYSTEM_PROMPT, /Fabaceae/);
+  assert.match(ADD_SYSTEM_PROMPT, /'pea family', 'common oak'/);
+  assert.match(ADD_SYSTEM_PROMPT, /'Summer Chocolate', 'Ishii Weeping', 'Pendula', 'Rosea'/);
+  assert.match(ADD_SYSTEM_PROMPT, /'Ernest Wilson'/);
+  assert.match(ADD_SYSTEM_PROMPT, /scientific Latin names/);
+  assert.match(ADD_SYSTEM_PROMPT, /fo\., var\., subsp\./);
+  assert.match(ADD_SYSTEM_PROMPT, /When unsure, leave it out/);
+});
+
+test('REMOVE_SYSTEM_PROMPT: categories, guardrails, and keep-when-unsure', () => {
+  assert.match(REMOVE_SYSTEM_PROMPT, /'broken-capture'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /Always remove these/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /starts with a verb or conjunction is a fragment/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'shadberries', 'sleeping tree' are genuine/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /Never remove/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /[Gg]enuine family or genus names/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /best-known name/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /shared with another plant/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'shadberry' \/ 'shadberries'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'silk tree', 'mimosa tree'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /When unsure whether an entry is a genuine name, keep it/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'cultivar'/);
 });

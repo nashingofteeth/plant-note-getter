@@ -1,9 +1,13 @@
 // End-of-Wikipedia LLM reviewer: sits after the deterministic regex
 // extraction, receives the Wikipedia extract plus the deterministic base
-// list, and decides what to add or remove. The LLM's decisions are applied
-// verbatim (trim + empty-filter + case-insensitive dedup only) — there is no
-// deterministic junk-classifier layer after the model. Corrections are logged
-// (see review-log.js) so the deterministic pipeline can be patched later.
+// list (and the taxon's scientific name for grounding), and runs two
+// focused passes: a remove pass that marks junk in the list, then an add
+// pass that finds missed names against the cleaned list. The LLM's
+// decisions are applied verbatim (trim + empty-filter + case-insensitive
+// dedup for adds; base-name key-match for removes) — there is no
+// deterministic junk-classifier layer after the model. Corrections are
+// logged (see review-log.js) so the deterministic pipeline can be patched
+// later.
 //
 // Only Wikipedia-derived names are in scope: other sources (Wikidata, GBIF)
 // have standardized structures where an LLM adds no value. A missing/broken
@@ -32,41 +36,70 @@ const REVIEWER_JSON_SCHEMA = {
   required: ['add', 'remove']
 };
 
-const SYSTEM_PROMPT =
-  'You review common (vernacular) names of a plant taxon that a regex pipeline ' +
-  'extracted from the taxon\'s Wikipedia article. The prompt names the taxon, ' +
-  'gives the article text, and lists the extracted names. Return ONLY a JSON ' +
-  'object with two keys:\n' +
-  "- 'add': an array of strings — common names people actually use FOR this " +
-  'taxon itself, stated verbatim in the text, missing from the list.\n' +
-  "- 'remove': an array of objects { name, category } — list entries that are " +
-  'NOT genuine common names of this taxon. Categories:\n' +
-  "  - 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
-  "phrases from sloppy extraction (e.g. 'although once included', 'which " +
-  'means shut happy\'). Always remove these.\n' +
-  "  - 'generic': vague words like 'tree', 'shrub', 'plant' that fit any plant.\n" +
-  "  - 'geographic': place names, regions, or geographic features, not the plant.\n" +
-  "  - 'morphological': structural descriptors like 'lanceolate'.\n" +
-  "  - 'procedural': extraction artifacts like a leading 'known as'.\n\n" +
-  "Rules for 'add':\n" +
-  '- Names must refer to THIS taxon (species, genus, or family) — never to ' +
-  'member species, crops, products, pests, or dishes. In a family or genus ' +
-  'article, do not add crop or member-species names (e.g. for Fabaceae: no ' +
-  "'peanut', 'alfalfa', 'chickpeas').\n" +
+const ADD_SYSTEM_PROMPT =
+  'You find common (vernacular) names of a plant taxon in its Wikipedia ' +
+  'article that a regex pipeline missed. The prompt names the taxon (with ' +
+  'its rank), gives the article text, and lists the names already ' +
+  'extracted. Return ONLY a JSON object: {"add": [...]} — common names ' +
+  'people actually use FOR this taxon itself, stated verbatim in the text, ' +
+  'missing from the list. Leave "remove" empty.\n' +
+  'Scope rule (most important): a common name of THIS taxon is a name that ' +
+  'refers to the taxon itself, the way people name it in everyday speech. ' +
+  'Member species, crops, and products of the taxon are NOT names of the ' +
+  'taxon. In a family or genus article the text usually lists many member ' +
+  'species and crops — expect to add NOTHING from such lists. The only ' +
+  "acceptable adds there are names denoting the group itself (e.g. for " +
+  "Fabaceae: 'pea family', 'legume family', 'pulse family'). Never add " +
+  'scientific Latin genus or species names (e.g. \'vicia\', ' +
+  "'glycyrrhiza').\n" +
   "- Names built on the taxon's own head noun are excellent (e.g. 'pea " +
   "family', 'common oak').\n" +
+  '- Exclude cultivar, trade-mark, and cultivated-form names (e.g. ' +
+  "'Summer Chocolate', 'Ishii Weeping', 'Pendula', 'Rosea') and person " +
+  "names (e.g. 'Ernest Wilson'), even when the text lists them under " +
+  "'Cultivars'.\n" +
   '- Exclude scientific Latin names of any organism (including pests, ' +
   'diseases, and fungi) and infraspecific Latin forms with rank markers ' +
   '(fo., var., subsp., ssp.).\n' +
   '- Exclude dishes, cooked foods, tools, or objects made from the plant, ' +
-  'person names, named geographic features, pronunciation guides, and ' +
-  'anything not literally present in the text.\n' +
-  "- Regional non-English vernaculars for the taxon itself are welcome.\n\n" +
-  "Rules for 'remove':\n" +
-  "- Never remove genuine family or genus names (e.g. 'pea family', 'legume " +
-  'family\') or the taxon\'s single best-known name.\n' +
-  '- Never remove a name merely because it is regional or informal.\n' +
-  'Do not invent, paraphrase, or translate. Empty arrays allowed.';
+  'named geographic features, pronunciation guides, and anything not ' +
+  'literally present in the text.\n' +
+  '- Regional non-English vernaculars for the taxon itself are welcome.\n' +
+  'Do not invent, paraphrase, or translate. When unsure, leave it out. ' +
+  'Empty arrays allowed.';
+
+const REMOVE_SYSTEM_PROMPT =
+  'You clean a list of common (vernacular) names of a plant taxon that a ' +
+  "regex pipeline extracted from the taxon's Wikipedia article. The prompt " +
+  'names the taxon, gives the article text, and lists the extracted names. ' +
+  'Return ONLY a JSON object: {"remove": [{name, category}]} — entries that ' +
+  'are NOT genuine vernacular names of this taxon. Leave "add" empty.\n' +
+  'Categories:\n' +
+  "  - 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
+  "phrases from sloppy extraction (e.g. 'although once included', 'which " +
+  "means shut happy', 'To add to the confusion', 'are also known as " +
+  "mimosa'). An entry that starts with a verb or conjunction is a fragment " +
+  'even when it embeds a real name inside — remove it. Always remove ' +
+  'these.\n' +
+  "  - 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
+  "'plant'). A vernacular name is NOT generic just because it sounds " +
+  "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
+  "  - 'geographic': place names, regions, or geographic features, not the plant.\n" +
+  "  - 'morphological': structural descriptors like 'lanceolate'.\n" +
+  "  - 'procedural': extraction artifacts like a leading 'known as'.\n" +
+  "  - 'cultivar': cultivar, trade-mark, or cultivated-form names (e.g. " +
+  "'Rosea', 'Summer Chocolate'), and person names (e.g. 'E.H.Wilson').\n\n" +
+  'Never remove:\n' +
+  "- Genuine family or genus names (e.g. 'pea family', 'legume family') or " +
+  "the taxon's single best-known name.\n" +
+  '- Names merely because they are regional or informal.\n' +
+  "- Names shared with another plant (e.g. 'mimosa' also names an Acacia) — " +
+  'a shared name is still genuine for this taxon.\n' +
+  "- Singular or plural variants of a vernacular name (e.g. 'shadberry' / " +
+  "'shadberries'), or a name built from a head noun plus a modifier of " +
+  "this taxon (e.g. 'silk tree', 'mimosa tree').\n" +
+  'When unsure whether an entry is a genuine name, keep it. Do not invent ' +
+  'or paraphrase. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
   if (!maxInputChars || text.length <= maxInputChars) return text;
@@ -136,22 +169,42 @@ function parseReviewJson(raw) {
   return { add, remove };
 }
 
-function buildPrompt(text, base, taxon) {
+function promptHead(text, base, taxon, rank) {
   const baseList = base.length ? base.join(', ') : 'none';
   return (
-    `The article is about the plant taxon: ${taxon || 'unknown'}.\n\n` +
+    `The article is about the plant taxon: ${taxon || 'unknown'}` +
+    `${rank ? ` (${rank})` : ''}.\n\n` +
     `Wikipedia text:\n\n${text}\n\n` +
-    `Names already extracted by existing rules:\n${baseList}\n\n` +
-    'Return the JSON object with "add" = common names FOR this taxon that are ' +
-    'missing from the list, and "remove" = list entries that are not genuine ' +
-    'common names of this taxon (each with a category).'
+    `Names already extracted by existing rules:\n${baseList}\n\n`
   );
 }
 
-// End-of-Wikipedia review.
+function buildAddPrompt(text, base, taxon, rank) {
+  return (
+    promptHead(text, base, taxon, rank) +
+    'Return the JSON object with "add" = common names FOR this taxon that ' +
+    'are missing from the list (leave "remove" empty).'
+  );
+}
+
+function buildRemovePrompt(text, base, taxon, rank) {
+  return (
+    promptHead(text, base, taxon, rank) +
+    'Return the JSON object with "remove" = list entries that are not ' +
+    'genuine common names of this taxon, each with a category (leave "add" ' +
+    'empty).'
+  );
+}
+
+// End-of-Wikipedia review, run as two focused passes (small models are far
+// more reliable single-task):
+//   pass 1 (remove): mark junk in the deterministic list
+//   pass 2 (add):    find missing names against the cleaned list
+//
 //   input.extract       full Wikipedia extract text
 //   input.baseNames     deterministic extraction output (Wikipedia-only)
 //   input.taxon         scientific name of the taxon (grounds the model)
+//   input.rank          taxonomic rank label, e.g. 'family' (grounds scope)
 //   options.completer   async (system, user, { jsonSchema }) => string (from
 //                       llm-backend); null disables.
 //   options.maxInputChars cap for the extract sent to the model (default 16000)
@@ -168,59 +221,77 @@ async function reviewWikipediaNames(input = {}, options = {}) {
   if (!extract) return result;
 
   const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
-  const prompt = buildPrompt(capped, base, input.taxon);
-  let response;
-  try {
-    response = await completer(SYSTEM_PROMPT, prompt, { jsonSchema: REVIEWER_JSON_SCHEMA });
-  } catch (err) {
-    result.reason = `completer-error: ${err && err.message ? err.message : err}`;
-    return result;
-  }
+  const schema = { jsonSchema: REVIEWER_JSON_SCHEMA };
+  let firstError = null;
 
-  const parsed = parseReviewJson(response);
-  if (!parsed.add.length && !parsed.remove.length) {
-    result.reason = 'llm-empty';
-    return result;
-  }
-  result.reason = 'llm-reviewed';
-
-  // Adds: trim + drop empties + case-insensitive dedup against base and
-  // among themselves. No junk classifiers — the LLM decides.
-  const seenKeys = new Set(base.map(normalizeNameKey));
-  const added = [];
-  for (const candidate of parsed.add) {
-    const name = String(candidate).trim();
-    if (!name) continue;
-    const key = normalizeNameKey(name);
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-    added.push(name);
-  }
-
-  // Removes: key-match against the base list so the LLM can only veto
-  // Wikipedia-derived names it was shown. Unknown names are ignored.
-  // Categories are kept as informational metadata for the log.
-  const baseKeys = new Set(base.map(normalizeNameKey));
-  const removed = [];
-  const removedKeys = new Set();
-  for (const candidate of parsed.remove) {
-    const key = normalizeNameKey(candidate.name);
-    if (!baseKeys.has(key)) continue;
-    if (removedKeys.has(key)) continue;
-    removedKeys.add(key);
-    removed.push({ name: candidate.name, category: candidate.category || '' });
-  }
-
-  const removedKeySet = new Set(removed.map((r) => normalizeNameKey(r.name)));
+  // Pass 1 — remove: the LLM may only veto names it was shown (base-list
+  // key-match); categories are informational metadata for the log.
   const baseNameByKey = new Map(base.map((n) => [normalizeNameKey(n), n]));
-  const removedNames = removed.map((r) => baseNameByKey.get(normalizeNameKey(r.name)));
+  const removedKeys = new Set();
+  const removed = [];
+  if (base.length) {
+    let response = null;
+    try {
+      response = await completer(
+        REMOVE_SYSTEM_PROMPT,
+        buildRemovePrompt(capped, base, input.taxon, input.rank),
+        schema
+      );
+    } catch (err) {
+      firstError = err;
+    }
+    if (response !== null) {
+      for (const candidate of parseReviewJson(response).remove) {
+        const key = normalizeNameKey(candidate.name);
+        if (!baseNameByKey.has(key)) continue;
+        if (removedKeys.has(key)) continue;
+        removedKeys.add(key);
+        removed.push({ name: baseNameByKey.get(key), category: candidate.category || '' });
+      }
+    }
+  }
+
+  // Pass 2 — add: the add pass sees the ORIGINAL base list (not the
+  // post-removal list), so it cannot re-propose entries pass 1 just removed;
+  // dedup against base keys blocks any contradiction. No junk classifiers —
+  // the LLM decides.
+  const afterRemoval = base.filter((n) => !removedKeys.has(normalizeNameKey(n)));
+  const added = [];
+  let response2 = null;
+  try {
+    response2 = await completer(
+      ADD_SYSTEM_PROMPT,
+      buildAddPrompt(capped, base, input.taxon, input.rank),
+      schema
+    );
+  } catch (err) {
+    if (!firstError) firstError = err;
+  }
+  if (response2 !== null) {
+    const seenKeys = new Set(base.map(normalizeNameKey));
+    for (const candidate of parseReviewJson(response2).add) {
+      const name = String(candidate).trim();
+      if (!name) continue;
+      const key = normalizeNameKey(name);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      added.push(name);
+    }
+  }
+
+  if (!added.length && !removed.length) {
+    if (firstError) {
+      result.reason = `completer-error: ${firstError && firstError.message ? firstError.message : firstError}`;
+    } else {
+      result.reason = 'llm-empty';
+    }
+    return result;
+  }
 
   result.added = added;
-  result.removed = removedNames.map((name, i) => ({
-    name,
-    category: removed[i].category
-  }));
-  result.names = [...base.filter((n) => !removedKeySet.has(normalizeNameKey(n))), ...added];
+  result.removed = removed;
+  result.names = [...afterRemoval, ...added];
+  result.reason = 'llm-reviewed';
   return result;
 }
 
@@ -228,7 +299,10 @@ module.exports = {
   reviewWikipediaNames,
   parseNamesJson,
   parseReviewJson,
-  buildPrompt,
-  SYSTEM_PROMPT,
+  promptHead,
+  buildAddPrompt,
+  buildRemovePrompt,
+  ADD_SYSTEM_PROMPT,
+  REMOVE_SYSTEM_PROMPT,
   REVIEWER_JSON_SCHEMA
 };

@@ -103,7 +103,8 @@ async function collectCommonNames(entity, candidateEntities) {
         {
           extract: wikiArticle.extract,
           baseNames: wikiNamesRaw,
-          taxon: entity.scientificName || entity.wikipediaTitle
+          taxon: entity.scientificName || entity.wikipediaTitle,
+          rank: entity.rankLabel
         },
         { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
       );
