@@ -550,14 +550,6 @@ function isLatinJunk(name) {
   return /\b(?:foliis|calyce|radii|petalis|pistillatis|ovato-acutis|hirsutis|oppositis|imbricatus)\b/i.test(name);
 }
 
-// Reject pest/disease terms that slipped through as "names" — e.g. "white
-// rot", "red ring disease", "coconut rhinoceros beetle" (Elaeis article,
-// skipped-sentence LLM catches). Whole-word matching so "carrot", "rusty",
-// "spotted", "scabious" are untouched.
-function isDiseaseJunk(name) {
-  return /\b(?:rot|rust|blight|wilt|mildew|smut|scab|spot|disease|syndrome|virus|viroid|phytoplasma|nematode|fungus|fungi|bacteria|pathogen)\b/i.test(name.trim());
-}
-
 // Reject names that denote OTHER organisms (insect pests, diseases) rather than
 // the plant itself — e.g. "fruit-tree leafroller", "giant bark aphid".
 // Plural variants included (following the larva/larvae, looper/loopers
@@ -626,14 +618,6 @@ function isEtymologyGloss(name) {
 
 function isAbbreviatedBinomialLike(text) {
   return /^[A-Z]\.\s+[a-z]+/.test(text.trim());
-}
-
-// Infraspecific Latin forms that slipped through as "names" — e.g. "Elais
-// guineensis fo. dura", "Elais guineensis var. pisifera" (Elaeis article,
-// skipped-sentence LLM catches). Rank markers never occur in genuine common
-// names, so the dotted abbreviations are matched unconditionally.
-function isLatinFormLike(text) {
-  return /\b(?:fo|var|subsp|ssp|subvar)\./i.test(text.trim());
 }
 
 function hasCJK(text) {
@@ -1961,9 +1945,7 @@ module.exports = {
   isGeographicJunk,
   isProcedural,
   isAbbreviatedBinomialLike,
-  isLatinFormLike,
   isSubjectBinomial,
   isOtherOrganismJunk,
-  isDiseaseJunk,
   hasCJK
 };

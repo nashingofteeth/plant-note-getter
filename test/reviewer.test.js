@@ -308,15 +308,15 @@ test('verifyCandidate: rejects abbreviated binomials and CJK', () => {
   assert.strictEqual(verifyCandidate('橡树', '橡树'.toLowerCase(), new Set()).dropped, 'hasCJK');
 });
 
-// ─── eval-driven gates (Elaeis/Lagenaria vault samples) ────────────────────
+// ─── prompt-carried exclusions (no deterministic gate) ──────────────────────
+// Infraspecific Latin forms (fo./var./subsp.), pest/disease/damage terms, and
+// named geographic features are excluded via SYSTEM_PROMPT wording, not via
+// verifyCandidate branches — the model must not propose them.
 
-test('verifyCandidate: drops infraspecific Latin forms (fo./var./subsp.)', () => {
-  const text =
-    'elais guineensis fo. dura and elais guineensis var. pisifera grow here. ' +
-    'pinus ponderosa subsp. benthamiana stands tall.';
-  assert.strictEqual(verifyCandidate('Elais guineensis fo. dura', text, new Set()).dropped, 'latin-form');
-  assert.strictEqual(verifyCandidate('Elais guineensis var. pisifera', text, new Set()).dropped, 'latin-form');
-  assert.strictEqual(verifyCandidate('Pinus ponderosa subsp. benthamiana', text, new Set()).dropped, 'latin-form');
+test('SYSTEM_PROMPT excludes latin forms, pests/diseases, and geo features', () => {
+  assert.match(SYSTEM_PROMPT, /fo\., var\., subsp\./);
+  assert.match(SYSTEM_PROMPT, /geographic features/);
+  assert.match(SYSTEM_PROMPT, /pest, disease/);
 });
 
 test('verifyCandidate: drops geographic feature phrases but keeps plant nouns', () => {
@@ -332,14 +332,12 @@ test('verifyCandidate: drops geographic feature phrases but keeps plant nouns', 
   assert.ok(verifyCandidate('Coast live oak', text, new Set()).name);
 });
 
-test('verifyCandidate: drops pest and disease terms', () => {
+test('verifyCandidate: drops pest terms', () => {
   const text =
-    'the coconut rhinoceros beetle bores into trunks. white rot kills buds. ' +
-    'red ring disease spreads fast. bagworm moths defoliate. oil palm grows here.';
+    'the coconut rhinoceros beetle bores into trunks. ' +
+    'bagworm moths defoliate. oil palm grows here.';
   assert.strictEqual(verifyCandidate('coconut rhinoceros beetle', text, new Set()).dropped, 'other-organism');
   assert.strictEqual(verifyCandidate('Bagworm moths', text, new Set()).dropped, 'other-organism');
-  assert.strictEqual(verifyCandidate('white rot', text, new Set()).dropped, 'disease');
-  assert.strictEqual(verifyCandidate('red ring disease', text, new Set()).dropped, 'disease');
   assert.ok(verifyCandidate('oil palm', text, new Set()).name);
 });
 
