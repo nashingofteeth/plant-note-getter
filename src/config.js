@@ -21,6 +21,11 @@ const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 // Hybrid LLM reviewer (advisory second pass over Wikipedia extracts).
 const LLM_ENABLED = process.env.LLM_ENABLED !== 'false';
 const LLM_MODEL_ID = process.env.LLM_MODEL_ID || 'onnx-community/Qwen2.5-1.5B-Instruct';
+// Backend: 'transformers' (in-process ONNX via transformers.js) or 'ollama'
+// (external daemon over HTTP; no node ML stack, supports JSON-schema mode).
+const LLM_BACKEND = process.env.LLM_BACKEND || 'transformers';
+const LLM_SERVER_URL = process.env.LLM_SERVER_URL || 'http://localhost:11434';
+const LLM_MODEL = process.env.LLM_MODEL || 'qwen3:4b-instruct-2507-q4_K_M';
 const LLM_MAX_INPUT_CHARS = parseInt(process.env.LLM_MAX_INPUT_CHARS || '16000', 10);
 const LLM_GATE = process.env.LLM_GATE || 'always'; // 'always' | 'auto'
 
@@ -38,6 +43,9 @@ module.exports = {
   LABEL_MAP_PATH,
   LLM_ENABLED,
   LLM_MODEL_ID,
+  LLM_BACKEND,
+  LLM_SERVER_URL,
+  LLM_MODEL,
   LLM_MAX_INPUT_CHARS,
   LLM_GATE,
   LLM_REJECT_ENABLED,

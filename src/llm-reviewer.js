@@ -28,6 +28,30 @@ const REJECT_CATEGORIES = new Set([
   'broken-capture'
 ]);
 
+// JSON schema for grammar-constrained decoding (Ollama `format`, or any
+// backend honoring options.jsonSchema). Mirrors parseReviewJson's {add,
+// remove} contract; the category enum mirrors REJECT_CATEGORIES so the model
+// cannot invent categories. Deterministic verifyCandidate/verifyVeto gates
+// still decide acceptance — this only guarantees syntactic shape.
+const REVIEWER_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    add: { type: 'array', items: { type: 'string' } },
+    remove: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          category: { type: 'string', enum: [...REJECT_CATEGORIES] }
+        },
+        required: ['name', 'category']
+      }
+    }
+  },
+  required: ['add', 'remove']
+};
+
 const SYSTEM_PROMPT =
   'You extract common (vernacular) names of a plant taxon from Wikipedia text. ' +
   'Return ONLY a JSON object with two keys:\n' +
@@ -179,7 +203,9 @@ function verifyVeto(candidate, baseKeys) {
 }
 
 // Advisory second pass over a Wikipedia extract.
-//   options.completer     async (system, user) => string (from llm-backend); null disables
+//   options.completer     async (system, user, { jsonSchema }) => string (from
+//                         llm-backend); null disables. Backends that ignore the
+//                         third argument keep working (free-form + tolerant parse).
 //   options.maxInputChars  cap for the extract sent to the model (default 16000)
 //   options.gate          'always' (default) or 'auto' (skip when base list is already long)
 //   options.autoGateMinBase  base-name count above which 'auto' gates out the LLM
@@ -208,7 +234,7 @@ async function reviewExtractWikipediaNames(text, options = {}) {
   const prompt = buildPrompt(extract, base);
   let response;
   try {
-    response = await completer(SYSTEM_PROMPT, prompt);
+    response = await completer(SYSTEM_PROMPT, prompt, { jsonSchema: REVIEWER_JSON_SCHEMA });
   } catch (err) {
     trace.reason = `completer-error: ${err && err.message ? err.message : err}`;
     return result;
@@ -285,5 +311,6 @@ module.exports = {
   verifyVeto,
   buildPrompt,
   SYSTEM_PROMPT,
+  REVIEWER_JSON_SCHEMA,
   REJECT_CATEGORIES
 };

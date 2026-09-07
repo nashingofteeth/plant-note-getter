@@ -6,6 +6,8 @@ const {
   parseReviewJson,
   verifyCandidate,
   verifyVeto,
+  SYSTEM_PROMPT,
+  REVIEWER_JSON_SCHEMA,
   REJECT_CATEGORIES
 } = require('../src/llm-reviewer');
 
@@ -303,4 +305,32 @@ test('parseNamesJson: non-array or unparseable returns empty', () => {
 test('verifyCandidate: rejects abbreviated binomials and CJK', () => {
   assert.strictEqual(verifyCandidate('Q. robur', 'q. robur'.toLowerCase(), new Set()).dropped, 'abbreviated-binomial');
   assert.strictEqual(verifyCandidate('橡树', '橡树'.toLowerCase(), new Set()).dropped, 'hasCJK');
+});
+
+// ─── REVIEWER_JSON_SCHEMA ─────────────────────────────────────────────────
+
+test('REVIEWER_JSON_SCHEMA mirrors the {add, remove} contract and category allowlist', () => {
+  assert.strictEqual(REVIEWER_JSON_SCHEMA.type, 'object');
+  assert.deepStrictEqual(REVIEWER_JSON_SCHEMA.required, ['add', 'remove']);
+  assert.strictEqual(REVIEWER_JSON_SCHEMA.properties.add.type, 'array');
+  const removeItems = REVIEWER_JSON_SCHEMA.properties.remove.items;
+  assert.deepStrictEqual(removeItems.required, ['name', 'category']);
+  assert.deepStrictEqual(
+    removeItems.properties.category.enum.sort(),
+    [...REJECT_CATEGORIES].sort()
+  );
+});
+
+test('reviewExtractWikipediaNames: passes the JSON schema to the completer', async () => {
+  const seen = [];
+  const completer = async (system, user, options) => {
+    seen.push({ system, user, options });
+    return '{"add":[],"remove":[]}';
+  };
+  const { names } = await reviewExtractWikipediaNames(BOUNDARY_OAK, { completer });
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(seen[0].system, SYSTEM_PROMPT);
+  assert.ok(seen[0].user.includes('boundary oak'));
+  assert.deepStrictEqual(seen[0].options, { jsonSchema: REVIEWER_JSON_SCHEMA });
+  assert.deepStrictEqual(names, []);
 });
