@@ -273,4 +273,4 @@ Each run where the LLM finds names, drops names, or vetoes names appends a JSONL
 5. Patch the regex rules in `src/wiki-extract.js`, then run `npm test` until the new tests are green and all existing cases still pass.
 6. For vetoes, the deterministic guard is the regex — there's no red test to "un-veto", so re-run the species to confirm the name is now captured cleanly by the regex (and the tally shows the removal as non-recurring).
 
-Disable the noise-rejection pass independently with `LLM_REJECT_ENABLED=false` in `.env` (keeps the add-only behavior).
+Both passes are disabled by default. Enable the add pass with `LLM_ENABLED=true` in `.env`, and the noise-rejection pass additionally with `LLM_REJECT_ENABLED=true` (add-only when the latter is unset).
