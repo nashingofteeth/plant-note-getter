@@ -100,7 +100,11 @@ async function collectCommonNames(entity, candidateEntities) {
       const { appendReviewRecord } = require('./review-log');
       const completer = await getCompleter();
       const reviewed = await reviewWikipediaNames(
-        { extract: wikiArticle.extract, baseNames: wikiNamesRaw },
+        {
+          extract: wikiArticle.extract,
+          baseNames: wikiNamesRaw,
+          taxon: entity.scientificName || entity.wikipediaTitle
+        },
         { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
       );
       if (reviewed.added.length || reviewed.removed.length) {

@@ -279,13 +279,16 @@ test('collectCommonNames: populate and interactive paths use same function (pari
 
 test('collectCommonNames: LLM review applied to Wikipedia list only; diff and log recorded', async () => {
   const logged = [];
+  let promptToModel = '';
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
   llmBackend.getCompleter = async () =>
-    async () =>
-      JSON.stringify({
+    async (_system, user) => {
+      promptToModel = user;
+      return JSON.stringify({
         add: ['llm catch'],
         remove: [{ name: 'regex noise', category: 'morphological' }]
       });
+    };
   stubCommonNames({ wikipedia: ['regex noise', 'keeper'], extract: 'Wiki text about the plant.' });
   const entity = {
     id: 'Q1',
@@ -302,6 +305,8 @@ test('collectCommonNames: LLM review applied to Wikipedia list only; diff and lo
   assert.deepStrictEqual(bySource.wikipedia, ['keeper', 'llm catch']);
   // Wikidata names untouched by the review; final list reflects the diff.
   assert.deepStrictEqual(names, ['wikidata name', 'keeper', 'llm catch']);
+  // The model is grounded with the taxon name.
+  assert.ok(promptToModel.includes('Test thing'));
   // Review-gap log record written with the capped extract.
   assert.strictEqual(logged.length, 1);
   assert.deepStrictEqual(logged[0].record.llmAdded, ['llm catch']);

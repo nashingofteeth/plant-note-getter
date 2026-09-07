@@ -33,24 +33,40 @@ const REVIEWER_JSON_SCHEMA = {
 };
 
 const SYSTEM_PROMPT =
-  'You extract common (vernacular) names of a plant taxon from Wikipedia text. ' +
-  'Return ONLY a JSON object with two keys:\n' +
-  "- 'add': an array of strings — single common names stated verbatim in the " +
-  'text that are NOT already in the provided list.\n' +
-  "- 'remove': an array of objects { name, category } — entries in the provided " +
-  'list that are NOT genuine common names of this plant. Valid categories: ' +
-  'generic, geographic, morphological, procedural, broken-capture.\n' +
-  'Exclude scientific (Latin) names, geographic terms, morphological ' +
-  'descriptions, pronunciation guides, and anything not literally present in ' +
-  'the text. Regional non-English vernaculars for the plant itself are welcome. ' +
-  'Exclude dishes, cooked foods, tools, instruments, or other objects made from ' +
-  'the plant, even when the text names them. Exclude scientific Latin names of ' +
-  'any organism, including pest, disease, and fungus names, and infraspecific ' +
-  'Latin forms containing rank markers such as fo., var., subsp., ssp., or ' +
-  'subvar. (e.g. Elais guineensis fo. dura). Exclude named geographic features ' +
-  'and pest, disease, or damage terms, even when they appear next to naming ' +
-  'verbs. Do not invent or ' +
-  'paraphrase. Empty arrays allowed.';
+  'You review common (vernacular) names of a plant taxon that a regex pipeline ' +
+  'extracted from the taxon\'s Wikipedia article. The prompt names the taxon, ' +
+  'gives the article text, and lists the extracted names. Return ONLY a JSON ' +
+  'object with two keys:\n' +
+  "- 'add': an array of strings — common names people actually use FOR this " +
+  'taxon itself, stated verbatim in the text, missing from the list.\n' +
+  "- 'remove': an array of objects { name, category } — list entries that are " +
+  'NOT genuine common names of this taxon. Categories:\n' +
+  "  - 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
+  "phrases from sloppy extraction (e.g. 'although once included', 'which " +
+  'means shut happy\'). Always remove these.\n' +
+  "  - 'generic': vague words like 'tree', 'shrub', 'plant' that fit any plant.\n" +
+  "  - 'geographic': place names, regions, or geographic features, not the plant.\n" +
+  "  - 'morphological': structural descriptors like 'lanceolate'.\n" +
+  "  - 'procedural': extraction artifacts like a leading 'known as'.\n\n" +
+  "Rules for 'add':\n" +
+  '- Names must refer to THIS taxon (species, genus, or family) — never to ' +
+  'member species, crops, products, pests, or dishes. In a family or genus ' +
+  'article, do not add crop or member-species names (e.g. for Fabaceae: no ' +
+  "'peanut', 'alfalfa', 'chickpeas').\n" +
+  "- Names built on the taxon's own head noun are excellent (e.g. 'pea " +
+  "family', 'common oak').\n" +
+  '- Exclude scientific Latin names of any organism (including pests, ' +
+  'diseases, and fungi) and infraspecific Latin forms with rank markers ' +
+  '(fo., var., subsp., ssp.).\n' +
+  '- Exclude dishes, cooked foods, tools, or objects made from the plant, ' +
+  'person names, named geographic features, pronunciation guides, and ' +
+  'anything not literally present in the text.\n' +
+  "- Regional non-English vernaculars for the taxon itself are welcome.\n\n" +
+  "Rules for 'remove':\n" +
+  "- Never remove genuine family or genus names (e.g. 'pea family', 'legume " +
+  'family\') or the taxon\'s single best-known name.\n' +
+  '- Never remove a name merely because it is regional or informal.\n' +
+  'Do not invent, paraphrase, or translate. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
   if (!maxInputChars || text.length <= maxInputChars) return text;
@@ -120,20 +136,22 @@ function parseReviewJson(raw) {
   return { add, remove };
 }
 
-function buildPrompt(text, base) {
+function buildPrompt(text, base, taxon) {
   const baseList = base.length ? base.join(', ') : 'none';
   return (
+    `The article is about the plant taxon: ${taxon || 'unknown'}.\n\n` +
     `Wikipedia text:\n\n${text}\n\n` +
     `Names already extracted by existing rules:\n${baseList}\n\n` +
-    'Return the JSON object with "add" = common names in the text that are ' +
+    'Return the JSON object with "add" = common names FOR this taxon that are ' +
     'missing from the list, and "remove" = list entries that are not genuine ' +
-    'common names of this plant (each with a category).'
+    'common names of this taxon (each with a category).'
   );
 }
 
 // End-of-Wikipedia review.
 //   input.extract       full Wikipedia extract text
 //   input.baseNames     deterministic extraction output (Wikipedia-only)
+//   input.taxon         scientific name of the taxon (grounds the model)
 //   options.completer   async (system, user, { jsonSchema }) => string (from
 //                       llm-backend); null disables.
 //   options.maxInputChars cap for the extract sent to the model (default 16000)
@@ -150,7 +168,7 @@ async function reviewWikipediaNames(input = {}, options = {}) {
   if (!extract) return result;
 
   const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
-  const prompt = buildPrompt(capped, base);
+  const prompt = buildPrompt(capped, base, input.taxon);
   let response;
   try {
     response = await completer(SYSTEM_PROMPT, prompt, { jsonSchema: REVIEWER_JSON_SCHEMA });

@@ -197,24 +197,29 @@ test('reviewWikipediaNames: maxInputChars caps the extract sent to the model', a
   assert.ok(sent.includes('pedunculate oak'), 'base list reaches the model');
 });
 
-test('reviewWikipediaNames: passes the JSON schema to the completer', async () => {
+test('reviewWikipediaNames: passes the JSON schema and taxon to the completer', async () => {
   const seen = [];
   const completer = async (system, user, options) => {
     seen.push({ system, user, options });
     return '{"add":[],"remove":[]}';
   };
-  await reviewWikipediaNames({ extract: EXTRACT, baseNames: [] }, { completer });
+  await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: [], taxon: 'Quercus robur' },
+    { completer }
+  );
   assert.strictEqual(seen.length, 1);
   assert.strictEqual(seen[0].system, SYSTEM_PROMPT);
   assert.ok(seen[0].user.includes('boundary oak'));
+  assert.ok(seen[0].user.includes('Quercus robur'));
   assert.deepStrictEqual(seen[0].options, { jsonSchema: REVIEWER_JSON_SCHEMA });
 });
 
-test('buildPrompt: includes the extract and the base list', () => {
-  const prompt = buildPrompt('Some wiki text.', ['oak', 'pine']);
+test('buildPrompt: includes taxon, extract, and the base list', () => {
+  const prompt = buildPrompt('Some wiki text.', ['oak', 'pine'], 'Quercus robur');
+  assert.ok(prompt.includes('Quercus robur'));
   assert.ok(prompt.includes('Some wiki text.'));
   assert.ok(prompt.includes('oak, pine'));
-  const empty = buildPrompt('Some wiki text.', []);
+  const empty = buildPrompt('Some wiki text.', [], 'Quercus robur');
   assert.ok(empty.includes('none'));
 });
 
@@ -272,9 +277,17 @@ test('REVIEWER_JSON_SCHEMA: {add, remove} contract; category is a free string', 
   assert.strictEqual(removeItems.properties.category.enum, undefined);
 });
 
-test('SYSTEM_PROMPT describes the add/remove contract and exclusions', () => {
+test('SYSTEM_PROMPT describes the contract, scope rules, and veto guardrails', () => {
   assert.match(SYSTEM_PROMPT, /'add'/);
   assert.match(SYSTEM_PROMPT, /'remove'/);
-  assert.match(SYSTEM_PROMPT, /scientific \(Latin\) names/);
+  assert.match(SYSTEM_PROMPT, /scientific Latin names/);
   assert.match(SYSTEM_PROMPT, /fo\., var\., subsp\./);
+  // Scope: names for this taxon, not member species or crops.
+  assert.match(SYSTEM_PROMPT, /FOR this\s+taxon itself/);
+  assert.match(SYSTEM_PROMPT, /Fabaceae/);
+  // Veto guardrails: family names and the best-known name stay.
+  assert.match(SYSTEM_PROMPT, /Never remove genuine family or genus names/);
+  assert.match(SYSTEM_PROMPT, /best-known name/);
+  // Broken captures must be removed.
+  assert.match(SYSTEM_PROMPT, /Always remove these/);
 });
