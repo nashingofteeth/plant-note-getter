@@ -525,6 +525,12 @@ function isGeographicJunk(name) {
   const lower = name.toLowerCase().trim();
   if (GEOGRAPHIC_JUNK.test(lower)) return true;
   if (/^(?:european|american|african|asian|australian|canadian|mexican|chinese|japanese|indian)\s+(holly|basswood|juniper|bluebell|elm|oak|pine|birch|cedar|fir|maple|walnut|poplar|cherry|pear|apple|rose|lily|iris)$/i.test(lower)) return false;
+  // Named geographic features — "Bight of Biafra", "Palm oil coast" (Elaeis
+  // article). The head-of pattern requires "X of" so plant nouns like "bay
+  // rum" and "mountain laurel" are untouched; the trailing-coast pattern only
+  // matches at the end so "coast redwood" and "Coast live oak" survive.
+  if (/\b(?:bight|gulf|bay|cape|peninsula|island|isle|mount|mountain|lake|falls|strait|channel|sound)\s+of\b/i.test(name)) return true;
+  if (/\bcoast$/i.test(name.trim())) return true;
   return false;
 }
 
@@ -544,10 +550,20 @@ function isLatinJunk(name) {
   return /\b(?:foliis|calyce|radii|petalis|pistillatis|ovato-acutis|hirsutis|oppositis|imbricatus)\b/i.test(name);
 }
 
+// Reject pest/disease terms that slipped through as "names" — e.g. "white
+// rot", "red ring disease", "coconut rhinoceros beetle" (Elaeis article,
+// skipped-sentence LLM catches). Whole-word matching so "carrot", "rusty",
+// "spotted", "scabious" are untouched.
+function isDiseaseJunk(name) {
+  return /\b(?:rot|rust|blight|wilt|mildew|smut|scab|spot|disease|syndrome|virus|viroid|phytoplasma|nematode|fungus|fungi|bacteria|pathogen)\b/i.test(name.trim());
+}
+
 // Reject names that denote OTHER organisms (insect pests, diseases) rather than
 // the plant itself — e.g. "fruit-tree leafroller", "giant bark aphid".
+// Plural variants included (following the larva/larvae, looper/loopers
+// precedent): model-proposed "Bagworm moths" and "Oryctes beetles" must match.
 function isOtherOrganismJunk(name) {
-  return /\b(?:leaf[- ]?roller|leafroller|aphid|lecanium|caterpillar|larva|larvae|moth|beetle|weevil|mite|sawfly|whitefly|thrips|borer|leafhopper|webworm|looper|loopers|armyworm|scale\s*(?:insect|bug|mite))\b/i.test(name);
+  return /\b(?:leaf[- ]?rollers?|leafroller|aphids?|lecanium|caterpillars?|larva|larvae|moths?|beetles?|weevils?|mites?|sawfl(?:y|ies)|whitefl(?:y|ies)|thrips|borers?|leafhoppers?|webworms?|loopers?|armyworms?|scale\s*(?:insect|bug|mite))\b/i.test(name);
 }
 
 // Reject taxonomic-rank references that slipped through (e.g. "legume or bean
@@ -610,6 +626,14 @@ function isEtymologyGloss(name) {
 
 function isAbbreviatedBinomialLike(text) {
   return /^[A-Z]\.\s+[a-z]+/.test(text.trim());
+}
+
+// Infraspecific Latin forms that slipped through as "names" — e.g. "Elais
+// guineensis fo. dura", "Elais guineensis var. pisifera" (Elaeis article,
+// skipped-sentence LLM catches). Rank markers never occur in genuine common
+// names, so the dotted abbreviations are matched unconditionally.
+function isLatinFormLike(text) {
+  return /\b(?:fo|var|subsp|ssp|subvar)\./i.test(text.trim());
 }
 
 function hasCJK(text) {
@@ -1937,5 +1961,9 @@ module.exports = {
   isGeographicJunk,
   isProcedural,
   isAbbreviatedBinomialLike,
+  isLatinFormLike,
+  isSubjectBinomial,
+  isOtherOrganismJunk,
+  isDiseaseJunk,
   hasCJK
 };

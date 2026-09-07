@@ -16,6 +16,9 @@ const {
   isGeographicJunk,
   isProcedural,
   isAbbreviatedBinomialLike,
+  isLatinFormLike,
+  isOtherOrganismJunk,
+  isDiseaseJunk,
   hasCJK
 } = require('./wiki-extract');
 const { stripArticle, normalizeNameKey } = require('./utils');
@@ -62,7 +65,11 @@ const SYSTEM_PROMPT =
   'generic, geographic, morphological, procedural, broken-capture.\n' +
   'Exclude scientific (Latin) names, geographic terms, morphological ' +
   'descriptions, pronunciation guides, and anything not literally present in ' +
-  'the text. Do not invent or paraphrase. Empty arrays allowed.';
+  'the text. Regional non-English vernaculars for the plant itself are welcome. ' +
+  'Exclude dishes, cooked foods, tools, instruments, or other objects made from ' +
+  'the plant, even when the text names them. Exclude scientific Latin names of ' +
+  'any organism, including pest, disease, and fungus names. Do not invent or ' +
+  'paraphrase. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
   if (!maxInputChars || text.length <= maxInputChars) return text;
@@ -175,11 +182,14 @@ function verifyCandidate(candidate, extractLower, seenKeys) {
   const target = (cleaned && cleaned[0]) || stripArticle(candidate).trim();
   if (!target) return { dropped: 'empty' };
   if (isAbbreviatedBinomialLike(target)) return { dropped: 'abbreviated-binomial' };
+  if (isLatinFormLike(target)) return { dropped: 'latin-form' };
   if (hasCJK(target)) return { dropped: 'hasCJK' };
   if (!extractLower.includes(target.toLowerCase())) return { dropped: 'not-in-text' };
   if (isGenericJunk(target)) return { dropped: 'isGenericJunk' };
   if (isGeographicJunk(target)) return { dropped: 'isGeographicJunk' };
   if (isProcedural(target)) return { dropped: 'isProcedural' };
+  if (isOtherOrganismJunk(target)) return { dropped: 'other-organism' };
+  if (isDiseaseJunk(target)) return { dropped: 'disease' };
   const key = normalizeNameKey(target);
   if (seenKeys.has(key)) return { dropped: 'duplicate' };
   seenKeys.add(key);

@@ -85,7 +85,7 @@ async function buildOllamaCompleter() {
       ],
       stream: false,
       think: false,
-      options: { temperature: 0, num_predict: 512 }
+      options: { temperature: 0, num_predict: 2048 }
     };
     if (options && options.jsonSchema) body.format = options.jsonSchema;
     const res = await fetch(`${baseUrl}/api/chat`, {

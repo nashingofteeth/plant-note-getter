@@ -308,6 +308,41 @@ test('verifyCandidate: rejects abbreviated binomials and CJK', () => {
   assert.strictEqual(verifyCandidate('橡树', '橡树'.toLowerCase(), new Set()).dropped, 'hasCJK');
 });
 
+// ─── eval-driven gates (Elaeis/Lagenaria vault samples) ────────────────────
+
+test('verifyCandidate: drops infraspecific Latin forms (fo./var./subsp.)', () => {
+  const text =
+    'elais guineensis fo. dura and elais guineensis var. pisifera grow here. ' +
+    'pinus ponderosa subsp. benthamiana stands tall.';
+  assert.strictEqual(verifyCandidate('Elais guineensis fo. dura', text, new Set()).dropped, 'latin-form');
+  assert.strictEqual(verifyCandidate('Elais guineensis var. pisifera', text, new Set()).dropped, 'latin-form');
+  assert.strictEqual(verifyCandidate('Pinus ponderosa subsp. benthamiana', text, new Set()).dropped, 'latin-form');
+});
+
+test('verifyCandidate: drops geographic feature phrases but keeps plant nouns', () => {
+  const text =
+    'renamed the bight of biafra. called the palm oil coast by europeans. ' +
+    'bay rum is fragrant. the coast redwood towers. mountain laurel blooms. ' +
+    'the coast live oak stands.';
+  assert.strictEqual(verifyCandidate('Bight of Biafra', text, new Set()).dropped, 'isGeographicJunk');
+  assert.strictEqual(verifyCandidate('Palm oil coast', text, new Set()).dropped, 'isGeographicJunk');
+  assert.ok(verifyCandidate('Bay rum', text, new Set()).name);
+  assert.ok(verifyCandidate('coast redwood', text, new Set()).name);
+  assert.ok(verifyCandidate('mountain laurel', text, new Set()).name);
+  assert.ok(verifyCandidate('Coast live oak', text, new Set()).name);
+});
+
+test('verifyCandidate: drops pest and disease terms', () => {
+  const text =
+    'the coconut rhinoceros beetle bores into trunks. white rot kills buds. ' +
+    'red ring disease spreads fast. bagworm moths defoliate. oil palm grows here.';
+  assert.strictEqual(verifyCandidate('coconut rhinoceros beetle', text, new Set()).dropped, 'other-organism');
+  assert.strictEqual(verifyCandidate('Bagworm moths', text, new Set()).dropped, 'other-organism');
+  assert.strictEqual(verifyCandidate('white rot', text, new Set()).dropped, 'disease');
+  assert.strictEqual(verifyCandidate('red ring disease', text, new Set()).dropped, 'disease');
+  assert.ok(verifyCandidate('oil palm', text, new Set()).name);
+});
+
 // ─── REVIEWER_JSON_SCHEMA ─────────────────────────────────────────────────
 
 test('REVIEWER_JSON_SCHEMA mirrors the {add, remove} contract and category allowlist', () => {

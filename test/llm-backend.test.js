@@ -62,7 +62,7 @@ test('ollama: builds the expected /api/chat request and returns trimmed content'
     ],
     stream: false,
     think: false,
-    options: { temperature: 0, num_predict: 512 },
+    options: { temperature: 0, num_predict: 2048 },
     format: SCHEMA
   });
 });
