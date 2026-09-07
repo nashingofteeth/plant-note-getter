@@ -1507,8 +1507,11 @@ function _extractWikipediaCommonNames(text, trace) {
     // R24: "called X, Y, or Z" after comma, before "is" (Lilium regale), and
     // "curd called Romanesco broccoli." (Cauliflower). Negative lookbehind keeps
     // "also called"/"is called"/"was called"/"being called" constructions for
-    // other rules.
-    const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s*[.,]\s*$)/i);
+    // other rules. Terminates at "by <agent>" so attributions ("called the X
+    // by local woodworkers") don't leak into the name; R50 captures the quote.
+    // Exempts "by the <People>" (capitalized) so Latin-name attributions
+    // ("called Salvia by the Romans") still reach the People guard below.
+    const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s+by\b(?!\s+the\s+[A-Z])|\s*[.,]\s*$)/i);
     if (r24) {
       const capture = finalizeCapture(r24[1], 200);
       // Reject historical/etymological attribution: "called Salvia by the Romans"
@@ -1772,8 +1775,11 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R51: "often/sometimes/frequently (also) called (the) X" — "often called the Cape heaths",
-    // "sometimes also called Virgilia" (adverb and "called" may be separated by "also")
-    const r51 = sentence.match(/(?:often|sometimes|frequently)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s*[,.;]\s*|$)/i);
+    // "sometimes also called Virgilia" (adverb and "called" may be separated by "also").
+    // Terminates at "by <agent>" so attributions ("called the X by local
+    // woodworkers") don't leak into the name; R50 captures the quoted name.
+    // Exempts "by the <People>" (capitalized Latin-name marker, cf. R24).
+    const r51 = sentence.match(/(?:often|sometimes|frequently)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s+by\b(?!\s+the\s+[A-Z])|\s*[,.;]\s*|$)/i);
     if (r51) {
       const capture = finalizeCapture(r51[1], 200);
       if (capture) caps.push({ rule: 'R51', capture: capture });

@@ -965,6 +965,11 @@ const TESTS = [
     extract: 'Common chicory is also known as blue daisy, blue dandelion, blue sailors, blue weed, and wild endive, among other regional names. ("Cornflower" is also commonly applied to Centaurea cyanus.) Common names for varieties of var. foliosum include endive, radicchio, radichetta, Belgian endive, French endive, red endive, sugarloaf, and witloof (or witlof).',
     expected: ['blue daisy', 'blue dandelion', 'blue sailors', 'blue weed', 'wild endive', 'endive', 'radicchio', 'radichetta', 'Belgian endive', 'French endive', 'red endive', 'sugarloaf', 'witloof', 'witlof'],
   },
+  {
+    name: 'R51 by-agent terminator (often called the "boundary oak" by local woodworkers)',
+    extract: 'Quercus robur is a species of flowering plant. In North America it is often called the "boundary oak" by local woodworkers.',
+    expected: ['boundary oak'],
+  },
 ];
 
 const GBIF_TESTS = [

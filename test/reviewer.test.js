@@ -230,9 +230,10 @@ test('reviewExtractWikipediaNames: clean regex capture stands; stale broken-capt
       JSON.stringify({ add: [], remove: [{ name: leaky, category: 'broken-capture' }] })
     )
   });
-  // The regex now captures the name cleanly (no stray quote), so the stale
-  // leaky veto no longer key-matches a base name and is ignored.
-  assert.deepStrictEqual(names, ['boundary oak by local woodworkers']);
+  // The regex now captures the name cleanly (R24/R51 terminate at the
+  // "by local woodworkers" attribution), so the stale leaky veto no longer
+  // key-matches a base name and is ignored.
+  assert.deepStrictEqual(names, ['boundary oak']);
   assert.deepStrictEqual(trace.vetoed, []);
   assert.deepStrictEqual(trace.vetoIgnored, [{ name: leaky, reason: 'not-a-base-name' }]);
 });
