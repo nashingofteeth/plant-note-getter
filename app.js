@@ -91,7 +91,21 @@ async function main() {
       }
     }
 
-    const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
+    const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities, {
+      reviewDecision: async (proposal) => {
+        printSection('LLM Review');
+        console.log(`  Deterministic extraction (${proposal.baseNames.length}): ${formatList(proposal.baseNames) || '(none)'}`);
+        for (const name of proposal.added) console.log(`  + ${name}`);
+        for (const r of proposal.removed) console.log(`  - ${r.name} [${r.category}]`);
+        if (autoApply) {
+          console.log('\n  --apply flag detected, accepting LLM review.');
+          return true;
+        }
+        const accepted = await askYesNo('\n  Accept LLM review changes? [y/N] ');
+        if (!accepted) console.log('  Declined — not applied, not recorded.');
+        return accepted;
+      }
+    });
 
     printSection('Entity');
 

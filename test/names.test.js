@@ -277,7 +277,7 @@ test('collectCommonNames: populate and interactive paths use same function (pari
 
 // ─── end-of-Wikipedia LLM review wiring ─────────────────────────────────────
 
-test('collectCommonNames: LLM review applied to Wikipedia list only; diff and log recorded', async () => {
+test('collectCommonNames: accepted review applies diff to Wikipedia list only and logs', async () => {
   const logged = [];
   let promptToModel = '';
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
@@ -297,7 +297,9 @@ test('collectCommonNames: LLM review applied to Wikipedia list only; diff and lo
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, []);
+  const { names, bySource } = await collectCommonNames(entity, [], {
+    reviewDecision: async () => true
+  });
   // Diff reported per source.
   assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
   assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);
@@ -319,6 +321,63 @@ test('collectCommonNames: LLM review applied to Wikipedia list only; diff and lo
   resetStubs();
 });
 
+test('collectCommonNames: declined review leaves list and log untouched', async () => {
+  const logged = [];
+  reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
+  llmBackend.getCompleter = async () =>
+    async () =>
+      JSON.stringify({
+        add: ['llm catch'],
+        remove: [{ name: 'regex noise', category: 'morphological' }]
+      });
+  stubCommonNames({ wikipedia: ['regex noise', 'keeper'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: ['wikidata name'],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { names, bySource } = await collectCommonNames(entity, [], {
+    reviewDecision: async () => false
+  });
+  // Deterministic list stands; no applied-diff fields.
+  assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
+  assert.deepStrictEqual(bySource.wikipedia, ['regex noise', 'keeper']);
+  assert.strictEqual(bySource.llmAdded, undefined);
+  assert.strictEqual(bySource.llmRemoved, undefined);
+  assert.deepStrictEqual(names, ['wikidata name', 'regex noise', 'keeper']);
+  // Declined proposals are not recorded.
+  assert.strictEqual(logged.length, 0);
+  resetStubs();
+});
+
+test('collectCommonNames: no reviewDecision callback skips the LLM entirely', async () => {
+  let completerCalled = false;
+  reviewLog.appendReviewRecord = () => {
+    throw new Error('should not log without a decision path');
+  };
+  llmBackend.getCompleter = async () =>
+    async () => {
+      completerCalled = true;
+      return '[]';
+    };
+  stubCommonNames({ wikipedia: ['wiki name'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: [],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { names, bySource } = await collectCommonNames(entity, []);
+  assert.strictEqual(completerCalled, false);
+  assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
+  assert.strictEqual(bySource.llmAdded, undefined);
+  assert.deepStrictEqual(names, ['wiki name']);
+  resetStubs();
+});
+
 test('collectCommonNames: no LLM review without extract (stubs stay deterministic)', async () => {
   let completerCalled = false;
   reviewLog.appendReviewRecord = () => {
@@ -337,7 +396,9 @@ test('collectCommonNames: no LLM review without extract (stubs stay deterministi
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, []);
+  const { names, bySource } = await collectCommonNames(entity, [], {
+    reviewDecision: async () => true
+  });
   assert.strictEqual(completerCalled, false);
   assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.strictEqual(bySource.llmAdded, undefined);

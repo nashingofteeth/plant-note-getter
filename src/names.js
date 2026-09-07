@@ -48,7 +48,7 @@ async function resolveWikipediaArticle(entity) {
   return null;
 }
 
-async function collectCommonNames(entity, candidateEntities) {
+async function collectCommonNames(entity, candidateEntities, { reviewDecision } = {}) {
   const synonymData = await collectSynonymData(entity, candidateEntities);
   entity.wikipediaUrl = synonymData.wikipediaUrl;
   entity.wikipediaTitle = synonymData.wikipediaTitle;
@@ -88,13 +88,16 @@ async function collectCommonNames(entity, candidateEntities) {
     if (!entity.wikipediaUrl) {
       entity.wikipediaUrl = wikiArticle.wikipediaUrl;
     }
-    // End-of-Wikipedia LLM review (Wikipedia-only). Skipped when there is
-    // no extract, when disabled, or when the daemon is unreachable — the
-    // deterministic list then stands unchanged.
+    // End-of-Wikipedia LLM review (Wikipedia-only). Only runs when a
+    // reviewDecision callback is supplied (app.js): without a human path
+    // there is nothing to accept, so the LLM is not invoked at all. The
+    // proposal is applied to the list and recorded in the review log only
+    // when the callback accepts it; declined proposals leave the
+    // deterministic list untouched and are not recorded.
     let wikiNamesRaw = wikiArticle.names || [];
     bySource.wikipediaBase = [...wikiNamesRaw];
     const config = require('./config');
-    if (wikiArticle.extract && config.LLM_ENABLED) {
+    if (wikiArticle.extract && config.LLM_ENABLED && typeof reviewDecision === 'function') {
       const { getCompleter } = require('./llm-backend');
       const { reviewWikipediaNames } = require('./llm-reviewer');
       const { appendReviewRecord } = require('./review-log');
@@ -109,24 +112,31 @@ async function collectCommonNames(entity, candidateEntities) {
         { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
       );
       if (reviewed.added.length || reviewed.removed.length) {
-        wikiNamesRaw = reviewed.names;
-      }
-      bySource.llmAdded = [...reviewed.added];
-      bySource.llmRemoved = reviewed.removed.map((r) => r.name);
-      if (reviewed.added.length || reviewed.removed.length) {
-        appendReviewRecord(
-          {
-            taxon: entity.scientificName || entity.wikipediaTitle,
-            wikipediaTitle: wikiArticle.wikipediaTitle,
-            date: new Date().toISOString(),
-            extract: wikiArticle.extract.slice(0, 2000),
-            extractLength: wikiArticle.extract.length,
-            baseNames: bySource.wikipediaBase,
-            llmAdded: reviewed.added,
-            llmRemoved: reviewed.removed
-          },
-          config.REVIEW_LOG_PATH
-        );
+        const accepted = await reviewDecision({
+          taxon: entity.scientificName || entity.wikipediaTitle,
+          rank: entity.rankLabel,
+          baseNames: bySource.wikipediaBase,
+          added: reviewed.added,
+          removed: reviewed.removed
+        });
+        if (accepted) {
+          wikiNamesRaw = reviewed.names;
+          bySource.llmAdded = [...reviewed.added];
+          bySource.llmRemoved = reviewed.removed.map((r) => r.name);
+          appendReviewRecord(
+            {
+              taxon: entity.scientificName || entity.wikipediaTitle,
+              wikipediaTitle: wikiArticle.wikipediaTitle,
+              date: new Date().toISOString(),
+              extract: wikiArticle.extract.slice(0, 2000),
+              extractLength: wikiArticle.extract.length,
+              baseNames: bySource.wikipediaBase,
+              llmAdded: reviewed.added,
+              llmRemoved: reviewed.removed
+            },
+            config.REVIEW_LOG_PATH
+          );
+        }
       }
     }
     const wikiSeen = new Set();
