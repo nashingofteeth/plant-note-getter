@@ -36,6 +36,28 @@ const REVIEWER_JSON_SCHEMA = {
   required: ['add', 'remove']
 };
 
+// Schema for the remove pass: the model must return a verdict for EVERY
+// listed entry (forcing per-name evaluation instead of cherry-picking
+// victims). verdict 'keep' entries are never applied.
+const REMOVE_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    remove: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          verdict: { type: 'string', enum: ['keep', 'remove'] },
+          category: { type: 'string' }
+        },
+        required: ['name', 'verdict']
+      }
+    }
+  },
+  required: ['remove']
+};
+
 const ADD_SYSTEM_PROMPT =
   'You find common (vernacular) names of a plant taxon in its Wikipedia ' +
   'article that a regex pipeline missed. The prompt names the taxon (with ' +
@@ -49,15 +71,24 @@ const ADD_SYSTEM_PROMPT =
   'taxon. In a family or genus article the text usually lists many member ' +
   'species and crops — expect to add NOTHING from such lists. The only ' +
   "acceptable adds there are names denoting the group itself (e.g. for " +
-  "Fabaceae: 'pea family', 'legume family', 'pulse family'). Never add " +
-  'scientific Latin genus or species names (e.g. \'vicia\', ' +
-  "'glycyrrhiza').\n" +
-  "- Names built on the taxon's own head noun are excellent (e.g. 'pea " +
-  "family', 'common oak').\n" +
+  "Fabaceae: 'pea family', 'legume family', 'pulse family'). A name that " +
+  'combines a place or species qualifier with the head noun (e.g. ' +
+  "'Pacific yew', 'Mexican yew' for the genus Taxus) names a member " +
+  'species, NOT this taxon — never add it, even though it contains the ' +
+  'head noun. Never add scientific Latin genus or species names (e.g. ' +
+  "'vicia', 'glycyrrhiza').\n" +
+  "- Names built on the taxon's own head noun with a qualifier that " +
+  'applies to the whole group are excellent (e.g. \'pea family\', ' +
+  "'common oak', 'golden yews').\n" +
   '- Exclude cultivar, trade-mark, and cultivated-form names (e.g. ' +
   "'Summer Chocolate', 'Ishii Weeping', 'Pendula', 'Rosea') and person " +
-  "names (e.g. 'Ernest Wilson'), even when the text lists them under " +
-  "'Cultivars'.\n" +
+  "names (e.g. 'Ernest Wilson'). Never add from 'cultivars include' lists " +
+  "(e.g. 'Japanese cultivars include: Benifuuki, Fushun, Yabukita'), and " +
+  'never add regional product names (e.g. \'Darjeeling tea\', ' +
+  "'Nilgiri tea') — those are products, not names of the plant.\n" +
+  '- Use each name\'s exact wording from the text — never merge or splice ' +
+  "pieces of different names into a composite (no 'Chinese Western Yunnan " +
+  "Assam tea' style splices).\n" +
   '- Exclude scientific Latin names of any organism (including pests, ' +
   'diseases, and fungi) and infraspecific Latin forms with rank markers ' +
   '(fo., var., subsp., ssp.).\n' +
@@ -72,34 +103,42 @@ const REMOVE_SYSTEM_PROMPT =
   'You clean a list of common (vernacular) names of a plant taxon that a ' +
   "regex pipeline extracted from the taxon's Wikipedia article. The prompt " +
   'names the taxon, gives the article text, and lists the extracted names. ' +
-  'Return ONLY a JSON object: {"remove": [{name, category}]} — entries that ' +
-  'are NOT genuine vernacular names of this taxon. Leave "add" empty.\n' +
-  'Categories:\n' +
-  "  - 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
+  'For EVERY listed entry, decide keep or remove, and return ONLY a JSON ' +
+  'object: {"remove": [{name, verdict, category}]} with verdict "keep" or ' +
+  '"remove" — one object per entry, in the same order. Leave "add" empty.\n' +
+  'Keep rules (these are genuine names of the taxon):\n' +
+  "- Names enumerated together after a naming verb ('commonly known as " +
+  "licorice fern, many-footed fern, and sweet root') are ALL genuine — " +
+  'every member of such an enumeration is keep.\n' +
+  "- Genuine family or genus names (e.g. 'pea family', 'legume family') and " +
+  "the taxon's single best-known name.\n" +
+  "- 'common' + head-noun forms (e.g. 'common chicory', 'common oak'), " +
+  'hyphenated compounds (e.g. \'eastern hemlock-spruce\'), and names built ' +
+  "from a head noun plus a modifier of this taxon (e.g. 'silk tree', " +
+  "'mimosa tree').\n" +
+  '- Regional plant names (e.g. \'Russian olive\', \'pruche du Canada\', ' +
+  "'radiki', 'stamnagathi') and informal names.\n" +
+  "- Names shared with another plant (e.g. 'mimosa' also names an Acacia).\n" +
+  "- Singular or plural variants of a vernacular name (e.g. 'shadberry' / " +
+  "'shadberries').\n" +
+  'When unsure whether an entry is a genuine name, verdict keep.\n' +
+  'Remove rules (verdict remove, with a category):\n' +
+  "- 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
   "phrases from sloppy extraction (e.g. 'although once included', 'which " +
   "means shut happy', 'To add to the confusion', 'are also known as " +
-  "mimosa'). An entry that starts with a verb or conjunction is a fragment " +
-  'even when it embeds a real name inside — remove it. Always remove ' +
-  'these.\n' +
-  "  - 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
+  "mimosa'), including detached place fragments ('from Verona'). An entry " +
+  'that starts with a verb, conjunction, or preposition is a fragment even ' +
+  'when it embeds a real name inside.\n' +
+  "- 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
   "'plant'). A vernacular name is NOT generic just because it sounds " +
   "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
-  "  - 'geographic': place names, regions, or geographic features, not the plant.\n" +
-  "  - 'morphological': structural descriptors like 'lanceolate'.\n" +
-  "  - 'procedural': extraction artifacts like a leading 'known as'.\n" +
-  "  - 'cultivar': cultivar, trade-mark, or cultivated-form names (e.g. " +
-  "'Rosea', 'Summer Chocolate'), and person names (e.g. 'E.H.Wilson').\n\n" +
-  'Never remove:\n' +
-  "- Genuine family or genus names (e.g. 'pea family', 'legume family') or " +
-  "the taxon's single best-known name.\n" +
-  '- Names merely because they are regional or informal.\n' +
-  "- Names shared with another plant (e.g. 'mimosa' also names an Acacia) — " +
-  'a shared name is still genuine for this taxon.\n' +
-  "- Singular or plural variants of a vernacular name (e.g. 'shadberry' / " +
-  "'shadberries'), or a name built from a head noun plus a modifier of " +
-  "this taxon (e.g. 'silk tree', 'mimosa tree').\n" +
-  'When unsure whether an entry is a genuine name, keep it. Do not invent ' +
-  'or paraphrase. Empty arrays allowed.';
+  "- 'geographic': names that ARE places or geographic features (e.g. " +
+  "'Bight of Biafra') — not plant names that merely mention a region.\n" +
+  "- 'morphological': structural descriptors like 'lanceolate'.\n" +
+  "- 'procedural': extraction artifacts like a leading 'known as'.\n" +
+  "- 'cultivar': cultivar, trade-mark, or cultivated-form names (e.g. " +
+  "'Rosea', 'Summer Chocolate'), and person names (e.g. 'E.H.Wilson').\n" +
+  'Do not invent or paraphrase. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
   if (!maxInputChars || text.length <= maxInputChars) return text;
@@ -162,6 +201,7 @@ function parseReviewJson(raw) {
         .filter((x) => x && typeof x === 'object')
         .map((x) => ({
           name: typeof x.name === 'string' ? x.name.trim() : '',
+          verdict: typeof x.verdict === 'string' ? x.verdict.trim().toLowerCase() : '',
           category: typeof x.category === 'string' ? x.category.trim().toLowerCase() : ''
         }))
         .filter((x) => x.name)
@@ -190,9 +230,8 @@ function buildAddPrompt(text, base, taxon, rank) {
 function buildRemovePrompt(text, base, taxon, rank) {
   return (
     promptHead(text, base, taxon, rank) +
-    'Return the JSON object with "remove" = list entries that are not ' +
-    'genuine common names of this taxon, each with a category (leave "add" ' +
-    'empty).'
+    'Return the JSON object with a "remove" verdict ("keep" or "remove") ' +
+    'for EVERY listed entry, each with a category (leave "add" empty).'
   );
 }
 
@@ -221,7 +260,6 @@ async function reviewWikipediaNames(input = {}, options = {}) {
   if (!extract) return result;
 
   const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
-  const schema = { jsonSchema: REVIEWER_JSON_SCHEMA };
   let firstError = null;
 
   // Pass 1 — remove: the LLM may only veto names it was shown (base-list
@@ -235,7 +273,7 @@ async function reviewWikipediaNames(input = {}, options = {}) {
       response = await completer(
         REMOVE_SYSTEM_PROMPT,
         buildRemovePrompt(capped, base, input.taxon, input.rank),
-        schema
+        { jsonSchema: REMOVE_JSON_SCHEMA }
       );
     } catch (err) {
       firstError = err;
@@ -245,6 +283,9 @@ async function reviewWikipediaNames(input = {}, options = {}) {
         const key = normalizeNameKey(candidate.name);
         if (!baseNameByKey.has(key)) continue;
         if (removedKeys.has(key)) continue;
+        // Per-entry verdict from the remove pass; absent verdict (free-form
+        // completers) keeps the legacy remove behavior.
+        if (candidate.verdict === 'keep') continue;
         removedKeys.add(key);
         removed.push({ name: baseNameByKey.get(key), category: candidate.category || '' });
       }
@@ -262,7 +303,7 @@ async function reviewWikipediaNames(input = {}, options = {}) {
     response2 = await completer(
       ADD_SYSTEM_PROMPT,
       buildAddPrompt(capped, base, input.taxon, input.rank),
-      schema
+      { jsonSchema: REVIEWER_JSON_SCHEMA }
     );
   } catch (err) {
     if (!firstError) firstError = err;
@@ -304,5 +345,6 @@ module.exports = {
   buildRemovePrompt,
   ADD_SYSTEM_PROMPT,
   REMOVE_SYSTEM_PROMPT,
-  REVIEWER_JSON_SCHEMA
+  REVIEWER_JSON_SCHEMA,
+  REMOVE_JSON_SCHEMA
 };

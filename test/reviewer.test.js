@@ -8,7 +8,8 @@ const {
   buildRemovePrompt,
   ADD_SYSTEM_PROMPT,
   REMOVE_SYSTEM_PROMPT,
-  REVIEWER_JSON_SCHEMA
+  REVIEWER_JSON_SCHEMA,
+  REMOVE_JSON_SCHEMA
 } = require('../src/llm-reviewer');
 
 const BASE = ['pedunculate oak', 'European oak', 'English oak'];
@@ -218,9 +219,8 @@ test('reviewWikipediaNames: two passes, both with schema and taxon grounding', a
   assert.strictEqual(seen[1].system, ADD_SYSTEM_PROMPT);
   assert.ok(seen[1].user.includes('boundary oak'));
   assert.ok(seen[1].user.includes('Quercus robur'));
-  for (const call of seen) {
-    assert.deepStrictEqual(call.options, { jsonSchema: REVIEWER_JSON_SCHEMA });
-  }
+  assert.deepStrictEqual(seen[0].options, { jsonSchema: REMOVE_JSON_SCHEMA });
+  assert.deepStrictEqual(seen[1].options, { jsonSchema: REVIEWER_JSON_SCHEMA });
 });
 
 test('reviewWikipediaNames: add pass sees the base list (no pass-contradiction)', async () => {
@@ -246,6 +246,51 @@ test('reviewWikipediaNames: add pass sees the base list (no pass-contradiction)'
   assert.deepStrictEqual(names, ['keeper', 'fresh name']);
 });
 
+test('reviewWikipediaNames: remove-pass verdicts — keep spares, remove applies, absent removes', async () => {
+  const users = [];
+  const completer = async (system, user) => {
+    users.push(user);
+    if (system === REMOVE_SYSTEM_PROMPT) {
+      return JSON.stringify({
+        remove: [
+          { name: 'keeper', verdict: 'keep', category: '' },
+          { name: 'junk', verdict: 'remove', category: 'generic' },
+          { name: 'legacy', category: 'broken-capture' }
+        ]
+      });
+    }
+    return '[]';
+  };
+  const { names, removed } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: ['keeper', 'junk', 'legacy'] },
+    { completer }
+  );
+  assert.deepStrictEqual(removed, [
+    { name: 'junk', category: 'generic' },
+    { name: 'legacy', category: 'broken-capture' }
+  ]);
+  assert.deepStrictEqual(names, ['keeper']);
+});
+
+test('reviewWikipediaNames: remove pass passes REMOVE_JSON_SCHEMA to the completer', async () => {
+  const seen = [];
+  const completer = async (system, user, options) => {
+    seen.push({ system, options });
+    return '{"remove":[]}';
+  };
+  await reviewWikipediaNames({ extract: EXTRACT, baseNames: BASE }, { completer });
+  assert.strictEqual(seen[0].system, REMOVE_SYSTEM_PROMPT);
+  assert.deepStrictEqual(seen[0].options, { jsonSchema: REMOVE_JSON_SCHEMA });
+});
+
+test('REMOVE_JSON_SCHEMA: per-entry verdict contract', () => {
+  assert.strictEqual(REMOVE_JSON_SCHEMA.type, 'object');
+  assert.deepStrictEqual(REMOVE_JSON_SCHEMA.required, ['remove']);
+  const items = REMOVE_JSON_SCHEMA.properties.remove.items;
+  assert.deepStrictEqual(items.required, ['name', 'verdict']);
+  assert.deepStrictEqual(items.properties.verdict.enum, ['keep', 'remove']);
+});
+
 test('buildAddPrompt / buildRemovePrompt: taxon, extract, base list, and task line', () => {
   const add = buildAddPrompt('Some wiki text.', ['oak', 'pine'], 'Quercus robur');
   assert.ok(add.includes('Quercus robur'));
@@ -265,7 +310,14 @@ test('buildAddPrompt / buildRemovePrompt: taxon, extract, base list, and task li
 test('parseReviewJson: parses the object shape { add, remove }', () => {
   assert.deepStrictEqual(
     parseReviewJson('{"add":["a"],"remove":[{"name":"b","category":"generic"}]}'),
-    { add: ['a'], remove: [{ name: 'b', category: 'generic' }] }
+    { add: ['a'], remove: [{ name: 'b', verdict: '', category: 'generic' }] }
+  );
+});
+
+test('parseReviewJson: carries per-entry verdict through', () => {
+  assert.deepStrictEqual(
+    parseReviewJson('{"add":[],"remove":[{"name":"b","verdict":"Keep","category":"generic"}]}'),
+    { add: [], remove: [{ name: 'b', verdict: 'keep', category: 'generic' }] }
   );
 });
 
@@ -276,7 +328,7 @@ test('parseReviewJson: bare array response is treated as add-only (backward comp
 test('parseReviewJson: strips code fences and normalizes categories', () => {
   assert.deepStrictEqual(
     parseReviewJson('```json\n{"add":[],"remove":[{"name":"b","category":"Broken-Capture"}]}\n```'),
-    { add: [], remove: [{ name: 'b', category: 'broken-capture' }] }
+    { add: [], remove: [{ name: 'b', verdict: '', category: 'broken-capture' }] }
   );
 });
 
@@ -320,22 +372,35 @@ test('ADD_SYSTEM_PROMPT: scope, head-noun, and exclusion rules', () => {
   assert.match(ADD_SYSTEM_PROMPT, /'pea family', 'common oak'/);
   assert.match(ADD_SYSTEM_PROMPT, /'Summer Chocolate', 'Ishii Weeping', 'Pendula', 'Rosea'/);
   assert.match(ADD_SYSTEM_PROMPT, /'Ernest Wilson'/);
+  assert.match(ADD_SYSTEM_PROMPT, /cultivars include' lists/);
+  assert.match(ADD_SYSTEM_PROMPT, /'Darjeeling tea', 'Nilgiri tea'/);
+  assert.match(ADD_SYSTEM_PROMPT, /never merge or splice/);
   assert.match(ADD_SYSTEM_PROMPT, /scientific Latin names/);
   assert.match(ADD_SYSTEM_PROMPT, /fo\., var\., subsp\./);
   assert.match(ADD_SYSTEM_PROMPT, /When unsure, leave it out/);
 });
 
-test('REMOVE_SYSTEM_PROMPT: categories, guardrails, and keep-when-unsure', () => {
+test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias', () => {
+  assert.match(REMOVE_SYSTEM_PROMPT, /decide keep or remove/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /one object per entry/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'broken-capture'/);
-  assert.match(REMOVE_SYSTEM_PROMPT, /Always remove these/);
-  assert.match(REMOVE_SYSTEM_PROMPT, /starts with a verb or conjunction is a fragment/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /starts with a verb, conjunction, or preposition/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'from Verona'/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'shadberries', 'sleeping tree' are genuine/);
-  assert.match(REMOVE_SYSTEM_PROMPT, /Never remove/);
+  // Enumerated naming lists: no cherry-picking members.
+  assert.match(
+    REMOVE_SYSTEM_PROMPT,
+    /commonly known as\s+licorice fern, many-footed fern, and sweet root/
+  );
   assert.match(REMOVE_SYSTEM_PROMPT, /[Gg]enuine family or genus names/);
   assert.match(REMOVE_SYSTEM_PROMPT, /best-known name/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'common' \+ head-noun forms/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /eastern hemlock-spruce/);
   assert.match(REMOVE_SYSTEM_PROMPT, /shared with another plant/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'shadberry' \/ 'shadberries'/);
-  assert.match(REMOVE_SYSTEM_PROMPT, /'silk tree', 'mimosa tree'/);
-  assert.match(REMOVE_SYSTEM_PROMPT, /When unsure whether an entry is a genuine name, keep it/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /When unsure whether an entry is a genuine name, verdict keep/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'cultivar'/);
+  // Regional plant names are not geographic junk.
+  assert.match(REMOVE_SYSTEM_PROMPT, /'Bight of Biafra'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'Russian olive', 'pruche du Canada', 'radiki', 'stamnagathi'/);
 });
