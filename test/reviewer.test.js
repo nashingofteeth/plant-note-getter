@@ -221,7 +221,7 @@ test('reviewExtractWikipediaNames: rejectEnabled=false keeps all base names (add
   assert.deepStrictEqual(trace.vetoed, []);
 });
 
-test('reviewExtractWikipediaNames: broken-capture noise is removed and attributed', async () => {
+test('reviewExtractWikipediaNames: clean regex capture stands; stale broken-capture veto is ignored', async () => {
   const text =
     'Quercus robur is a species of flowering plant. In North America it is often called the "boundary oak" by local woodworkers.';
   const leaky = 'boundary oak" by local woodworkers';
@@ -230,10 +230,11 @@ test('reviewExtractWikipediaNames: broken-capture noise is removed and attribute
       JSON.stringify({ add: [], remove: [{ name: leaky, category: 'broken-capture' }] })
     )
   });
-  assert.deepStrictEqual(names, []);
-  assert.strictEqual(trace.removals.length, 1);
-  assert.strictEqual(trace.removals[0].category, 'broken-capture');
-  assert.match(trace.removals[0].sentence, /called the/);
+  // The regex now captures the name cleanly (no stray quote), so the stale
+  // leaky veto no longer key-matches a base name and is ignored.
+  assert.deepStrictEqual(names, ['boundary oak by local woodworkers']);
+  assert.deepStrictEqual(trace.vetoed, []);
+  assert.deepStrictEqual(trace.vetoIgnored, [{ name: leaky, reason: 'not-a-base-name' }]);
 });
 
 // ─── parseReviewJson ────────────────────────────────────────────────────────
