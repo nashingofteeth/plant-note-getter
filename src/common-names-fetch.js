@@ -44,7 +44,8 @@ async function fetchWikipediaArticle(wikipediaTitle) {
   if (!page || page.missing || !page.extract) return null;
 
   const title = page.title || wikipediaTitle;
-  let names = extractWikipediaCommonNames(page.extract);
+  const baseNames = extractWikipediaCommonNames(page.extract);
+  let names = [...baseNames];
 
   // Hybrid LLM reviewer (advisory second pass). Lazy requires keep module
   // load cheap and allow tests to stub fetchWikipediaCommonNames offline.
@@ -78,8 +79,9 @@ async function fetchWikipediaArticle(wikipediaTitle) {
           taxon: wikipediaTitle,
           wikipediaTitle,
           date: new Date().toISOString(),
-          extract: page.extract,
-          baseNames: extractWikipediaCommonNames(page.extract),
+          extract: page.extract.slice(0, 2000),
+          extractLength: page.extract.length,
+          baseNames,
           llmAdded: trace.kept || [],
           catches: trace.catches || [],
           dropped: trace.dropped || [],

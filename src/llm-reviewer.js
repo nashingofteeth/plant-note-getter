@@ -169,8 +169,10 @@ function findEnclosingSentence(text, name) {
 // Map each kept name to its originating sentence, and whether that sentence
 // was gated out of the regex scan ('skipped') or scanned but missed by every
 // rule ('parsed-no-capture').
-function attributeCatches(text, kept) {
-  const skipped = new Set(traceExtraction(text).skippedSentences.map((s) => s.sentence));
+function attributeCatches(text, kept, skippedSentences) {
+  const skipped = new Set(
+    (skippedSentences || traceExtraction(text).skippedSentences).map((s) => s.sentence)
+  );
   return kept.map((name) => {
     const sentence = findEnclosingSentence(text, name);
     return { name, sentence, gate: skipped.has(sentence) ? 'skipped' : 'parsed-no-capture' };
@@ -302,8 +304,11 @@ async function reviewExtractWikipediaNames(text, options = {}) {
   trace.dropped = dropped;
   trace.vetoed = vetoed;
   trace.vetoIgnored = vetoIgnored;
-  trace.catches = kept.length ? attributeCatches(text, kept) : [];
-  trace.removals = removed.length ? attributeCatches(text, removed) : [];
+  // Single trace pass feeds both attributions (kept + removed).
+  const skippedSentences =
+    kept.length || removed.length ? traceExtraction(text).skippedSentences : [];
+  trace.catches = kept.length ? attributeCatches(text, kept, skippedSentences) : [];
+  trace.removals = removed.length ? attributeCatches(text, removed, skippedSentences) : [];
   trace.removals = trace.removals.map((r) => {
     const cat =
       parsed.remove.find((c) => normalizeNameKey(c.name) === normalizeNameKey(r.name)) || {};

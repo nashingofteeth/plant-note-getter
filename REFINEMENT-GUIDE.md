@@ -260,7 +260,7 @@ The deterministic regex pipeline in `src/wiki-extract.js` stays the primary extr
 
 A missing/broken model degrades to regex-only; a note is never blocked. Removal is safe because `collectCommonNames` in `src/names.js` merges Wikidata P1843 → GBIF → Wikipedia: any name corroborated by Wikidata/GBIF survives even if the Wikipedia reviewer vetoed it, so cross-source names can't be lost. The LLM can never reorder names.
 
-Each run where the LLM finds names, drops names, or vetoes names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`), with `llmAdded`, `catches`, `dropped`, and `llmRemoved` (each removal carrying `category` and the originating sentence/gate).
+Each run where the LLM finds names, drops names, or vetoes names appends a JSONL record to `.review-data/review-gaps.jsonl` (gitignored; see `src/review-log.js`), with `llmAdded`, `catches`, `dropped`, and `llmRemoved` (each removal carrying `category` and the originating sentence/gate). The stored `extract` is capped at 2000 chars (`extractLength` preserves the full size) so `--regressions` snippets stay paste-sized.
 
 **Tally → red test → regex patch loop** (the user of this guide):
 
