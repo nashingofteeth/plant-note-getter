@@ -2,7 +2,7 @@ const { test, afterEach } = require('node:test');
 const assert = require('node:assert');
 const backend = require('../src/llm-backend');
 
-const ENV_KEYS = ['LLM_BACKEND', 'LLM_SERVER_URL', 'LLM_MODEL'];
+const ENV_KEYS = ['LLM_SERVER_URL', 'LLM_MODEL'];
 const savedEnv = {};
 for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
 const originalFetch = global.fetch;
@@ -19,7 +19,6 @@ afterEach(() => {
 });
 
 function useOllama() {
-  process.env.LLM_BACKEND = 'ollama';
   delete process.env.LLM_SERVER_URL;
   delete process.env.LLM_MODEL;
   backend.resetCompleter();
