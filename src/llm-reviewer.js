@@ -49,6 +49,7 @@ const REMOVE_JSON_SCHEMA = {
         properties: {
           name: { type: 'string' },
           verdict: { type: 'string', enum: ['keep', 'remove'] },
+          quote: { type: 'string' },
           category: { type: 'string' }
         },
         required: ['name', 'verdict']
@@ -104,8 +105,11 @@ const REMOVE_SYSTEM_PROMPT =
   "regex pipeline extracted from the taxon's Wikipedia article. The prompt " +
   'names the taxon, gives the article text, and lists the extracted names. ' +
   'For EVERY listed entry, decide keep or remove, and return ONLY a JSON ' +
-  'object: {"remove": [{name, verdict, category}]} with verdict "keep" or ' +
-  '"remove" — one object per entry, in the same order. Leave "add" empty.\n' +
+  'object: {"remove": [{name, verdict, quote, category}]} with verdict ' +
+  '"keep" or "remove" — one object per entry, in the same order. For each ' +
+  'verdict remove, "quote" MUST be the exact article span that proves the ' +
+  'entry is not a genuine name of this taxon; if you cannot quote such a ' +
+  'span, verdict keep. Leave "add" empty.\n' +
   'Keep rules (these are genuine names of the taxon):\n' +
   "- Names enumerated together after a naming verb ('commonly known as " +
   "licorice fern, many-footed fern, and sweet root') are ALL genuine — " +
@@ -121,6 +125,15 @@ const REMOVE_SYSTEM_PROMPT =
   "- Names shared with another plant (e.g. 'mimosa' also names an Acacia).\n" +
   "- Singular or plural variants of a vernacular name (e.g. 'shadberry' / " +
   "'shadberries').\n" +
+  "- Names whose etymology the text explains: 'its Persian name shabkhosb " +
+  'means "night sleeper"' + "' or 'the Chinese common name hehuan, which " +
+  'means "shut happy" and symbolizes a happy couple\' — the explanation is ' +
+  'about the name, not instead of it. Etymology and meaning sentences keep ' +
+  "their names (verdict keep for the name, ignore the explanation).\n" +
+  "- Names scoped to a variety, subspecies, or cultivar group OF this taxon " +
+  "('Common names for varieties of var. foliosum include radicchio, " +
+  "endive...') — variety-level names are still names FOR this taxon. Keep " +
+  "them.\n" +
   'When unsure whether an entry is a genuine name, verdict keep.\n' +
   'Remove rules (verdict remove, with a category):\n' +
   "- 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
@@ -214,6 +227,7 @@ function parseReviewJson(raw) {
         .map((x) => ({
           name: typeof x.name === 'string' ? x.name.trim() : '',
           verdict: typeof x.verdict === 'string' ? x.verdict.trim().toLowerCase() : '',
+          quote: typeof x.quote === 'string' ? x.quote.trim() : '',
           category: typeof x.category === 'string' ? x.category.trim().toLowerCase() : ''
         }))
         .filter((x) => x.name)
@@ -299,7 +313,11 @@ async function reviewWikipediaNames(input = {}, options = {}) {
         // completers) keeps the legacy remove behavior.
         if (candidate.verdict === 'keep') continue;
         removedKeys.add(key);
-        removed.push({ name: baseNameByKey.get(key), category: candidate.category || '' });
+        removed.push({
+          name: baseNameByKey.get(key),
+          category: candidate.category || '',
+          quote: candidate.quote || ''
+        });
       }
     }
   }

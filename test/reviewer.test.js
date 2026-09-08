@@ -67,13 +67,13 @@ test('reviewWikipediaNames: applies removes (base casing reported, category pass
     { extract: text, baseNames: ['scots pine', 'lanceolate'] },
     {
       completer: completerReturning(
-        JSON.stringify({ add: [], remove: [{ name: 'Lanceolate', category: 'morphological' }] })
+        JSON.stringify({ add: [], remove: [{ name: 'Lanceolate', quote: '', category: 'morphological' }] })
       )
     }
   );
   assert.deepStrictEqual(names, ['scots pine']);
   assert.deepStrictEqual(added, []);
-  assert.deepStrictEqual(removed, [{ name: 'lanceolate', category: 'morphological' }]);
+  assert.deepStrictEqual(removed, [{ name: 'lanceolate', quote: '', category: 'morphological' }]);
 });
 
 test('reviewWikipediaNames: remove of a name outside the base list is ignored', async () => {
@@ -81,7 +81,7 @@ test('reviewWikipediaNames: remove of a name outside the base list is ignored', 
     { extract: EXTRACT, baseNames: BASE },
     {
       completer: completerReturning(
-        JSON.stringify({ add: [], remove: [{ name: 'purple pine', category: 'generic' }] })
+        JSON.stringify({ add: [], remove: [{ name: 'purple pine', quote: '', category: 'generic' }] })
       )
     }
   );
@@ -94,12 +94,12 @@ test('reviewWikipediaNames: category is informational — unknown category still
     { extract: EXTRACT, baseNames: ['lanceolate'] },
     {
       completer: completerReturning(
-        JSON.stringify({ add: [], remove: [{ name: 'lanceolate', category: 'made-up' }] })
+        JSON.stringify({ add: [], remove: [{ name: 'lanceolate', quote: '', category: 'made-up' }] })
       )
     }
   );
   assert.deepStrictEqual(names, []);
-  assert.deepStrictEqual(removed, [{ name: 'lanceolate', category: 'made-up' }]);
+  assert.deepStrictEqual(removed, [{ name: 'lanceolate', quote: '', category: 'made-up' }]);
 });
 
 test('reviewWikipediaNames: duplicate removes collapse to one', async () => {
@@ -118,7 +118,7 @@ test('reviewWikipediaNames: duplicate removes collapse to one', async () => {
     }
   );
   assert.deepStrictEqual(names, ['scots pine']);
-  assert.deepStrictEqual(removed, [{ name: 'lanceolate', category: 'morphological' }]);
+  assert.deepStrictEqual(removed, [{ name: 'lanceolate', quote: '', category: 'morphological' }]);
 });
 
 test('reviewWikipediaNames: add duplicate of a base name is skipped (case-insensitive)', async () => {
@@ -241,7 +241,7 @@ test('reviewWikipediaNames: add pass sees the base list (no pass-contradiction)'
   // The add pass is shown the original list, so a removed name cannot be
   // re-proposed through dedup.
   assert.ok(users[1].includes('keeper, junk'));
-  assert.deepStrictEqual(removed, [{ name: 'junk', category: 'generic' }]);
+  assert.deepStrictEqual(removed, [{ name: 'junk', quote: '', category: 'generic' }]);
   assert.deepStrictEqual(added, ['fresh name']);
   assert.deepStrictEqual(names, ['keeper', 'fresh name']);
 });
@@ -253,8 +253,8 @@ test('reviewWikipediaNames: remove-pass verdicts — keep spares, remove applies
     if (system === REMOVE_SYSTEM_PROMPT) {
       return JSON.stringify({
         remove: [
-          { name: 'keeper', verdict: 'keep', category: '' },
-          { name: 'junk', verdict: 'remove', category: 'generic' },
+          { name: 'keeper', verdict: 'keep', quote: '', category: '' },
+          { name: 'junk', verdict: 'remove', quote: '', category: 'generic' },
           { name: 'legacy', category: 'broken-capture' }
         ]
       });
@@ -266,8 +266,8 @@ test('reviewWikipediaNames: remove-pass verdicts — keep spares, remove applies
     { completer }
   );
   assert.deepStrictEqual(removed, [
-    { name: 'junk', category: 'generic' },
-    { name: 'legacy', category: 'broken-capture' }
+    { name: 'junk', quote: '', category: 'generic' },
+    { name: 'legacy', quote: '', category: 'broken-capture' }
   ]);
   assert.deepStrictEqual(names, ['keeper']);
 });
@@ -310,14 +310,14 @@ test('buildAddPrompt / buildRemovePrompt: taxon, extract, base list, and task li
 test('parseReviewJson: parses the object shape { add, remove }', () => {
   assert.deepStrictEqual(
     parseReviewJson('{"add":["a"],"remove":[{"name":"b","category":"generic"}]}'),
-    { add: ['a'], remove: [{ name: 'b', verdict: '', category: 'generic' }] }
+    { add: ['a'], remove: [{ name: 'b', verdict: '', quote: '', category: 'generic' }] }
   );
 });
 
 test('parseReviewJson: carries per-entry verdict through', () => {
   assert.deepStrictEqual(
     parseReviewJson('{"add":[],"remove":[{"name":"b","verdict":"Keep","category":"generic"}]}'),
-    { add: [], remove: [{ name: 'b', verdict: 'keep', category: 'generic' }] }
+    { add: [], remove: [{ name: 'b', verdict: 'keep', quote: '', category: 'generic' }] }
   );
 });
 
@@ -328,7 +328,7 @@ test('parseReviewJson: bare array response is treated as add-only (backward comp
 test('parseReviewJson: strips code fences and normalizes categories', () => {
   assert.deepStrictEqual(
     parseReviewJson('```json\n{"add":[],"remove":[{"name":"b","category":"Broken-Capture"}]}\n```'),
-    { add: [], remove: [{ name: 'b', verdict: '', category: 'broken-capture' }] }
+    { add: [], remove: [{ name: 'b', verdict: '', quote: '', category: 'broken-capture' }] }
   );
 });
 

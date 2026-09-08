@@ -316,7 +316,7 @@ test('collectCommonNames: review merged before return; logReview logs on demand'
   assert.strictEqual(logged.length, 1);
   assert.deepStrictEqual(logged[0].record.llmAdded, ['llm catch']);
   assert.deepStrictEqual(logged[0].record.llmRemoved, [
-    { name: 'regex noise', category: 'morphological' }
+    { name: 'regex noise', quote: '', category: 'morphological' }
   ]);
   assert.deepStrictEqual(logged[0].record.baseNames, ['regex noise', 'keeper']);
   assert.ok(logged[0].record.extract.startsWith('Wiki text'));

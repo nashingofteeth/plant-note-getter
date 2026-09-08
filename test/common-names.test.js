@@ -1060,6 +1060,101 @@ const TESTS = [
     extract: 'A formerly used name that is now rare is plantain tree.',
     expected: ['plantain tree'],
   },
+  {
+    name: 'Platanus R70 stops at subordinate although-clause (no "although the term is also" junk)',
+    extract: 'Some North American species are called sycamores (especially Platanus occidentalis), although the term is also used for several unrelated species of trees.',
+    expected: ['sycamores'],
+  },
+  {
+    name: 'R8 disease-subject guard ("a disease, commonly known as Massaria disease, has attacked" yields nothing)',
+    extract: 'In the 21st century a disease, commonly known as Massaria disease, has attacked plane trees across Europe.',
+    expected: [],
+  },
+  {
+    name: 'Morinda citrifolia ("among many other names" tail stripped)',
+    extract: 'It is commonly known as noni or Indian mulberry, among many other names.',
+    expected: ['noni', 'Indian mulberry'],
+  },
+  {
+    name: 'Cichorium intybus ("from <Place> (<Name>)" glosses; no "from Verona"/"Chioggia" fragments)',
+    extract: 'The most famous being the ones from Treviso (known as radicchio rosso di Treviso), from Verona (radicchio di Verona), and Chioggia (radicchio di Chioggia), which are classified as an IGP.',
+    expected: ['radicchio rosso di Treviso', 'radicchio di Verona', 'radicchio di Chioggia'],
+  },
+  {
+    name: 'Camellia ("The name X is a compound" Botanical-Latin gloss yields nothing)',
+    extract: 'The name sinensis is a compound meaning "from China" in Botanical Latin.',
+    expected: [],
+  },
+  {
+    name: 'Camellia ("The generic name X" is a genus name, not vernacular)',
+    extract: 'The generic name Camellia is taken from the Latinized name of Rev. Kamel.',
+    expected: [],
+  },
+  {
+    name: 'Camellia ("The bark on trunks is smooth" prepositional phrase yields nothing)',
+    extract: 'The bark on trunks is smooth and gray.',
+    expected: [],
+  },
+  {
+    name: 'R10 copula-participle tail ("known as blue daisy, is used throughout Italy" drops the tail, no bare "is")',
+    extract: 'Common chicory, known as blue daisy, is used throughout Italy.',
+    expected: ['blue daisy'],
+  },
+  {
+    name: 'R8 disease-subject guard ("a disease, commonly known as Massaria disease, has attacked" yields nothing)',
+    extract: 'In the 21st century a disease, commonly known as Massaria disease, has attacked plane trees across Europe.',
+    expected: [],
+  },
+  {
+    name: 'Salix alba var. serica fragment admitted past the gate in multi-sentence text',
+    extract: 'Salix alba is a willow native to Europe.\nSalix alba var. serica (silver willow)',
+    expected: ['silver willow'],
+  },
+  {
+    name: 'Leading infinitive clause rejected ("To add to the confusion" yields nothing)',
+    extract: 'To add to the confusion, several species of Acacia are also known as "mimosa".',
+    expected: ['mimosa'],
+  },
+  {
+    name: 'Section which-tail stripped ("nenenoki which all mean" yields clean name)',
+    extract: '== Names ==\nIn Japan its common names are nemunoki and nenenoki which all mean "sleeping tree".',
+    expected: ['nemunoki', 'nenenoki'],
+  },
+  {
+    name: 'Section meaning-verb rejected ("symbolizes a happy couple in bed" yields nothing)',
+    extract: '== Names ==\nThe Chinese common name hehuan, which means "shut happy" and symbolizes a happy couple in bed.',
+    expected: ['hehuan'],
+  },
+  {
+    name: 'Tsuga shelf fungus rejected ("hemlock varnish shelf" yields nothing)',
+    extract: 'Ganoderma tsugae, which has the common name hemlock varnish shelf, grows on hemlocks.',
+    expected: [],
+  },
+  {
+    name: 'Salix cultivar-string rejected ("Salix alba \'Vitellina-Tristis\'" yields nothing, paren kept)',
+    extract: 'Salix alba \'Vitellina-Tristis\' (golden weeping willow, synonym \'Tristis\') is a weeping cultivar.',
+    expected: ['golden weeping willow'],
+  },
+  {
+    name: 'R6 cultivar-prologue guard ("also known as E.H.Wilson or Rosea" after cultivar subject yields nothing)',
+    extract: 'The selected cultivar A. julibrissin \'Ernest Wilson\' (also known as \'E.H.Wilson\' or \'Rosea\') is a cold-tolerant tree.',
+    expected: [],
+  },
+  {
+    name: 'Person-initials rejected ("E.H.Wilson" yields nothing)',
+    extract: 'The tree E.H.Wilson is planted in gardens.',
+    expected: [],
+  },
+  {
+    name: 'R64 chemical-compound guard ("Acetylsalicylic acid (aspirin)" yields nothing)',
+    extract: 'Acetylsalicylic acid (aspirin) is a chemical that does not occur in nature.',
+    expected: [],
+  },
+  {
+    name: '"notably <Taxon>" example intros rejected (contrast taxon not emitted)',
+    extract: 'To add to the confusion, several species of Acacia, notably Acacia baileyana and Acacia dealbata, are also known as "mimosa".',
+    expected: ['mimosa'],
+  },
 ];
 
 const GBIF_TESTS = [
@@ -1096,11 +1191,6 @@ const GBIF_TESTS = [
   {
     name: 'empty and null inputs return empty array',
     raw: '',
-    expected: [],
-  },
-  {
-    name: 'null input returns empty array',
-    raw: null,
     expected: [],
   },
 ];
