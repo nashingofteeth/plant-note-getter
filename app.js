@@ -160,7 +160,8 @@ async function main() {
         finalAliases = finalizeReview(true);
       } else {
         finalizeReview(false);
-        console.log('  Declined — note will use the deterministic aliases.');
+        console.log('\n  Declined — nothing applied, note not created. Run with --apply to accept the review.');
+        return;
       }
     }
 
