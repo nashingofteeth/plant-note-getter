@@ -970,6 +970,96 @@ const TESTS = [
     extract: 'Quercus robur is a species of flowering plant. In North America it is often called the "boundary oak" by local woodworkers.',
     expected: ['boundary oak'],
   },
+  {
+    name: 'Amelanchier arborea (parenthetical gloss after binomial lead)',
+    extract: 'Amelanchier arborea (downy serviceberry or common serviceberry), is a small tree native to eastern North America.',
+    expected: ['downy serviceberry', 'common serviceberry'],
+  },
+  {
+    name: 'Amelanchier arborea ("Other common names are" list with quoted X-or-Y-headnoun alternation)',
+    extract: 'Other common names are "shadberries", "Juneberries", and "Service" or "Sarvice" berries.',
+    expected: ['shadberries', 'Juneberries', 'Service berries', 'Sarvice berries'],
+  },
+  {
+    name: 'Salix alba (infraspecific binomial gloss in parens, fragment and predicate forms)',
+    extract: 'Salix alba var. serica (silver willow)\nSalix alba var. serica (silver willow) grows in wet soils.',
+    expected: ['silver willow'],
+  },
+  {
+    name: 'Morinda citrifolia ("known as X are" with plural predicate)',
+    extract: 'In Thai cuisine, the leaves known as bai-yo are used as a leaf vegetable.',
+    expected: ['bai-yo'],
+  },
+  {
+    name: 'Morinda citrifolia (bare category appositive "The fruit X is")',
+    extract: 'The fruit luk-yo is added as a salad ingredient.',
+    expected: ['luk-yo'],
+  },
+  {
+    name: 'Morinda citrifolia ("of X, as it is known to them" aside)',
+    extract: 'Yolngu artists use the roots and bark of djundom, as it is known to them, to dye the fibres of pandanus.',
+    expected: ['djundom'],
+  },
+  {
+    name: 'Elaeagnus angustifolia ("known locally as X" adverbial known-as)',
+    extract: 'The dried fruit, known locally as senjed, is one of seven served.',
+    expected: ['senjed'],
+  },
+  {
+    name: 'Elaeagnus angustifolia ("called X" with trailing participle phrase)',
+    extract: 'The dried fruit is served in its own syrup in a fruit salad called haft mēwa eaten during Nowruz in Afghanistan.',
+    expected: ['haft mēwa'],
+  },
+  {
+    name: 'Albizia julibrissin ("is called X, Y or Z in <place>" list)',
+    extract: 'The species is called Chinese silk tree, silk tree or mimosa in the United States.',
+    expected: ['Chinese silk tree', 'silk tree', 'mimosa'],
+  },
+  {
+    name: 'Albizia julibrissin ("<language> name X means" construction)',
+    extract: 'Its modern Persian name shabkhosb (شب\u200cخسب) means "night sleeper".',
+    expected: ['shabkhosb'],
+  },
+  {
+    name: 'Albizia julibrissin ("<language> common name X, which means" construction)',
+    extract: 'The Chinese common name hehuan, which means "shut happy", symbolizes happiness.',
+    expected: ['hehuan'],
+  },
+  {
+    name: 'Albizia julibrissin ("common names are X, Y and Z which all mean" tail)',
+    extract: 'In Japan its common names are nemunoki, nemurinoki and nenenoki which all mean "sleeping tree".',
+    expected: ['nemunoki', 'nemurinoki', 'nenenoki'],
+  },
+  {
+    name: 'Albizia julibrissin ("X is a partial translation of Y" subject)',
+    extract: 'Nemu tree is a partial translation of nemunoki.',
+    expected: ['Nemu tree'],
+  },
+  {
+    name: 'Tsuga canadensis ("and in <place> as Y" tail after known-as list)',
+    extract: 'Tsuga canadensis, also known as Canadian hemlock, eastern hemlock-spruce, or eastern hemlock, and in the French-speaking regions of Canada as pruche du Canada, is a coniferous tree.',
+    expected: ['Canadian hemlock', 'eastern hemlock-spruce', 'eastern hemlock', 'pruche du Canada'],
+  },
+  {
+    name: 'Pinus resinosa ("(also X in <place>)" parenthetical gloss)',
+    extract: 'Pinus resinosa, known as red pine (also Norway pine in Minnesota), is a pine native to Eastern North America.',
+    expected: ['red pine', 'Norway pine'],
+  },
+  {
+    name: 'Platanus ("are often known in English as X or Y")',
+    extract: 'They are often known in English as planes or plane trees.',
+    expected: ['planes', 'plane trees'],
+  },
+  {
+    name: 'Platanus (plural-subject "are called X" naming)',
+    extract: 'Some North American species are called sycamores.',
+    expected: ['sycamores'],
+  },
+  {
+    name: 'Platanus ("name ... is X" predicate)',
+    extract: 'A formerly used name that is now rare is plantain tree.',
+    expected: ['plantain tree'],
+  },
 ];
 
 const GBIF_TESTS = [

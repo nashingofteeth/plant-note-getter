@@ -40,7 +40,10 @@ const LEADING_PREFIX_PATTERNS = [
   /^simply\s+/i,
   /^the\s+name\s+/i,
   /^called\s+/i,
-  /^known\s+as\s+/i,
+  // "known as" with an intervening lowercase adverb ("known locally as",
+  // "known also as") — genuine names never start with "known", so the
+  // adverb slot is safe.
+  /^known\s+(?:[a-zà-ÿ]+\s+)?as\s+/i,
   /^commonly\s+known\s+as\s+/i,
   /^commonly\s+named\s+/i,
   /^generally\s+known\s+as\s+/i,
@@ -135,6 +138,15 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
   // taxon's name ("red spruce").
   text = text.replace(/\(\s*or\s+([^(),]+?)\)\s*[.,]?\s*$/gi, ', $1');
 
+  // Expand a TRAILING "(also X [in <place>])" alias gloss before stripping
+  // parens, e.g. "red pine (also Norway pine in Minnesota)" -> "red pine,
+  // Norway pine in Minnesota" (the trailing "in <Place>" qualifier strip
+  // below reduces it to "Norway pine"). Anchored to the end of the capture
+  // like the (or Y) rule so mid-phrase contrast glosses still drop; single
+  // item only (no commas), and "also known as / called / spelled"
+  // parentheticals are left for their own handlers.
+  text = text.replace(/\(\s*also\s+(?!(?:known\s+as|called|spelled?)\b)([^(),]+?)\)\s*[.,]?\s*$/gi, ', $1');
+
   text = stripOuterParens(text);
 
   text = text
@@ -164,6 +176,14 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
 
   // Strip hedge interjections: "or, possibly, Y" → "or Y"
   text = text.replace(/,\s*(?:possibly|perhaps),/gi, ',');
+
+  // Distribute a shared head noun over a quoted "X" or "Y" alternation:
+  // '"Service" or "Sarvice" berries' -> '"Service berries", "Sarvice
+  // berries"'. Only when a head word follows the second quote; bare
+  // '"X" or "Y"' pairs stay two separate names. Must run before the
+  // and/or-to-comma normalization below, which would otherwise split the
+  // alternation apart and leave a bare headless fragment ("Service").
+  text = text.replace(/"([^"]+)"\s+or\s+"([^"]+)"\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)/gi, '"$1 $3", "$2 $3"');
 
   text = text.replace(/\s*,?\s+(?:and|or)\s+/gi, (match, offset, string) => {
     // Don't split "X or Y family/genus/species" patterns, but only when the
@@ -269,6 +289,34 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'geographic-qualifier' });
       continue;
     }
+
+    // Strip a trailing participial descriptor ("haft mēwa eaten during
+    // Nowruz" -> "haft mēwa"). Bare trailing participles never end a
+    // genuine common name; adverb-led variants ("mainly boiled ...") keep
+    // flowing to the preparation-manner reject below (no leading space).
+    // Paren-aware: a participle inside parens ("West Indian vanilla (which
+    // is also used for ...)") must not truncate the segment.
+    segment = segment.replace(/\s+(?:eaten|served|grown|used|found|made|prepared|cooked|followed)\b.*$/i, (m0, off, str) => {
+      const before = str.slice(0, off);
+      const depth = (before.match(/\(/g) || []).length - (before.match(/\)/g) || []).length;
+      return depth > 0 ? m0 : '';
+    }).trim();
+    if (!segment) continue;
+    // Relative-pronoun remnants of the strip above ("John Fraser who made
+    // ..." -> "...who") are clause fragments, not names; and segments that
+    // ARE relative clauses ("who made ...", "which means ...") are not
+    // names either.
+    segment = segment.replace(/\s+(?:who|which|that)\s*$/i, '').trim();
+    if (!segment) continue;
+    if (/^(?:who|which|that)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'relative-clause' });
+      continue;
+    }
+    // Strip a trailing "because" explanation ("Sarvice berries because
+    // their blooms mean ..." -> "Sarvice berries"). A because-clause is
+    // never part of a name.
+    segment = segment.replace(/\s+because\b.*$/i, '').trim();
+    if (!segment) continue;
 
     // Strip trailing orphan connectors ("elm or", "poppy and")
     segment = segment.replace(/\s+(?:or|and)\s*$/, '').trim();
@@ -723,6 +771,16 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/name\s+.+\s+is\s+(?:often|also|commonly|frequently|widely)\s+applied\s+to/i.test(sentence)) return true;
   if (/commonly\s+known\s+as/i.test(sentence)) return true;
   if (/known\s+(?:by|as)\s/i.test(sentence)) return true;
+  // Narrow "called" gates mirroring R67/R70 cores — a bare
+  // "(is|are) called" gate admits sentences whose "called" is incidental
+  // (e.g. "...bok choy is called baby bok choy" inside a lit-gloss
+  // sentence that R9b then misreads).
+  if (/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:also\s+)?called\b/i.test(sentence)) return true;
+  if (/^Some\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}species\s+are\s+called\b/i.test(sentence)) return true;
+  if (/\bas\s+it\s+is\s+known\s+to\b/i.test(sentence)) return true;
+  if (/(?:Its|Their|The)\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}names?\s+[A-Za-zÀ-ÿ]/i.test(sentence)) return true;
+  if (/\bnames?\s+that\s+is\s+(?:now\s+)?[a-z]+\s+is\b/i.test(sentence)) return true;
+  if (/^The\s+(?:fruits?|trees?|plants?|shrubs?|herbs?|flowers?|leaves?|seeds?|roots?|bark|wood|nuts?|berr(?:y|ies)|vines?|bushes)\s+[A-Za-zÀ-ÿ].+?\s+(?:is|was)\b/i.test(sentence)) return true;
   if (/\balso\s+called\b/i.test(sentence)) return true;
   if (/\b(?:is|are)\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
   if (/\b(?:often|sometimes|frequently)\s+called\b/i.test(sentence)) return true;
@@ -751,6 +809,29 @@ const DESCRIPTIVE_CONTINUATION = /,\s+(?:gives|since|because|where|tastes|in\s+w
 function truncateAtDescriptiveClause(capture) {
   const m = capture.match(DESCRIPTIVE_CONTINUATION);
   if (m) return capture.slice(0, m.index).trim();
+  return capture;
+}
+
+// Truncate a capture at a "which" that sits outside any parenthetical:
+// "A, B and C which all mean D" -> "A, B and C", while a "which" inside
+// parens ("X (a name which is shared with hundreds of other species)")
+// does not terminate — the list continues after the aside.
+function truncateAtTopLevelWhich(capture) {
+  let depth = 0;
+  const lower = capture.toLowerCase();
+  for (let i = 0; i < capture.length; i++) {
+    const ch = capture[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (
+      depth === 0 &&
+      lower.startsWith('which', i) &&
+      (i === 0 || /\s/.test(capture[i - 1])) &&
+      /[\s,.;:]/.test(capture[i + 5] || '')
+    ) {
+      return capture.slice(0, i).trim();
+    }
+  }
   return capture;
 }
 
@@ -987,10 +1068,10 @@ function _extractWikipediaCommonNames(text, trace) {
   // ─── RULE INDEX (construction → rule; category banners below) ─────────────
   // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44, R53, R56, R57, R59, R60
   // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
-  //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46, R58
-  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47
+  //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
+  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
@@ -1197,18 +1278,30 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R6c: Parenthetical bare name list — "(X, Y, Z or W) is a species" (Rosa, Rubus)
-    const r6c = sentence.match(/\(\s*([^)]+?)\)\s+(?:is|was|are)\s+(?:a|an|the|some|native|endemic)/i);
+    // The comma between paren and copula is optional ("(X or Y), is a ...").
+    const r6c = sentence.match(/\(\s*([^)]+?)\)\s*,?\s+(?:is|was|are)\s+(?:a|an|the|some|native|endemic)/i);
      if (r6c && !r6 && !r6b && !r6b2) {
-      const content = r6c[1];
-      const isBotanicalSeq = /^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content.trim());
+      // Semicolon tails ("...; syn. ...", "; Chinese: ...") are stripped
+      // before the guards so translations/synonym lists don't veto the head.
+      const content = r6c[1].split(';')[0].trim();
+      const isBotanicalSeq = /^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content);
       // Filter out synonym-only, botanical-name, author-abbreviation content,
-      // and pure botanical-name sequences with no comma (these are binomials,
-      // not common-name lists). Comma-containing lists are name lists.
+      // cross-reference asides ("(see ...)"), "cf." glosses, naming-verb
+      // glosses ("(also known as / called / spelled ...)") left for their
+      // own handlers, non-Latin-script parens (Greek/CJK glosses, author
+      // citations with "&"/"=", measurements, "Welsh: X" tags — the gloss
+      // must be Latin-script vernacular text), and pure botanical-name
+      // sequences with no comma (these are binomials, not common-name
+      // lists). Comma-containing lists are name lists.
       if (!/^\s*syn\.?\s/i.test(content)
           && !/^\s*botanical\s+name\s/i.test(content)
+          && !/^\s*see\b/i.test(content)
+          && !/^\s*cf\.?\s/i.test(content)
+          && !/^\s*also\s+(?:known\s+as|called|spelled?)\b/i.test(content)
+          && /^[\p{Script=Latin}"'\u2019\s,.-]+$/u.test(content.trim())
           && !isAbbreviatedBinomialLike(content)
           && !(isBotanicalSeq && !content.includes(','))) {
-        caps.push({ rule: 'R6c', capture: content.split(';')[0].trim() });
+        caps.push({ rule: 'R6c', capture: content });
       }
     }
 
@@ -1218,6 +1311,31 @@ function _extractWikipediaCommonNames(text, trace) {
       const content = r6d[1];
       if (!/^\s*syn\.?\s/i.test(content) && !/^\s*botanical\s+name\s/i.test(content)) {
         caps.push({ rule: 'R6d', capture: content });
+      }
+    }
+
+    // R64: bare binomial lead with a gloss parenthetical — "Salix alba var.
+    // serica (silver willow) grows in wet soils", or the predicate-less
+    // variety-list fragment "Salix alba var. serica (silver willow)". The binomial-lead gate
+    // (not "The X", not a phrase — isSubjectBinomial) keeps descriptive
+    // asides like "The olive (large fruit) grows..." silent, and
+    // mechanism/process heads ("Secondary pollen presentation (...) ...",
+    // cf. R6) are excluded; gloss guards mirror R6c. Predicates extend past
+    // the copula because a glossed lead often continues with a growth verb.
+    const r64 = sentence.match(/^([A-Z][a-zà-ÿ]+(?:\s+[a-zà-ÿ×.x'-]+){1,3})\s+\(([^()]+)\)(?:,?\s+(?:is|was|are|were|grows?|grew|flowers?|reaches?|occurs?)\b|\s*[.,]?\s*$)/i);
+    if (r64 && isSubjectBinomial(r64[1]) && !/\b(?:presentation|mechanism|process|syndrome|phenomenon|mode|method|system)\b/i.test(r64[1])) {
+      // Semicolon tails stripped before guards (see R6c).
+      const content = r64[2].split(';')[0].trim();
+      const isBotanicalSeq = /^(?:[A-Z][a-z]+\.?\s&?\s*)+/.test(content);
+      if (!/^\s*syn\.?\s/i.test(content)
+          && !/^\s*botanical\s+name\s/i.test(content)
+          && !/^\s*see\b/i.test(content)
+          && !/^\s*cf\.?\s/i.test(content)
+          && !/^\s*also\s+(?:known\s+as|called|spelled?)\b/i.test(content)
+          && /^[\p{Script=Latin}"'\u2019\s,.-]+$/u.test(content.trim())
+          && !isAbbreviatedBinomialLike(content)
+          && !(isBotanicalSeq && !content.includes(','))) {
+        caps.push({ rule: 'R64', capture: content });
       }
     }
 
@@ -1254,16 +1372,17 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // ─── "known as / called / referred to as" ────────────────────────────
-    // R8: "commonly known as" / "generally known as" — stop at copula, an
-    // explanatory "because" clause, or end. The comma-terminator list also
-    // stops at a comma followed by a bare copula (is/are/was/were), so a name
+    // R8: "commonly known as" / "generally known as" / "often known as" — stop at copula, an
+    // explanatory "because" clause, or end. An "in <language>" qualifier may
+    // sit between "known" and "as" ("often known in English as planes").
+    // The comma-terminator list also stops at a comma followed by a bare copula (is/are/was/were), so a name
     // list like "rosinweeds, are herbaceous perennial plants growing to ..."
     // (Silphium genus) terminates at "rosinweeds," instead of swallowing the
     // whole descriptive tail ("with yellow flowerheads that resemble
     // sunflowers").
     // Note: family-restatement filtering (e.g. "Fabaceae or commonly known as
     // legume or bean family") is centralized in addNames via isFamilyRestatement.
-    const r8 = sentence.match(/(?:commonly|generally|widely)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety)|is|are|was|were)\b|\s+because\b|$)/i);
+    const r8 = sentence.match(/(?:commonly|generally|widely|often)\s+known\s+(?:in\s+[A-Za-z]+\s+)?as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety)|is|are|was|were)\b|\s+because\b|$)/i);
     if (r8) {
       const capture = finalizeCapture(r8[1], 300);
       if (capture) caps.push({ rule: 'R8', capture: capture });
@@ -1308,9 +1427,11 @@ function _extractWikipediaCommonNames(text, trace) {
     // R9d: "Other common names [recorded] include X, Y, and Z" — explicit list.
     // Restricted to forms with "recorded" or an "Other" lead so it does not
     // overlap with R12 ("Common names include ..."), which is already labeled R12.
+    // A trailing "because" explanation is cut before the length cap so long
+    // asides don't void the whole list.
     const r9d = sentence.match(/(?:(?:other\s+)?common\s+names?\s+recorded|other\s+common\s+names?)\s+(?:include|are)\s+(.+?)(?:\.|$)/i);
     if (r9d) {
-      const capture = finalizeCapture(r9d[1], 300);
+      const capture = finalizeCapture(r9d[1].replace(/\s+because\b.*$/i, ''), 300);
       if (capture) caps.push({ rule: 'R9d', capture: capture });
     }
 
@@ -1326,6 +1447,19 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r9f) {
       if (!isGenericJunk(r9f[1])) caps.push({ rule: 'R9f', capture: r9f[1] });
       if (!isGenericJunk(r9f[2])) caps.push({ rule: 'R9f', capture: r9f[2] });
+    }
+
+    // R66: bare category appositive — "The fruit luk-yo is added as...".
+    // "The <category> <Name> is/was": the name slot must look like a name
+    // (hyphenated borrowing, capitalized, or multi-word) — a bare
+    // lowercase single word there is a compound-noun subject ("The bark
+    // tannin was used ..."), not an appositive. The copula requirement
+    // keeps "The bark is thick" (no name slot) and "The leaves are green"
+    // (no copula after the slot) silent; downstream junk classifiers vet
+    // the name itself.
+    const r66 = sentence.match(/^The\s+(?:fruits?|trees?|plants?|shrubs?|herbs?|flowers?|leaves?|seeds?|roots?|bark|wood|nuts?|berr(?:y|ies)|vines?|bushes)\s+([A-Za-zÀ-ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*)?)\s+(?:is|was)\b/i);
+    if (r66 && /(?:-|^[A-ZÀ-Ÿ]|\s)/.test(r66[1])) {
+      caps.push({ rule: 'R66', capture: r66[1] });
     }
 
     // R10: "known as" / "called" — at sentence start ("It is..." or any named
@@ -1354,6 +1488,17 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
+    // R63: ", and in <place> as <names>" tail after a naming list — "also
+    // known as A, B, or C, and in the French-speaking regions of Canada as
+    // pruche du Canada, is a ...". Gated on a naming verb before the tail
+    // so non-naming "and in X as Y" spans (habitat descriptions, uses)
+    // stay silent.
+    const r63 = sentence.match(/,\s*and\s+in\s+(.+?)\s+as\s+(.+?)(?:,\s*(?:is|was)\s+(?:a|an|the)\b|\s*[.,]\s*$)/i);
+    if (r63 && /\b(?:known\s+as|called|common\s+names?)\b/i.test(sentence.slice(0, r63.index))) {
+      const capture = finalizeCapture(r63[2], 200);
+      if (capture) caps.push({ rule: 'R63', capture: capture });
+    }
+
     // R11: "referred to as" mid-sentence — capture to end
     const r11 = sentence.match(/referred\s+to\s+as\s+(?:a\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
     if (r11) {
@@ -1373,6 +1518,23 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r11b) {
       let capture = r11b[1].trim();
       if (capture.length < 200) caps.push({ rule: 'R11b', capture: capture });
+    }
+
+    // R68: "<possessive/lang> [adjectives] name(s) <Name>" — "Its modern
+    // Persian name shabkhosb ... means", "the Chinese common name hehuan,
+    // which means ...". Single-token name right after "name(s)"; meaning
+    // tails never enter the capture. The lookahead requires the name to be
+    // followed by punctuation, end, or a verb/preposition — a following
+    // bare noun ("Siskiyou lewisia", "Peruvian lily") means the name
+    // continues and the list rules own it, so R68 stays silent. Skipped
+    // for scientific/botanical/Latin names (the captured word would be
+    // Latin, not vernacular) and for stopword captures ("names are X").
+    const r68 = sentence.match(/(?:Its|Their|The)\s+((?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2})names?\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)(?=\s*(?:[,();.]|$|\s+(?:which|who|means?|is|are|was|were)\b))/i);
+    if (r68
+        && !/\bother\s+than\b/i.test(sentence)
+        && !/\b(?:scientific|botanical|latin|binomial|specific|epithet|genus|species|family|order|tribe|taxon)\b/i.test(r68[1])
+        && !/^(?:is|are|was|were|be|been|being|a|an|the|and|or|also|often|sometimes|usually|commonly|generally|widely|rarely|mainly|mostly|typically|frequently|therefore|however|instead|indeed|already|never|ever|always|quite|rather|largely|chiefly|primarily|broadly|loosely|strictly|formally|apparently|actually|index|list|page|section|table|figure|database|known|called|named|given|considered)\b/i.test(r68[2])) {
+      caps.push({ rule: 'R68', capture: r68[2] });
     }
 
     // R11c: "Members are commonly known as X, Y, or Z" and "Some species of
@@ -1407,7 +1569,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // R12: "common names include" / "Common names for X include" — capture full list, stop at though/despite
     const r12 = sentence.match(/common\s+names?\s+(?:for\s+.+?\s+)?(?:usually\s+)?(?:include|are)\s+(.+?)(?:\s*,\s*(?:though|despite|but)\b|$)/i);
     if (r12) {
-      const capture = finalizeCapture(r12[1], 300);
+      const capture = finalizeCapture(truncateAtTopLevelWhich(r12[1]).replace(/\s+because\b.*$/i, ''), 300);
       if (capture) caps.push({ rule: 'R12', capture: capture });
     }
 
@@ -1516,11 +1678,63 @@ function _extractWikipediaCommonNames(text, trace) {
       const capture = finalizeCapture(r24[1], 200);
       // Reject historical/etymological attribution: "called Salvia by the Romans"
       // is the Latin name used by an ancient people, not a common name. The bare
-      // "by the <People>" (no "indigenous"/"people" qualifier) is a Latin-name
+      // "by the <People>" (no indigenous/people qualifier) is a Latin-name
       // marker; indigenous-name attributions ("by the indigenous Cahuilla") are
-      // preserved by R10/R25 elsewhere.
-      if (capture && !/\s+by\s+the?\s+[A-Z][a-z]+\b/.test(capture)) {
+      // preserved by R10/R25 elsewhere. Likewise "called salicin, after the
+      // Latin name Salix" marks a derivation (usually a chemical/product),
+      // not a vernacular — drop the whole capture, including the head name.
+      if (capture && !/\s+by\s+the?\s+[A-Z][a-z]+\b/.test(capture) && !/\bafter\s+the\s+Latin\b/i.test(capture)) {
         caps.push({ rule: 'R24', capture: capture });
+      }
+    }
+
+    // R67: "The <category> is called X, Y or Z" — bare "is called" with a
+    // species/tree/plant subject (R24's lookbehind deliberately leaves
+    // these for a dedicated rule). Captures to sentence end so lists stay
+    // whole, but stops at a subordinate ", which" clause ("...in the
+    // United States, which is misleading") and at "and the <part> X"
+    // part-names ("...called mogwa-namu and the fruit mogwa" — fruit names
+    // name the part, not the plant, cf. R10). Trailing "in <Place>"
+    // qualifiers are stripped downstream; leading-preposition captures
+    // ("into question") are rejected.
+    const r67 = sentence.match(/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s+and\s+the\s+(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|wood|nut|nuts|berry|berries)\b|,\s*which\b|\.\s*$|$)/i);
+    if (r67) {
+      const capture = finalizeCapture(r67[1], 300);
+      if (capture && !/^(?:into|in|on|at|to|for|with|by|of|from)\b/i.test(capture)) {
+        caps.push({ rule: 'R67', capture: capture });
+      }
+    }
+
+    // R69: "X is a (partial) translation of Y" — the subject is the
+    // vernacular calque ("Nemu tree is a partial translation of
+    // nemunoki"). Guarded against pronoun/generic subjects ("The name",
+    // "It") which would leak non-names.
+    const r69 = sentence.match(/^([A-ZÀ-Ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*){0,3})\s+is\s+a\s+(?:partial\s+)?translation\s+of\b/i);
+    if (r69 && !/^(?:the\s+)?names?\b/i.test(r69[1]) && !/^(?:it|this|that|these|those|he|she|they)\b/i.test(r69[1])) {
+      caps.push({ rule: 'R69', capture: r69[1].trim() });
+    }
+
+    // R70: "Some ... species are called X" — sentence-start plural-species
+    // naming ("Some North American species are called sycamores"). Kept
+    // deliberately narrow (sentence start, "species", "are called", capture
+    // to end): the general "are called" shape is too noisy for a shared
+    // rule (R11c), and mid-sentence variants stay silent.
+    const r70 = sentence.match(/^Some\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}species\s+are\s+called\s+(.+?)(?:\s*\.\s*|$)/i);
+    if (r70) {
+      const capture = finalizeCapture(r70[1], 300);
+      if (capture) caps.push({ rule: 'R70', capture: capture });
+    }
+
+    // R71: "A ... name(s) that is now <adj> is X" — name predicate with a
+    // relative clause between "name" and the copula ("A formerly used name
+    // that is now rare is plantain tree"). The "now <adj>" slot keeps bare
+    // "name is X" etymology sentences ("The name is derived from ...")
+    // silent.
+    const r71 = sentence.match(/\bnames?\s+that\s+is\s+(?:now\s+)?[a-z]+\s+is\s+(.+?)(?:\s*[.,]\s*|$)/i);
+    if (r71) {
+      const capture = finalizeCapture(r71[1], 200);
+      if (capture && !/^(?:into|in|on|at|to|for|with|by|of|from|derived|comes?|means?|refers?)\b/i.test(capture)) {
+        caps.push({ rule: 'R71', capture: capture });
       }
     }
 
@@ -1702,7 +1916,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // The ",\s+a\s+term..." terminator stops a trailing shared-term clause from
     // leaking other genera as names (Echinocereus: "known as hedgehog cacti,
     // a term also used for the Pediocactus and Echinopsis" -> [hedgehog cacti]).
-    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|$)/i);
+    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|(?:,?\s*(?:and\s+)?there\s+)?(?:is|are|was|were)\b|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
       if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
@@ -1723,6 +1937,15 @@ function _extractWikipediaCommonNames(text, trace) {
           if (trimmed && !isGenericJunk(trimmed)) caps.push({ rule: 'R41', capture: trimmed });
         }
       }
+    }
+
+    // R65: "of X, as it is known to <group>" aside — "the roots and bark of
+    // djundom, as it is known to them, to dye...". Single-token name after
+    // "of"; downstream junk classifiers (generic/other-organism) filter
+    // non-names ("of plants, as it is known..." -> "plants" dies there).
+    const r65 = sentence.match(/\bof\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)\s*,\s*as\s+it\s+is\s+known\s+to\b/i);
+    if (r65) {
+      caps.push({ rule: 'R65', capture: r65[1] });
     }
 
     // R48: regional common-name distribution —
