@@ -26,7 +26,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 
 | File | Role |
 |------|------|
-| `app.js` | CLI entry, orchestrates pipeline, supports `--check` mode; one merged write-time confirmation covers property updates + any pending LLM review (`--apply` auto-accepts) |
+| `app.js` | CLI entry, orchestrates pipeline, supports `--check` mode; write/update prompts are the standard pre-LLM ones — a pending LLM review rides along (applied + tally-logged on write/create, dropped otherwise) |
 | `src/wikidata.js` | Wikidata search, entity data, SPARQL parent chain, synonym data |
 | `src/api-client.js` | HTTP transport, rate limiting, API URL constants |
 | `src/names.js` | Common-name orchestration: `collectCommonNames` merges all sources, runs the end-of-Wikipedia LLM review when enabled (proposal stashed in `bySource.llmProposal`; returns `finalizeReview(accepted)` that applies/logs it — app.js merges that decision into the note-write confirmation), `buildAliases` produces final list |

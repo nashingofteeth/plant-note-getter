@@ -17,12 +17,6 @@ function printSection(title) {
   console.log('\n' + line + '\n');
 }
 
-function formatList(items, maxInline) {
-  if (!items || items.length === 0) return '';
-  if (items.length <= (maxInline || 10)) return items.join(', ');
-  return items.slice(0, maxInline || 10).join(', ') + ', ...';
-}
-
 async function main() {
   const args = process.argv.slice(2);
 
@@ -145,25 +139,11 @@ async function main() {
     const finalLabelMap = loadLabelMap(LABEL_MAP_PATH);
     let finalAliases = aliases;
 
-    // New note: creation itself stays silent — the only gate is the LLM
-    // review delta, asked before the frontmatter is generated so the note
-    // bakes in the decided aliases.
-    if (isNew && llmProposal) {
-      printSection('LLM Review');
-      console.log(`  Deterministic extraction (${llmProposal.baseNames.length}): ${formatList(llmProposal.baseNames) || '(none)'}`);
-      for (const name of llmProposal.added) console.log(`  + ${name}`);
-      for (const r of llmProposal.removed) console.log(`  - ${r.name} [${r.category}]`);
-      if (autoApply) {
-        console.log('\n  --apply flag detected, accepting LLM review.');
-        finalAliases = finalizeReview(true);
-      } else if (await askYesNo('\n  Apply LLM review to the new note? [y/N] ')) {
-        finalAliases = finalizeReview(true);
-      } else {
-        finalizeReview(false);
-        console.log('\n  Declined — nothing applied, note not created. Run with --apply to accept the review.');
-        return;
-      }
-    }
+    // Any pending LLM review rides with the write decision: a written or
+    // created note applies it and records it in the tally log; a declined
+    // or no-write run drops it, recorded nowhere. The write prompts
+    // themselves are the standard pre-LLM ones.
+    if (isNew && llmProposal) finalAliases = finalizeReview(true);
 
     const content = generateFrontMatter(entity, ancestors, finalLabelMap);
 
@@ -182,59 +162,22 @@ async function main() {
     if (result.created) {
       console.log('  File created.');
     } else if (result.exists) {
-      const { missing } = analyzeMissingProperties(
+      const { missing, updates } = analyzeMissingProperties(
         result.frontMatter,
         entity,
         ancestors,
         finalLabelMap
       );
 
-      if (missing.length === 0 && !llmProposal) {
+      if (missing.length === 0) {
         console.log('  Already exists — all properties filled.');
-        return;
-      }
-
-      if (missing.length > 0) {
-        console.log(`  Already exists — missing: ${missing.join(', ')}`);
-      } else {
-        console.log('  Already exists — all properties filled.');
-      }
-      if (llmProposal) {
-        const parts = [];
-        if (llmProposal.added.length > 0) parts.push(`+ ${llmProposal.added.join(', ')}`);
-        if (llmProposal.removed.length > 0) parts.push(`- ${llmProposal.removed.map(r => r.name).join(', ')}`);
-        console.log(`  LLM review proposes: ${parts.join('; ')}`);
-      }
-
-      let accepted = false;
-      if (autoApply) {
-        console.log('\n  --apply flag detected, applying.');
-        accepted = true;
-      } else if (missing.length > 0 && llmProposal) {
-        accepted = await askYesNo(`\n  Apply updates + LLM review (+${llmProposal.added.length}/-${llmProposal.removed.length})? [y/N] `);
-      } else if (llmProposal) {
-        accepted = await askYesNo(`\n  Apply LLM review (+${llmProposal.added.length}/-${llmProposal.removed.length})? [y/N] `);
-      } else {
-        accepted = await askYesNo('\n  Apply available updates? [y/N] ');
-      }
-
-      if (!accepted) {
         if (llmProposal) finalizeReview(false);
-        console.log('\n  Declined — nothing applied, nothing recorded. Run with --apply to apply updates.');
         return;
       }
 
-      if (llmProposal) finalAliases = finalizeReview(true);
-
-      // Recompute after finalize so the alias update reflects the review.
-      const { updates } = analyzeMissingProperties(
-        result.frontMatter,
-        entity,
-        ancestors,
-        finalLabelMap
-      );
+      console.log(`  Already exists — missing: ${missing.join(', ')}`);
       if (Object.keys(updates).length > 0) {
-        console.log('  Applying updates:');
+        console.log('  Available updates:');
         for (const [k, v] of Object.entries(updates)) {
           let display = Array.isArray(v) ? v.join(', ') : v;
           if (k === 'aliases' && Array.isArray(v) && result.frontMatter?.aliases) {
@@ -244,13 +187,25 @@ async function main() {
           }
           console.log(`    ${k}: ${display}`);
         }
-        const updatedContent = updateFrontMatter(result.content, updates);
+        if (autoApply) {
+          console.log('\n  --apply flag detected, updating...');
+        } else if (!(await askYesNo('\n  Apply available updates? [y/N] '))) {
+          if (llmProposal) finalizeReview(false);
+          console.log('\n  Run with --apply to apply updates.');
+          return;
+        }
+        // The pending review (if any) applies here, recorded in the tally
+        // log; recompute so the written aliases include it.
+        if (llmProposal) finalAliases = finalizeReview(true);
+        const { updates: toWrite } = analyzeMissingProperties(
+          result.frontMatter,
+          entity,
+          ancestors,
+          finalLabelMap
+        );
+        const updatedContent = updateFrontMatter(result.content, toWrite);
         fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
         console.log('  Updated successfully.');
-      } else if (llmProposal) {
-        console.log('  No frontmatter changes needed — review diff did not alter the note aliases.');
-      } else {
-        console.log('  No changes to apply.');
       }
     }
   } catch (error) {
