@@ -115,14 +115,15 @@ async function main() {
     if (bySource.wikidata.length > 0) console.log(`    (Wikidata common names): ${bySource.wikidata.join(', ')}`);
     if (bySource.wikidataAliases.length > 0) console.log(`    (Wikidata aliases): ${bySource.wikidataAliases.join(', ')}`);
     if (bySource.gbif && bySource.gbif.length > 0) console.log(`    (GBIF): ${bySource.gbif.join(', ')}`);
-    if (bySource.wikipedia && bySource.wikipedia.length > 0) console.log(`    (Wikipedia): ${bySource.wikipedia.join(', ')}`);
+    const wikiList = bySource.wikipediaBase || bySource.wikipedia || [];
+    if (wikiList.length > 0) console.log(`    (Wikipedia): ${wikiList.join(', ')}`);
     const llmAdded = bySource.llmAdded || [];
     const llmRemoved = bySource.llmRemoved || [];
     if (llmAdded.length > 0 || llmRemoved.length > 0) {
       const parts = [];
       if (llmAdded.length > 0) parts.push(`+ ${llmAdded.join(', ')}`);
       if (llmRemoved.length > 0) parts.push(`- ${llmRemoved.join(', ')}`);
-      console.log(`    (LLM review): ${parts.join('; ')}`);
+      console.log(`      (LLM review): ${parts.join('; ')}`);
     }
     console.log(`    (Combined): ${aliases ? aliases.join(', ') : '(none)'}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
