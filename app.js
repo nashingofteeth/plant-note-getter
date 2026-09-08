@@ -85,12 +85,12 @@ async function main() {
       }
     }
 
-    const { names: aliases, bySource, finalizeReview } = await collectCommonNames(entity, candidateEntities, {
+    const { names: aliases, bySource, logReview } = await collectCommonNames(entity, candidateEntities, {
       onReviewStart: () => {
         console.log(`\n  Reviewing Wikipedia names with ${LLM_MODEL} — this can take up to a minute...`);
       }
     });
-    const llmProposal = bySource.llmProposal || null;
+    const llmAdded = bySource.llmAdded || [];
 
     printSection('Entity');
 
@@ -102,14 +102,8 @@ async function main() {
     if (bySource.gbif && bySource.gbif.length > 0) console.log(`    (GBIF): ${bySource.gbif.join(', ')}`);
     const wikiList = bySource.wikipediaBase || bySource.wikipedia || [];
     if (wikiList.length > 0) console.log(`    (Wikipedia): ${wikiList.join(', ')}`);
-    const llmAdded = bySource.llmAdded || [];
     const llmRemoved = bySource.llmRemoved || [];
-    if (llmProposal) {
-      const parts = [];
-      if (llmProposal.added.length > 0) parts.push(`+ ${llmProposal.added.join(', ')}`);
-      if (llmProposal.removed.length > 0) parts.push(`- ${llmProposal.removed.map(r => r.name).join(', ')}`);
-      console.log(`      (LLM review — pending): ${parts.join('; ')}`);
-    } else if (llmAdded.length > 0 || llmRemoved.length > 0) {
+    if (llmAdded.length > 0 || llmRemoved.length > 0) {
       const parts = [];
       if (llmAdded.length > 0) parts.push(`+ ${llmAdded.join(', ')}`);
       if (llmRemoved.length > 0) parts.push(`- ${llmRemoved.join(', ')}`);
@@ -137,13 +131,7 @@ async function main() {
     tag = await checkAndPruneTag(tag, originals, noteName, autoApply, isNew, ancestors, entity.id);
 
     const finalLabelMap = loadLabelMap(LABEL_MAP_PATH);
-    let finalAliases = aliases;
-
-    // Any pending LLM review rides with the write decision: a written or
-    // created note applies it and records it in the tally log; a declined
-    // or no-write run drops it, recorded nowhere. The write prompts
-    // themselves are the standard pre-LLM ones.
-    if (isNew && llmProposal) finalAliases = finalizeReview(true);
+    const finalAliases = aliases;
 
     const content = generateFrontMatter(entity, ancestors, finalLabelMap);
 
@@ -155,12 +143,21 @@ async function main() {
     console.log(`  Rank: ${entity.rankLabel}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
 
+    // General creation confirmation; --apply overrides. A pending LLM
+    // review is already merged into the displayed aliases — answering no
+    // creates nothing and records nothing.
+    if (isNew && !autoApply && !(await askYesNo('\n  Create note? [y/N] '))) {
+      console.log('\n  Note not created. Run with --apply to create it.');
+      return;
+    }
+
     const result = createNoteFile(filename, content);
 
     printSection('Status');
 
     if (result.created) {
       console.log('  File created.');
+      if (logReview) logReview();
     } else if (result.exists) {
       const { missing, updates } = analyzeMissingProperties(
         result.frontMatter,
@@ -171,7 +168,6 @@ async function main() {
 
       if (missing.length === 0) {
         console.log('  Already exists — all properties filled.');
-        if (llmProposal) finalizeReview(false);
         return;
       }
 
@@ -190,22 +186,13 @@ async function main() {
         if (autoApply) {
           console.log('\n  --apply flag detected, updating...');
         } else if (!(await askYesNo('\n  Apply available updates? [y/N] '))) {
-          if (llmProposal) finalizeReview(false);
           console.log('\n  Run with --apply to apply updates.');
           return;
         }
-        // The pending review (if any) applies here, recorded in the tally
-        // log; recompute so the written aliases include it.
-        if (llmProposal) finalAliases = finalizeReview(true);
-        const { updates: toWrite } = analyzeMissingProperties(
-          result.frontMatter,
-          entity,
-          ancestors,
-          finalLabelMap
-        );
-        const updatedContent = updateFrontMatter(result.content, toWrite);
+        const updatedContent = updateFrontMatter(result.content, updates);
         fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
         console.log('  Updated successfully.');
+        if (logReview) logReview();
       }
     }
   } catch (error) {

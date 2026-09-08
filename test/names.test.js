@@ -278,7 +278,7 @@ test('collectCommonNames: populate and interactive paths use same function (pari
 
 // ─── end-of-Wikipedia LLM review wiring ─────────────────────────────────────
 
-test('collectCommonNames: proposal stashed; finalizeReview(true) applies diff and logs', async () => {
+test('collectCommonNames: review merged before return; logReview logs on demand', async () => {
   const logged = [];
   let reviewStarted = false;
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
@@ -296,30 +296,23 @@ test('collectCommonNames: proposal stashed; finalizeReview(true) applies diff an
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource, finalizeReview } = await collectCommonNames(entity, [], {
+  const { names, bySource, logReview } = await collectCommonNames(entity, [], {
     onReviewStart: () => {
       reviewStarted = true;
     }
   });
   // Loading hook fired for the review round-trip.
   assert.ok(reviewStarted, 'onReviewStart should fire when the review begins');
-  // Pending proposal stashed; the working list stays deterministic.
-  assert.deepStrictEqual(bySource.llmProposal, {
-    baseNames: ['regex noise', 'keeper'],
-    added: ['llm catch'],
-    removed: [{ name: 'regex noise', category: 'morphological' }]
-  });
+  // Review already merged before return; diff reported per source.
   assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
-  assert.deepStrictEqual(bySource.wikipedia, ['regex noise', 'keeper']);
-  assert.deepStrictEqual(names, ['wikidata name', 'regex noise', 'keeper']);
-  // Nothing recorded before the decision.
-  assert.strictEqual(logged.length, 0);
-  // Accept: applies the diff, logs, returns the recomputed aliases.
-  const finalNames = finalizeReview(true);
   assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);
   assert.deepStrictEqual(bySource.llmRemoved, ['regex noise']);
   assert.deepStrictEqual(bySource.wikipedia, ['keeper', 'llm catch']);
-  assert.deepStrictEqual(finalNames, ['wikidata name', 'keeper', 'llm catch']);
+  assert.deepStrictEqual(names, ['wikidata name', 'keeper', 'llm catch']);
+  // Nothing recorded until the caller logs.
+  assert.strictEqual(logged.length, 0);
+  assert.strictEqual(typeof logReview, 'function');
+  logReview();
   assert.strictEqual(logged.length, 1);
   assert.deepStrictEqual(logged[0].record.llmAdded, ['llm catch']);
   assert.deepStrictEqual(logged[0].record.llmRemoved, [
@@ -331,7 +324,7 @@ test('collectCommonNames: proposal stashed; finalizeReview(true) applies diff an
   resetStubs();
 });
 
-test('collectCommonNames: finalizeReview(false) is a no-op and records nothing', async () => {
+test('collectCommonNames: without logReview the applied review is recorded nowhere', async () => {
   const logged = [];
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
   llmBackend.getCompleter = async () =>
@@ -348,20 +341,13 @@ test('collectCommonNames: finalizeReview(false) is a no-op and records nothing',
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
-  assert.ok(bySource.llmProposal);
-  const finalNames = finalizeReview(false);
-  // Deterministic list stands; no applied-diff fields.
-  assert.deepStrictEqual(bySource.wikipedia, ['regex noise', 'keeper']);
-  assert.strictEqual(bySource.llmAdded, undefined);
-  assert.strictEqual(bySource.llmRemoved, undefined);
-  assert.deepStrictEqual(finalNames, ['wikidata name', 'regex noise', 'keeper']);
-  // Declined proposals are not recorded.
+  const { bySource } = await collectCommonNames(entity, []);
+  assert.ok(bySource.llmAdded);
   assert.strictEqual(logged.length, 0);
   resetStubs();
 });
 
-test('collectCommonNames: finalizeReview(true) keeps Wikidata-corroborated names', async () => {
+test('collectCommonNames: review removals keep Wikidata-corroborated names', async () => {
   reviewLog.appendReviewRecord = () => {};
   llmBackend.getCompleter = async () =>
     async () =>
@@ -380,16 +366,16 @@ test('collectCommonNames: finalizeReview(true) keeps Wikidata-corroborated names
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { finalizeReview } = await collectCommonNames(entity, []);
-  finalizeReview(true);
+  const { logReview } = await collectCommonNames(entity, []);
   const keys = entity.commonNames.map(normalizeNameKey);
   // 'shared name' survives (corroborated by Wikidata); 'wiki only' is stripped.
   assert.ok(keys.includes(normalizeNameKey('shared name')));
   assert.ok(!keys.includes(normalizeNameKey('wiki only')));
+  logReview();
   resetStubs();
 });
 
-test('collectCommonNames: review runs without callbacks; no proposal leaves finalizeReview null', async () => {
+test('collectCommonNames: review runs without callbacks; no proposal leaves logReview null', async () => {
   let completerCalled = false;
   reviewLog.appendReviewRecord = () => {
     throw new Error('should not log when the model proposes nothing');
@@ -407,12 +393,11 @@ test('collectCommonNames: review runs without callbacks; no proposal leaves fina
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
+  const { names, bySource, logReview } = await collectCommonNames(entity, []);
   assert.strictEqual(completerCalled, true);
-  assert.strictEqual(bySource.llmProposal, undefined);
-  assert.strictEqual(finalizeReview, null);
-  assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.strictEqual(bySource.llmAdded, undefined);
+  assert.strictEqual(logReview, null);
+  assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.deepStrictEqual(names, ['wiki name']);
   resetStubs();
 });
@@ -435,11 +420,11 @@ test('collectCommonNames: no LLM review without extract (stubs stay deterministi
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
+  const { names, bySource, logReview } = await collectCommonNames(entity, []);
   assert.strictEqual(completerCalled, false);
   assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.strictEqual(bySource.llmAdded, undefined);
-  assert.strictEqual(finalizeReview, null);
+  assert.strictEqual(logReview, null);
   assert.deepStrictEqual(names, ['wiki name']);
   resetStubs();
 });

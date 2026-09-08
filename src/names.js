@@ -49,7 +49,7 @@ async function resolveWikipediaArticle(entity) {
 }
 
 async function collectCommonNames(entity, candidateEntities, { onReviewStart } = {}) {
-  let finalizeReview = null; // set when the LLM proposes changes (deferred decision)
+  let logReview = null; // set when the LLM review changed the list (record on write accept)
   const synonymData = await collectSynonymData(entity, candidateEntities);
   entity.wikipediaUrl = synonymData.wikipediaUrl;
   entity.wikipediaTitle = synonymData.wikipediaTitle;
@@ -108,24 +108,25 @@ async function collectCommonNames(entity, candidateEntities, { onReviewStart } =
       entity.wikipediaUrl = wikiArticle.wikipediaUrl;
     }
     // End-of-Wikipedia LLM review (Wikipedia-only). Runs when enabled and
-    // there is an extract; the proposal is stashed in bySource.llmProposal —
-    // the working list stays deterministic. The caller decides via
-    // finalizeReview(accepted): acceptance applies the diff to the merged
-    // names (Wikipedia-sourced entries only — names corroborated by
-    // Wikidata/GBIF are never removed), appends the review-log record, and
-    // returns the recomputed aliases. Decline is a no-op and records
-    // nothing.
+    // there is an extract. The reviewed list is merged into the working
+    // names right away — before any write confirmation — so displays and
+    // update diffs include it (Wikipedia-sourced entries only; names
+    // corroborated by Wikidata/GBIF are never removed). What the caller
+    // controls is the RECORD: collectCommonNames returns a logReview
+    // closure (null when the model proposed nothing) and the write/write
+    // acceptance decides whether it is ever invoked. Declined or no-write
+    // runs record nothing.
     const wikiNamesRaw = wikiArticle.names || [];
     bySource.wikipediaBase = [...wikiNamesRaw];
     const config = require('./config');
-    let pendingReview = null;
+    let reviewed = null;
     if (wikiArticle.extract && config.LLM_ENABLED) {
       const { getCompleter } = require('./llm-backend');
       const { reviewWikipediaNames } = require('./llm-reviewer');
       const { appendReviewRecord } = require('./review-log');
       if (typeof onReviewStart === 'function') onReviewStart();
       const completer = await getCompleter();
-      const reviewed = await reviewWikipediaNames(
+      reviewed = await reviewWikipediaNames(
         {
           extract: wikiArticle.extract,
           baseNames: wikiNamesRaw,
@@ -134,67 +135,39 @@ async function collectCommonNames(entity, candidateEntities, { onReviewStart } =
         },
         { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
       );
-      if (reviewed.added.length || reviewed.removed.length) {
-        pendingReview = {
-          added: reviewed.added,
-          removed: reviewed.removed,
-          reviewedNames: reviewed.names,
-          appendReviewRecord,
-          config
-        };
-        bySource.llmProposal = {
-          baseNames: [...bySource.wikipediaBase],
-          added: [...reviewed.added],
-          removed: reviewed.removed.map((r) => ({ name: r.name, category: r.category }))
-        };
-      }
+      if (!(reviewed.added.length || reviewed.removed.length)) reviewed = null;
     }
-    mergeWikipediaNames(wikiNamesRaw);
-    bySource.wikipedia = [...wikiNamesRaw];
-
-    if (pendingReview) {
-      const { added, removed, reviewedNames, appendReviewRecord, config: cfg } = pendingReview;
+    if (reviewed) {
+      // Merge the reviewed list (base minus removals, plus adds). Removed
+      // names can't re-enter here; if Wikidata/GBIF also had them, they
+      // were merged earlier and survive.
+      mergeWikipediaNames(reviewed.names);
+      bySource.wikipedia = [...reviewed.names];
+      bySource.llmAdded = [...reviewed.added];
+      bySource.llmRemoved = reviewed.removed.map((r) => r.name);
+      const removedWithCategories = reviewed.removed;
       const taxonName = entity.scientificName || entity.wikipediaTitle;
-      finalizeReview = (accepted) => {
-        if (accepted) {
-          // Adds: same merge rules as the deterministic list.
-          mergeWikipediaNames(added);
-          // Removes: strip Wikipedia-sourced entries only — names
-          // corroborated by Wikidata/GBIF survive.
-          const protectedKeys = new Set(
-            [
-              ...(bySource.wikidata || []),
-              ...(bySource.wikidataAliases || []),
-              ...(bySource.gbif || [])
-            ].map((n) => normalizeNameKey(n))
-          );
-          const removedKeys = new Set(removed.map((r) => normalizeNameKey(r.name)));
-          entity.commonNames = entity.commonNames.filter(
-            (n) => !(removedKeys.has(normalizeNameKey(n)) && !protectedKeys.has(normalizeNameKey(n)))
-          );
-          bySource.wikipedia = [...reviewedNames];
-          bySource.llmAdded = [...added];
-          bySource.llmRemoved = removed.map((r) => r.name);
-          appendReviewRecord(
-            {
-              taxon: taxonName,
-              wikipediaTitle: wikiArticle.wikipediaTitle,
-              date: new Date().toISOString(),
-              extract: wikiArticle.extract.slice(0, 2000),
-              extractLength: wikiArticle.extract.length,
-              baseNames: bySource.wikipediaBase,
-              llmAdded: added,
-              llmRemoved: removed
-            },
-            cfg.REVIEW_LOG_PATH
-          );
-        }
-        return buildAliases(entity);
-      };
+      logReview = () =>
+        require('./review-log').appendReviewRecord(
+          {
+            taxon: taxonName,
+            wikipediaTitle: wikiArticle.wikipediaTitle,
+            date: new Date().toISOString(),
+            extract: wikiArticle.extract.slice(0, 2000),
+            extractLength: wikiArticle.extract.length,
+            baseNames: bySource.wikipediaBase,
+            llmAdded: reviewed.added,
+            llmRemoved: removedWithCategories
+          },
+          config.REVIEW_LOG_PATH
+        );
+    } else {
+      mergeWikipediaNames(wikiNamesRaw);
+      bySource.wikipedia = [...wikiNamesRaw];
     }
   }
 
-  return { names: buildAliases(entity), bySource, finalizeReview };
+  return { names: buildAliases(entity), bySource, logReview };
 }
 
 module.exports = {
