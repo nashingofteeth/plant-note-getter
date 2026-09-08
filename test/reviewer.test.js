@@ -403,4 +403,11 @@ test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias'
   // Regional plant names are not geographic junk.
   assert.match(REMOVE_SYSTEM_PROMPT, /'Bight of Biafra'/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'Russian olive', 'pruche du Canada', 'radiki', 'stamnagathi'/);
+  // Eval-driven escape classes: Latin+cultivar strings, anatomy terms,
+  // quote-wrapped captures, family-member fragments — and the guardrail
+  // that plain-English cultivar vernaculars survive.
+  assert.match(REMOVE_SYSTEM_PROMPT, /"Salix alba 'Vitellina-Tristis'"/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'golden weeping willow'\) is a genuine regional name/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'mouth', 'trigger hairs', 'utricles', 'bark',/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'other members of the Scrophulariaceae'/);
 });

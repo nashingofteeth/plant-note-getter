@@ -126,18 +126,26 @@ const REMOVE_SYSTEM_PROMPT =
   "- 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
   "phrases from sloppy extraction (e.g. 'although once included', 'which " +
   "means shut happy', 'To add to the confusion', 'are also known as " +
-  "mimosa'), including detached place fragments ('from Verona'). An entry " +
-  'that starts with a verb, conjunction, or preposition is a fragment even ' +
-  'when it embeds a real name inside.\n' +
+  "mimosa'), including detached place fragments ('from Verona'), entries " +
+  'wrapped in stray quotation marks (e.g. \'"figwort"\'), and phrases ' +
+  "about other members of the family (e.g. 'other members of the " +
+  'Scrophulariaceae\'). An entry that starts with a verb, conjunction, or ' +
+  'preposition is a fragment even when it embeds a real name inside.\n' +
   "- 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
   "'plant'). A vernacular name is NOT generic just because it sounds " +
   "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
   "- 'geographic': names that ARE places or geographic features (e.g. " +
   "'Bight of Biafra') — not plant names that merely mention a region.\n" +
-  "- 'morphological': structural descriptors like 'lanceolate'.\n" +
+  "- 'morphological': structural descriptors like 'lanceolate', and " +
+  "plant-part/anatomy terms — any entry naming a PART of the plant rather " +
+  "than the plant itself ('mouth', 'trigger hairs', 'utricles', 'bark', " +
+  "'roots') is not a name of the taxon.\n" +
   "- 'procedural': extraction artifacts like a leading 'known as'.\n" +
-  "- 'cultivar': cultivar, trade-mark, or cultivated-form names (e.g. " +
-  "'Rosea', 'Summer Chocolate'), and person names (e.g. 'E.H.Wilson').\n" +
+  "- 'cultivar': person names (e.g. 'E.H.Wilson') and scientific-form " +
+  'strings — entries whose wording is a Latin binomial or contains a ' +
+  "quote-epithet (e.g. \"Salix alba 'Vitellina-Tristis'\") are not " +
+  'vernacular names. But a plain-English vernacular name of a cultivar ' +
+  "(e.g. 'golden weeping willow') is a genuine regional name — keep it.\n" +
   "  - 'other-organism': names of other organisms mentioned in passing — " +
   "bacteria, fungi, pests, diseases (e.g. 'diazotrophs', 'Fusarium'), and " +
   'scientific Latin names of any organism. Do NOT use this for regional ' +
