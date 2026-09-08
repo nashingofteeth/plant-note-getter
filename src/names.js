@@ -48,7 +48,7 @@ async function resolveWikipediaArticle(entity) {
   return null;
 }
 
-async function collectCommonNames(entity, candidateEntities, { reviewDecision } = {}) {
+async function collectCommonNames(entity, candidateEntities, { reviewDecision, onReviewStart } = {}) {
   const synonymData = await collectSynonymData(entity, candidateEntities);
   entity.wikipediaUrl = synonymData.wikipediaUrl;
   entity.wikipediaTitle = synonymData.wikipediaTitle;
@@ -101,6 +101,7 @@ async function collectCommonNames(entity, candidateEntities, { reviewDecision } 
       const { getCompleter } = require('./llm-backend');
       const { reviewWikipediaNames } = require('./llm-reviewer');
       const { appendReviewRecord } = require('./review-log');
+      if (typeof onReviewStart === 'function') onReviewStart();
       const completer = await getCompleter();
       const reviewed = await reviewWikipediaNames(
         {

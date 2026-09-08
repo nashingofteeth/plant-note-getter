@@ -280,6 +280,7 @@ test('collectCommonNames: populate and interactive paths use same function (pari
 test('collectCommonNames: accepted review applies diff to Wikipedia list only and logs', async () => {
   const logged = [];
   let promptToModel = '';
+  let reviewStarted = false;
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
   llmBackend.getCompleter = async () =>
     async (_system, user) => {
@@ -298,8 +299,13 @@ test('collectCommonNames: accepted review applies diff to Wikipedia list only an
     wikipediaTitle: 'Test thing'
   };
   const { names, bySource } = await collectCommonNames(entity, [], {
+    onReviewStart: () => {
+      reviewStarted = true;
+    },
     reviewDecision: async () => true
   });
+  // Loading hook fired for the review round-trip.
+  assert.ok(reviewStarted, 'onReviewStart should fire when the review begins');
   // Diff reported per source.
   assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
   assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);

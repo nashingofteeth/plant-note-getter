@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
+const { NOTE_ROOT, LABEL_MAP_PATH, LLM_MODEL } = require('./src/config');
 const { sanitizeFilename, loadLabelMap, normalizeNameKey } = require('./src/utils');
 const { resolveTaxon, getParentChain } = require('./src/wikidata');
 const { collectCommonNames } = require('./src/names');
@@ -92,6 +92,9 @@ async function main() {
     }
 
     const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities, {
+      onReviewStart: () => {
+        console.log(`\n  Reviewing Wikipedia names with ${LLM_MODEL} — this can take up to a minute...`);
+      },
       reviewDecision: async (proposal) => {
         printSection('LLM Review');
         console.log(`  Deterministic extraction (${proposal.baseNames.length}): ${formatList(proposal.baseNames) || '(none)'}`);
