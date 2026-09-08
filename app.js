@@ -91,24 +91,12 @@ async function main() {
       }
     }
 
-    const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities, {
+    const { names: aliases, bySource, finalizeReview } = await collectCommonNames(entity, candidateEntities, {
       onReviewStart: () => {
         console.log(`\n  Reviewing Wikipedia names with ${LLM_MODEL} — this can take up to a minute...`);
-      },
-      reviewDecision: async (proposal) => {
-        printSection('LLM Review');
-        console.log(`  Deterministic extraction (${proposal.baseNames.length}): ${formatList(proposal.baseNames) || '(none)'}`);
-        for (const name of proposal.added) console.log(`  + ${name}`);
-        for (const r of proposal.removed) console.log(`  - ${r.name} [${r.category}]`);
-        if (autoApply) {
-          console.log('\n  --apply flag detected, accepting LLM review.');
-          return true;
-        }
-        const accepted = await askYesNo('\n  Accept LLM review changes? [y/N] ');
-        if (!accepted) console.log('  Declined — not applied, not recorded.');
-        return accepted;
       }
     });
+    const llmProposal = bySource.llmProposal || null;
 
     printSection('Entity');
 
@@ -122,7 +110,12 @@ async function main() {
     if (wikiList.length > 0) console.log(`    (Wikipedia): ${wikiList.join(', ')}`);
     const llmAdded = bySource.llmAdded || [];
     const llmRemoved = bySource.llmRemoved || [];
-    if (llmAdded.length > 0 || llmRemoved.length > 0) {
+    if (llmProposal) {
+      const parts = [];
+      if (llmProposal.added.length > 0) parts.push(`+ ${llmProposal.added.join(', ')}`);
+      if (llmProposal.removed.length > 0) parts.push(`- ${llmProposal.removed.map(r => r.name).join(', ')}`);
+      console.log(`      (LLM review — pending): ${parts.join('; ')}`);
+    } else if (llmAdded.length > 0 || llmRemoved.length > 0) {
       const parts = [];
       if (llmAdded.length > 0) parts.push(`+ ${llmAdded.join(', ')}`);
       if (llmRemoved.length > 0) parts.push(`- ${llmRemoved.join(', ')}`);
@@ -150,13 +143,34 @@ async function main() {
     tag = await checkAndPruneTag(tag, originals, noteName, autoApply, isNew, ancestors, entity.id);
 
     const finalLabelMap = loadLabelMap(LABEL_MAP_PATH);
+    let finalAliases = aliases;
+
+    // New note: creation itself stays silent — the only gate is the LLM
+    // review delta, asked before the frontmatter is generated so the note
+    // bakes in the decided aliases.
+    if (isNew && llmProposal) {
+      printSection('LLM Review');
+      console.log(`  Deterministic extraction (${llmProposal.baseNames.length}): ${formatList(llmProposal.baseNames) || '(none)'}`);
+      for (const name of llmProposal.added) console.log(`  + ${name}`);
+      for (const r of llmProposal.removed) console.log(`  - ${r.name} [${r.category}]`);
+      if (autoApply) {
+        console.log('\n  --apply flag detected, accepting LLM review.');
+        finalAliases = finalizeReview(true);
+      } else if (await askYesNo('\n  Apply LLM review to the new note? [y/N] ')) {
+        finalAliases = finalizeReview(true);
+      } else {
+        finalizeReview(false);
+        console.log('  Declined — note will use the deterministic aliases.');
+      }
+    }
+
     const content = generateFrontMatter(entity, ancestors, finalLabelMap);
 
     printSection('Note');
 
     console.log(`  Filename: ${filename}`);
     console.log(`  Tag: ${tag}`);
-    if (aliases) console.log(`  Aliases: ${aliases.join(', ')}`);
+    if (finalAliases) console.log(`  Aliases: ${finalAliases.join(', ')}`);
     console.log(`  Rank: ${entity.rankLabel}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
 
@@ -167,21 +181,59 @@ async function main() {
     if (result.created) {
       console.log('  File created.');
     } else if (result.exists) {
-      const { missing, updates } = analyzeMissingProperties(
+      const { missing } = analyzeMissingProperties(
         result.frontMatter,
         entity,
         ancestors,
         finalLabelMap
       );
 
-      if (missing.length === 0) {
+      if (missing.length === 0 && !llmProposal) {
         console.log('  Already exists — all properties filled.');
         return;
       }
 
-      console.log(`  Already exists — missing: ${missing.join(', ')}`);
+      if (missing.length > 0) {
+        console.log(`  Already exists — missing: ${missing.join(', ')}`);
+      } else {
+        console.log('  Already exists — all properties filled.');
+      }
+      if (llmProposal) {
+        const parts = [];
+        if (llmProposal.added.length > 0) parts.push(`+ ${llmProposal.added.join(', ')}`);
+        if (llmProposal.removed.length > 0) parts.push(`- ${llmProposal.removed.map(r => r.name).join(', ')}`);
+        console.log(`  LLM review proposes: ${parts.join('; ')}`);
+      }
+
+      let accepted = false;
+      if (autoApply) {
+        console.log('\n  --apply flag detected, applying.');
+        accepted = true;
+      } else if (missing.length > 0 && llmProposal) {
+        accepted = await askYesNo(`\n  Apply updates + LLM review (+${llmProposal.added.length}/-${llmProposal.removed.length})? [y/N] `);
+      } else if (llmProposal) {
+        accepted = await askYesNo(`\n  Apply LLM review (+${llmProposal.added.length}/-${llmProposal.removed.length})? [y/N] `);
+      } else {
+        accepted = await askYesNo('\n  Apply available updates? [y/N] ');
+      }
+
+      if (!accepted) {
+        if (llmProposal) finalizeReview(false);
+        console.log('\n  Declined — nothing applied, nothing recorded. Run with --apply to apply updates.');
+        return;
+      }
+
+      if (llmProposal) finalAliases = finalizeReview(true);
+
+      // Recompute after finalize so the alias update reflects the review.
+      const { updates } = analyzeMissingProperties(
+        result.frontMatter,
+        entity,
+        ancestors,
+        finalLabelMap
+      );
       if (Object.keys(updates).length > 0) {
-        console.log('  Available updates:');
+        console.log('  Applying updates:');
         for (const [k, v] of Object.entries(updates)) {
           let display = Array.isArray(v) ? v.join(', ') : v;
           if (k === 'aliases' && Array.isArray(v) && result.frontMatter?.aliases) {
@@ -191,18 +243,13 @@ async function main() {
           }
           console.log(`    ${k}: ${display}`);
         }
-        if (autoApply) {
-          console.log('\n  --apply flag detected, updating...');
-          const updatedContent = updateFrontMatter(result.content, updates);
-          fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
-          console.log('  Updated successfully.');
-        } else if (await askYesNo('\n  Apply available updates? [y/N] ')) {
-          const updatedContent = updateFrontMatter(result.content, updates);
-          fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
-          console.log('  Updated successfully.');
-        } else {
-          console.log('\n  Run with --apply to apply updates.');
-        }
+        const updatedContent = updateFrontMatter(result.content, updates);
+        fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
+        console.log('  Updated successfully.');
+      } else if (llmProposal) {
+        console.log('  No frontmatter changes needed — review diff did not alter the note aliases.');
+      } else {
+        console.log('  No changes to apply.');
       }
     }
   } catch (error) {

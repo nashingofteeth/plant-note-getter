@@ -43,6 +43,7 @@ function resetStubs() {
 }
 
 const { collectCommonNames, buildAliases } = require('../src/names');
+const { normalizeNameKey } = require('../src/utils');
 
 // ─── buildAliases ───────────────────────────────────────────────────────────
 
@@ -277,19 +278,16 @@ test('collectCommonNames: populate and interactive paths use same function (pari
 
 // ─── end-of-Wikipedia LLM review wiring ─────────────────────────────────────
 
-test('collectCommonNames: accepted review applies diff to Wikipedia list only and logs', async () => {
+test('collectCommonNames: proposal stashed; finalizeReview(true) applies diff and logs', async () => {
   const logged = [];
-  let promptToModel = '';
   let reviewStarted = false;
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
   llmBackend.getCompleter = async () =>
-    async (_system, user) => {
-      promptToModel = user;
-      return JSON.stringify({
+    async () =>
+      JSON.stringify({
         add: ['llm catch'],
         remove: [{ name: 'regex noise', category: 'morphological' }]
       });
-    };
   stubCommonNames({ wikipedia: ['regex noise', 'keeper'], extract: 'Wiki text about the plant.' });
   const entity = {
     id: 'Q1',
@@ -298,24 +296,30 @@ test('collectCommonNames: accepted review applies diff to Wikipedia list only an
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, [], {
+  const { names, bySource, finalizeReview } = await collectCommonNames(entity, [], {
     onReviewStart: () => {
       reviewStarted = true;
-    },
-    reviewDecision: async () => true
+    }
   });
   // Loading hook fired for the review round-trip.
   assert.ok(reviewStarted, 'onReviewStart should fire when the review begins');
-  // Diff reported per source.
+  // Pending proposal stashed; the working list stays deterministic.
+  assert.deepStrictEqual(bySource.llmProposal, {
+    baseNames: ['regex noise', 'keeper'],
+    added: ['llm catch'],
+    removed: [{ name: 'regex noise', category: 'morphological' }]
+  });
   assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
+  assert.deepStrictEqual(bySource.wikipedia, ['regex noise', 'keeper']);
+  assert.deepStrictEqual(names, ['wikidata name', 'regex noise', 'keeper']);
+  // Nothing recorded before the decision.
+  assert.strictEqual(logged.length, 0);
+  // Accept: applies the diff, logs, returns the recomputed aliases.
+  const finalNames = finalizeReview(true);
   assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);
   assert.deepStrictEqual(bySource.llmRemoved, ['regex noise']);
   assert.deepStrictEqual(bySource.wikipedia, ['keeper', 'llm catch']);
-  // Wikidata names untouched by the review; final list reflects the diff.
-  assert.deepStrictEqual(names, ['wikidata name', 'keeper', 'llm catch']);
-  // The model is grounded with the taxon name.
-  assert.ok(promptToModel.includes('Test thing'));
-  // Review-gap log record written with the capped extract.
+  assert.deepStrictEqual(finalNames, ['wikidata name', 'keeper', 'llm catch']);
   assert.strictEqual(logged.length, 1);
   assert.deepStrictEqual(logged[0].record.llmAdded, ['llm catch']);
   assert.deepStrictEqual(logged[0].record.llmRemoved, [
@@ -327,7 +331,7 @@ test('collectCommonNames: accepted review applies diff to Wikipedia list only an
   resetStubs();
 });
 
-test('collectCommonNames: declined review leaves list and log untouched', async () => {
+test('collectCommonNames: finalizeReview(false) is a no-op and records nothing', async () => {
   const logged = [];
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
   llmBackend.getCompleter = async () =>
@@ -344,24 +348,51 @@ test('collectCommonNames: declined review leaves list and log untouched', async 
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, [], {
-    reviewDecision: async () => false
-  });
+  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
+  assert.ok(bySource.llmProposal);
+  const finalNames = finalizeReview(false);
   // Deterministic list stands; no applied-diff fields.
-  assert.deepStrictEqual(bySource.wikipediaBase, ['regex noise', 'keeper']);
   assert.deepStrictEqual(bySource.wikipedia, ['regex noise', 'keeper']);
   assert.strictEqual(bySource.llmAdded, undefined);
   assert.strictEqual(bySource.llmRemoved, undefined);
-  assert.deepStrictEqual(names, ['wikidata name', 'regex noise', 'keeper']);
+  assert.deepStrictEqual(finalNames, ['wikidata name', 'regex noise', 'keeper']);
   // Declined proposals are not recorded.
   assert.strictEqual(logged.length, 0);
   resetStubs();
 });
 
-test('collectCommonNames: no reviewDecision callback skips the LLM entirely', async () => {
+test('collectCommonNames: finalizeReview(true) keeps Wikidata-corroborated names', async () => {
+  reviewLog.appendReviewRecord = () => {};
+  llmBackend.getCompleter = async () =>
+    async () =>
+      JSON.stringify({
+        add: [],
+        remove: [
+          { name: 'shared name', category: 'generic' },
+          { name: 'wiki only', category: 'generic' }
+        ]
+      });
+  stubCommonNames({ wikipedia: ['shared name', 'wiki only'], extract: 'Wiki text.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: ['shared name'],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { finalizeReview } = await collectCommonNames(entity, []);
+  finalizeReview(true);
+  const keys = entity.commonNames.map(normalizeNameKey);
+  // 'shared name' survives (corroborated by Wikidata); 'wiki only' is stripped.
+  assert.ok(keys.includes(normalizeNameKey('shared name')));
+  assert.ok(!keys.includes(normalizeNameKey('wiki only')));
+  resetStubs();
+});
+
+test('collectCommonNames: review runs without callbacks; no proposal leaves finalizeReview null', async () => {
   let completerCalled = false;
   reviewLog.appendReviewRecord = () => {
-    throw new Error('should not log without a decision path');
+    throw new Error('should not log when the model proposes nothing');
   };
   llmBackend.getCompleter = async () =>
     async () => {
@@ -376,8 +407,10 @@ test('collectCommonNames: no reviewDecision callback skips the LLM entirely', as
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, []);
-  assert.strictEqual(completerCalled, false);
+  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
+  assert.strictEqual(completerCalled, true);
+  assert.strictEqual(bySource.llmProposal, undefined);
+  assert.strictEqual(finalizeReview, null);
   assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.strictEqual(bySource.llmAdded, undefined);
   assert.deepStrictEqual(names, ['wiki name']);
@@ -402,12 +435,11 @@ test('collectCommonNames: no LLM review without extract (stubs stay deterministi
     aliases: [],
     wikipediaTitle: 'Test thing'
   };
-  const { names, bySource } = await collectCommonNames(entity, [], {
-    reviewDecision: async () => true
-  });
+  const { names, bySource, finalizeReview } = await collectCommonNames(entity, []);
   assert.strictEqual(completerCalled, false);
   assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.strictEqual(bySource.llmAdded, undefined);
+  assert.strictEqual(finalizeReview, null);
   assert.deepStrictEqual(names, ['wiki name']);
   resetStubs();
 });
