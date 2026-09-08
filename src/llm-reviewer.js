@@ -138,6 +138,10 @@ const REMOVE_SYSTEM_PROMPT =
   "- 'procedural': extraction artifacts like a leading 'known as'.\n" +
   "- 'cultivar': cultivar, trade-mark, or cultivated-form names (e.g. " +
   "'Rosea', 'Summer Chocolate'), and person names (e.g. 'E.H.Wilson').\n" +
+  "  - 'other-organism': names of other organisms mentioned in passing — " +
+  "bacteria, fungi, pests, diseases (e.g. 'diazotrophs', 'Fusarium'), and " +
+  'scientific Latin names of any organism. Do NOT use this for regional ' +
+  'plant names of this taxon.\n' +
   'Do not invent or paraphrase. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
