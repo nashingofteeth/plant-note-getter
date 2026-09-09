@@ -1177,7 +1177,7 @@ function _extractWikipediaCommonNames(text, trace) {
   //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
@@ -1604,7 +1604,6 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r66 && /(?:-|^[A-ZÀ-Ÿ]|\s)/.test(r66[1]) && !/^(?:on|in|at|to|for|with|by|of|from|as|into|over|under|against|between|among)\b/i.test(r66[1])) {
       caps.push({ rule: 'R66', capture: r66[1] });
     }
-
     // R10: "known as" / "called" — at sentence start ("It is..." or any named
     // subject, e.g. the Cichorium test's "Common chicory is also known as
     // blue daisy, ...") or mid-sentence (after a comma, with or without
@@ -1612,7 +1611,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // known as" anywhere): subordinate "where it is also known as"
     // cultivar clauses like the Valencia test's 'Italy (where it is also
     // known as "Liscio")' stay silent, as do R51b's "is also called" cases.
-    const r10 = sentence.match(/(?:\s*,\s+(?:also\s+)?(?:known\s+as|called)\s+|^(?:It|[A-ZÀ-Ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*){0,3})\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+)(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any)\b|\s+(?:has|have)\b|$)/i);
+    const r10 = sentence.match(/(?:\s*,\s+(?:also\s+)?(?:known\s+as|called)\s+|^(?:It|[A-ZÀ-Ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*){0,3})\s+(?:is|was)\s+also\s+(?:known\s+as|called)\s+)(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one|any|native|endemic|found|distributed)\b|\s+(?:has|have)\b|$)/i);
     if (r10) {
       const r10Prologue = sentence.slice(0, r10.index);
       // Reject attribution sentences naming a people/nation/tribe ("...Anishinaabe
@@ -1722,7 +1721,11 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r13) {
       const capture = finalizeCapture(r13[1], 300);
       // Reject provenance clauses: "from the Amur River region..."
-      if (capture && !/^(?:from\s+the|in\s+(?:northeastern|southern|northern|western|eastern|central))/i.test(capture)) {
+      // Reject "the word X" meta-statements: "...names which include the
+      // word "gooseberry"" describes names containing a word, it is not a
+      // name itself.
+      if (capture && !/^(?:from\s+the|in\s+(?:northeastern|southern|northern|western|eastern|central))/i.test(capture)
+          && !/^the\s+word\s+/i.test(capture)) {
         caps.push({ rule: 'R13', capture: capture });
       }
     }
@@ -1868,6 +1871,17 @@ function _extractWikipediaCommonNames(text, trace) {
     if (r70) {
       const capture = finalizeCapture(r70[1], 300);
       if (capture) caps.push({ rule: 'R70', capture: capture });
+    }
+
+    // R73: variety appositive — "Ribes divaricatum var. divaricatum, or
+    // spreading gooseberry is found in ...". The ", or <Name> is found in"
+    // tail names the variety; the place list after it is stripped
+    // downstream. Guarded against contrast binomials ("Abies alba, or Picea
+    // rubens is found ..." must not emit "Picea rubens"): the name must
+    // not be a bare Cap+lower binomial.
+    const r73 = sentence.match(/,\s*or\s+([A-Za-zÀ-ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*){0,3})\s+is\s+found\s+in\b/i);
+    if (r73 && !/^[A-Z][a-z]+\s+[a-z]+$/.test(r73[1].trim())) {
+      caps.push({ rule: 'R73', capture: r73[1].trim() });
     }
 
     // R71: "A ... name(s) that is now <adj> is X" — name predicate with a

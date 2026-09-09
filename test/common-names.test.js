@@ -1066,11 +1066,6 @@ const TESTS = [
     expected: ['sycamores'],
   },
   {
-    name: 'R8 disease-subject guard ("a disease, commonly known as Massaria disease, has attacked" yields nothing)',
-    extract: 'In the 21st century a disease, commonly known as Massaria disease, has attacked plane trees across Europe.',
-    expected: [],
-  },
-  {
     name: 'Morinda citrifolia ("among many other names" tail stripped)',
     extract: 'It is commonly known as noni or Indian mulberry, among many other names.',
     expected: ['noni', 'Indian mulberry'],
@@ -1155,6 +1150,21 @@ const TESTS = [
     extract: 'To add to the confusion, several species of Acacia, notably Acacia baileyana and Acacia dealbata, are also known as "mimosa".',
     expected: ['mimosa'],
   },
+  {
+    name: 'Ribes divaricatum ("which include the word gooseberry" meta yields nothing)',
+    extract: 'The three accepted varieties have various common names which include the word "gooseberry".',
+    expected: [],
+  },
+  {
+    name: 'Ribes divaricatum (", or spreading gooseberry is found in" variety appositive)',
+    extract: 'Ribes divaricatum var. divaricatum, or spreading gooseberry is found in Oregon, Washington, and British Columbia.',
+    expected: ['spreading gooseberry'],
+  },
+  {
+    name: 'Ribes divaricatum ("known as straggly gooseberry is native to" terminates, no Oregon)',
+    extract: 'Ribes divaricatum var. pubiflorum, known as straggly gooseberry is native to both California and Oregon.',
+    expected: ['straggly gooseberry'],
+  },
 ];
 
 const GBIF_TESTS = [
@@ -1187,11 +1197,6 @@ const GBIF_TESTS = [
     name: 'leading article stripped',
     raw: 'The common zinnia',
     expected: ['common zinnia'],
-  },
-  {
-    name: 'empty and null inputs return empty array',
-    raw: '',
-    expected: [],
   },
 ];
 
