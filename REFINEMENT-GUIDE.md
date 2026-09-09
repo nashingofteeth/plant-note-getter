@@ -289,4 +289,4 @@ Each **accepted** proposal appends a JSONL record to `.review-data/review-gaps.j
 5. Patch the regex rules in `src/wiki-extract.js`, then run `npm test` until the new tests are green and all existing cases still pass.
 6. For vetoes, the deterministic guard is the regex — there's no red test to "un-veto", so re-run the species to confirm the name is now captured cleanly by the regex (and the tally shows the removal as non-recurring).
 
-The reviewer is disabled by default. Enable it with `LLM_ENABLED=true` plus an explicit `LLM_MODEL=<ollama model>` in `.env` — with no model configured it stays off and extraction is regex-only.
+The reviewer runs whenever `LLM_MODEL` is set (no default model — set it explicitly). Disable with `LLM_DISABLED=true` in `.env` or a `--disable` CLI flag; with no model configured it stays off and extraction is regex-only.

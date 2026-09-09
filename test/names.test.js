@@ -1,11 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-// Enable the LLM reviewer for the wiring test below. config.js is loaded
-// lazily inside collectCommonNames, so this must be set before the first
-// call (stubs without `extract` never reach the reviewer, so the rest of
-// the suite is unaffected).
-process.env.LLM_ENABLED = 'true';
+// The reviewer runs whenever a model is configured (unless disabled).
+// config.js is loaded lazily inside collectCommonNames, so ensure a model
+// is present before the first call (stubs without `extract` never reach
+// the reviewer, so the rest of the suite is unaffected).
+process.env.LLM_MODEL = process.env.LLM_MODEL || 'test-model';
 
 // Stub the API functions BEFORE names.js loads, so its destructured refs
 // point at the stubs (deterministic, no API calls).
