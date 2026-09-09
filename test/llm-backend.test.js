@@ -20,7 +20,7 @@ afterEach(() => {
 
 function useOllama() {
   delete process.env.LLM_SERVER_URL;
-  delete process.env.LLM_MODEL;
+  process.env.LLM_MODEL = 'test-model';
   backend.resetCompleter();
 }
 
@@ -54,7 +54,7 @@ test('ollama: builds the expected /api/chat request and returns trimmed content'
   assert.strictEqual(chat.url, 'http://localhost:11434/api/chat');
   assert.strictEqual(chat.init.method, 'POST');
   assert.deepStrictEqual(JSON.parse(chat.init.body), {
-    model: 'qwen3:4b-instruct-2507-q4_K_M',
+    model: 'test-model',
     messages: [
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'user' }
@@ -92,6 +92,15 @@ test('ollama: omits format when no jsonSchema is passed', async () => {
   await complete('sys', 'user');
   const body = JSON.parse(calls[1].init.body);
   assert.ok(!('format' in body));
+});
+
+test('ollama: missing LLM_MODEL yields a null completer without probing', async () => {
+  delete process.env.LLM_SERVER_URL;
+  delete process.env.LLM_MODEL;
+  backend.resetCompleter();
+  const calls = stubFetch(() => okJson({ models: [] }));
+  assert.strictEqual(await backend.getCompleter(), null);
+  assert.strictEqual(calls.length, 0);
 });
 
 test('ollama: probe failure yields a null completer', async () => {

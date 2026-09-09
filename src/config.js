@@ -19,10 +19,13 @@ if (!fs.existsSync(NOTE_ROOT)) {
 const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 
 // End-of-Wikipedia LLM reviewer (advisory second pass; see src/llm-reviewer.js)
-// via an external Ollama daemon. Disabled by default; set LLM_ENABLED=true.
-const LLM_ENABLED = process.env.LLM_ENABLED === 'true';
+// via an external Ollama daemon. Runs only when explicitly enabled AND a
+// model is configured — there is no default model. Set LLM_ENABLED=true
+// plus LLM_MODEL=<ollama model>; anything else keeps regex-only output.
+const LLM_ENABLED =
+  process.env.LLM_ENABLED === 'true' && Boolean(process.env.LLM_MODEL);
 const LLM_SERVER_URL = process.env.LLM_SERVER_URL || 'http://localhost:11434';
-const LLM_MODEL = process.env.LLM_MODEL || 'qwen3:4b-instruct-2507-q4_K_M';
+const LLM_MODEL = process.env.LLM_MODEL || '';
 const LLM_MAX_INPUT_CHARS = parseInt(process.env.LLM_MAX_INPUT_CHARS || '16000', 10);
 
 // Review-gap tally log (LLM corrections later become red tests → regex patches).

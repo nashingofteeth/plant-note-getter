@@ -8,15 +8,19 @@
 // pipeline always keeps working.
 
 const DEFAULT_SERVER_URL = 'http://localhost:11434';
-const DEFAULT_OLLAMA_MODEL = 'qwen3:4b-instruct-2507-q4_K_M';
 
 // External Ollama daemon completer. Talks to the daemon's native /api/chat
 // endpoint (grammar-constrained output when options.jsonSchema is given).
+// No default model: without LLM_MODEL there is nothing to complete with,
+// so this throws and getCompleter below degrades to a null completer.
 // A cheap /api/tags probe at build time turns an unreachable daemon into a
 // null completer immediately instead of failing on the first review.
 async function buildCompleter() {
   const baseUrl = (process.env.LLM_SERVER_URL || DEFAULT_SERVER_URL).replace(/\/+$/, '');
-  const model = process.env.LLM_MODEL || DEFAULT_OLLAMA_MODEL;
+  const model = process.env.LLM_MODEL || '';
+  if (!model) {
+    throw new Error('LLM_MODEL is not set — reviewer disabled');
+  }
   const probeRes = await fetch(`${baseUrl}/api/tags`, {
     signal: AbortSignal.timeout(5000)
   });
@@ -69,6 +73,5 @@ function resetCompleter() {
 module.exports = {
   getCompleter,
   resetCompleter,
-  DEFAULT_SERVER_URL,
-  DEFAULT_OLLAMA_MODEL
+  DEFAULT_SERVER_URL
 };
