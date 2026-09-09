@@ -78,6 +78,12 @@ const ADD_SYSTEM_PROMPT =
   'species, NOT this taxon — never add it, even though it contains the ' +
   'head noun. Never add scientific Latin genus or species names (e.g. ' +
   "'vicia', 'glycyrrhiza').\n" +
+  '- Never add galls, diseases, or pests (e.g. \'oak apple\', ' +
+  "'oak marble gall', 'pineapple gall') — those belong to other organisms, " +
+  'not this plant.\n' +
+  '- Never add names of individual organisms: famous specimen trees ' +
+  "(e.g. 'Major Oak', 'Bowthorpe Oak', 'Carroll Oak') name one particular " +
+  'plant, not the taxon.\n' +
   "- Names built on the taxon's own head noun with a qualifier that " +
   'applies to the whole group are excellent (e.g. \'pea family\', ' +
   "'common oak', 'golden yews').\n" +
@@ -96,6 +102,12 @@ const ADD_SYSTEM_PROMPT =
   '- Exclude dishes, cooked foods, tools, or objects made from the plant, ' +
   'named geographic features, pronunciation guides, and anything not ' +
   'literally present in the text.\n' +
+  '- Add a name only when the text presents it AS a name of this taxon ' +
+  '(naming verbs, appositives, common-name lists) — never pull candidates ' +
+  'out of passing mentions, anecdotes, or lists of other things.\n' +
+  '- Return at most 10 names. On long articles with many candidate ' +
+  'strings, keep only the strongest naming-construction matches so the ' +
+  'output stays within budget.\n' +
   '- Regional non-English vernaculars for the taxon itself are welcome.\n' +
   'Do not invent, paraphrase, or translate. When unsure, leave it out. ' +
   'Empty arrays allowed.';
@@ -178,6 +190,20 @@ function capInput(text, maxInputChars) {
   return text.slice(0, maxInputChars);
 }
 
+// Detect a completion cut off mid-stream when the token budget ran out:
+// an opening brace/bracket with no matching close. Short prose refusals
+// ('Sorry, ...') have no opening delimiter and are NOT truncation.
+function looksTruncated(raw) {
+  if (!raw) return false;
+  const text = String(raw).trim();
+  if (!text) return false;
+  const openBrace = text.indexOf('{');
+  const closeBrace = text.lastIndexOf('}');
+  if (openBrace !== -1 && closeBrace <= openBrace) return true;
+  if (/^\[/.test(text) && text.lastIndexOf(']') === -1) return true;
+  return false;
+}
+
 // Parse a possibly-fenced or noisy completion into a list of candidate strings.
 function parseNamesJson(raw) {
   if (!raw) return [];
@@ -257,7 +283,8 @@ function buildAddPrompt(text, base, taxon, rank) {
   return (
     promptHead(text, base, taxon, rank) +
     'Return the JSON object with "add" = common names FOR this taxon that ' +
-    'are missing from the list (leave "remove" empty).'
+    'are missing from the list (at most 10; leave "remove" empty). ' +
+    'Never add galls, diseases, pests, or individual specimen trees.'
   );
 }
 
@@ -295,6 +322,7 @@ async function reviewWikipediaNames(input = {}, options = {}) {
 
   const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
   let firstError = null;
+  let truncated = false;
 
   // Pass 1 — remove: the LLM may only veto names it was shown (base-list
   // key-match); categories are informational metadata for the log.
@@ -313,7 +341,11 @@ async function reviewWikipediaNames(input = {}, options = {}) {
       firstError = err;
     }
     if (response !== null) {
-      for (const candidate of parseReviewJson(response).remove) {
+      const parsed = parseReviewJson(response);
+      if (!parsed.add.length && !parsed.remove.length && looksTruncated(response)) {
+        truncated = true;
+      }
+      for (const candidate of parsed.remove) {
         const key = normalizeNameKey(candidate.name);
         if (!baseNameByKey.has(key)) continue;
         if (removedKeys.has(key)) continue;
@@ -347,8 +379,12 @@ async function reviewWikipediaNames(input = {}, options = {}) {
     if (!firstError) firstError = err;
   }
   if (response2 !== null) {
+    const parsed2 = parseReviewJson(response2);
+    if (!parsed2.add.length && !parsed2.remove.length && looksTruncated(response2)) {
+      truncated = true;
+    }
     const seenKeys = new Set(base.map(normalizeNameKey));
-    for (const candidate of parseReviewJson(response2).add) {
+    for (const candidate of parsed2.add) {
       const name = String(candidate).trim();
       if (!name) continue;
       const key = normalizeNameKey(name);
@@ -361,6 +397,11 @@ async function reviewWikipediaNames(input = {}, options = {}) {
   if (!added.length && !removed.length) {
     if (firstError) {
       result.reason = `completer-error: ${firstError && firstError.message ? firstError.message : firstError}`;
+    } else if (truncated) {
+      result.reason = 'llm-truncated';
+      console.warn(
+        `[llm] reviewer output looked truncated (token budget) for ${input.taxon || 'unknown'} — no names applied`
+      );
     } else {
       result.reason = 'llm-empty';
     }

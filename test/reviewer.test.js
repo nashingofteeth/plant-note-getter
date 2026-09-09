@@ -380,6 +380,74 @@ test('ADD_SYSTEM_PROMPT: scope, head-noun, and exclusion rules', () => {
   assert.match(ADD_SYSTEM_PROMPT, /When unsure, leave it out/);
 });
 
+test('ADD_SYSTEM_PROMPT: add-pass overflow guards (Quercus robur)', () => {
+  // Long articles made the add pass emit a ~2000-token avalanche of
+  // individual trees and galls that exceeded num_predict and truncated
+  // mid-string into a silent no-op. The prompt constrains output volume
+  // and excludes those classes so long-article outputs stay in budget.
+  assert.match(ADD_SYSTEM_PROMPT, /at most 10/);
+  assert.match(ADD_SYSTEM_PROMPT, /Major Oak/);
+  assert.match(ADD_SYSTEM_PROMPT, /oak marble gall|pineapple gall/);
+  assert.match(ADD_SYSTEM_PROMPT, /naming verbs?, appositives, common-name lists/);
+  // Primacy: the gall/individual exclusions lead the prompt. Mid-prompt
+  // placement let "knopper gall is very common" style passages override
+  // them (4 gall adds on Quercus); leading placement yields zero.
+  assert.ok(
+    ADD_SYSTEM_PROMPT.indexOf('oak marble gall') < ADD_SYSTEM_PROMPT.indexOf('Summer Chocolate'),
+    'gall exclusion precedes cultivar exclusions'
+  );
+  assert.ok(
+    ADD_SYSTEM_PROMPT.indexOf('Major Oak') < ADD_SYSTEM_PROMPT.indexOf('Darjeeling tea'),
+    'individual exclusion precedes product exclusions'
+  );
+});
+
+test('buildAddPrompt: reinforces gall/individual exclusion in the task line', () => {
+  const add = buildAddPrompt('Some wiki text.', ['oak'], 'Quercus robur', 'species');
+  assert.match(add, /Never add galls, diseases, pests, or individual specimen trees/);
+});
+
+test('reviewWikipediaNames: truncated add output yields llm-truncated (not silent llm-empty)', async () => {
+  // Shape of the Quercus robur avalanche tail: unterminated JSON cut off
+  // mid-string when the completion budget ran out.
+  const truncated =
+    '{"add": ["Major Oak", "Bowthorpe Oak", "oak apple", "oak marble gall", "oak tree';
+  const completer = async (system) => {
+    if (system === REMOVE_SYSTEM_PROMPT) return '{"remove":[]}';
+    return truncated;
+  };
+  const { names, added, removed, reason } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: BASE, taxon: 'Quercus robur', rank: 'species' },
+    { completer }
+  );
+  assert.deepStrictEqual(names, BASE);
+  assert.deepStrictEqual(added, []);
+  assert.deepStrictEqual(removed, []);
+  assert.strictEqual(reason, 'llm-truncated');
+});
+
+test('reviewWikipediaNames: truncated remove output yields llm-truncated', async () => {
+  const truncated = '{"remove": [{"name": "lanceolate", "verdict": "remove", "quote": "the scots';
+  const completer = async (system) => {
+    if (system === REMOVE_SYSTEM_PROMPT) return truncated;
+    return '{"add":[],"remove":[]}';
+  };
+  const { names, reason } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: ['lanceolate'], taxon: 'Pinus sylvestris' },
+    { completer }
+  );
+  assert.deepStrictEqual(names, ['lanceolate']);
+  assert.strictEqual(reason, 'llm-truncated');
+});
+
+test('reviewWikipediaNames: short unparseable output stays llm-empty (no over-flagging)', async () => {
+  const { reason } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: BASE },
+    { completer: completerReturning('Sorry, I could not find any.') }
+  );
+  assert.strictEqual(reason, 'llm-empty');
+});
+
 test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias', () => {
   assert.match(REMOVE_SYSTEM_PROMPT, /decide keep or remove/);
   assert.match(REMOVE_SYSTEM_PROMPT, /one object per entry/);
