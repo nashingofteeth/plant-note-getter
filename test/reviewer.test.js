@@ -410,4 +410,8 @@ test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias'
   assert.match(REMOVE_SYSTEM_PROMPT, /'golden weeping willow'\) is a genuine regional name/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'mouth', 'trigger hairs', 'utricles', 'bark',/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'other members of the Scrophulariaceae'/);
+  // Bare places are never names, even inside naming sentences.
+  assert.match(REMOVE_SYSTEM_PROMPT, /'Oregon', 'California', 'Verona'/);
+  // Meta-language about names is not a name.
+  assert.match(REMOVE_SYSTEM_PROMPT, /'word gooseberry'/);
 });

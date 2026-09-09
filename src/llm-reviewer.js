@@ -148,12 +148,20 @@ const REMOVE_SYSTEM_PROMPT =
   "'plant'). A vernacular name is NOT generic just because it sounds " +
   "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
   "- 'geographic': names that ARE places or geographic features (e.g. " +
-  "'Bight of Biafra') — not plant names that merely mention a region.\n" +
+  "'Bight of Biafra') — not plant names that merely mention a region. A " +
+  "bare place with no plant word in it ('Oregon', 'California', 'Verona') " +
+  "is never a common name, even inside a naming sentence ('is native to " +
+  "both California and Oregon') — remove it. Regional plant names that " +
+  "combine a place with a plant word ('Russian olive', 'Canada yew') are " +
+  "genuine — keep those.\n" +
   "- 'morphological': structural descriptors like 'lanceolate', and " +
   "plant-part/anatomy terms — any entry naming a PART of the plant rather " +
   "than the plant itself ('mouth', 'trigger hairs', 'utricles', 'bark', " +
   "'roots') is not a name of the taxon.\n" +
-  "- 'procedural': extraction artifacts like a leading 'known as'.\n" +
+  "- 'procedural': extraction artifacts like a leading 'known as', and " +
+  "meta-language about names (an entry like 'word gooseberry' from a " +
+  "sentence about names including a word — describing names is not " +
+  "itself a name).\n" +
   "- 'cultivar': person names (e.g. 'E.H.Wilson') and scientific-form " +
   'strings — entries whose wording is a Latin binomial or contains a ' +
   "quote-epithet (e.g. \"Salix alba 'Vitellina-Tristis'\") are not " +
