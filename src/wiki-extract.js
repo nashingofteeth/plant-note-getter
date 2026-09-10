@@ -1556,8 +1556,12 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R9: "commonly called" — stop at copula or end
-    const r9 = sentence.match(/commonly\s+called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|$)/i);
+    // R9: "commonly called" — stop at copula or end. Also stops at a
+    // resumptive subject ("...or mountain maple the species is native...",
+    // Acer heldreichii): the copula's complement there is an adjective
+    // ("is native"), not an article, so the plain copula terminator misses
+    // and the distribution text leaks into the capture.
+    const r9 = sentence.match(/commonly\s+called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s+the\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|was|are|were)\b|$)/i);
     if (r9) {
       const capture = finalizeCapture(r9[1], 300);
       if (capture) caps.push({ rule: 'R9', capture: capture });
@@ -1833,7 +1837,10 @@ function _extractWikipediaCommonNames(text, trace) {
     // by local woodworkers") don't leak into the name; R50 captures the quote.
     // Exempts "by the <People>" (capitalized) so Latin-name attributions
     // ("called Salvia by the Romans") still reach the People guard below.
-    const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s+by\b(?!\s+the\s+[A-Z])|\s*[.,]\s*$)/i);
+    // Also stops at a resumptive subject ("...or mountain maple the species
+    // is native...", Acer heldreichii — shared with R9): without it the
+    // distribution text leaks in and splits into geographic junk.
+    const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s+the\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|was)\b|\s+by\b(?!\s+the\s+[A-Z])|\s*[.,]\s*$)/i);
     if (r24) {
       const capture = finalizeCapture(r24[1], 200);
       // Reject historical/etymological attribution: "called Salvia by the Romans"

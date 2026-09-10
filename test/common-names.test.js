@@ -1170,6 +1170,11 @@ const TESTS = [
     extract: 'Lolium arundinaceum, commonly known as tall fescue, is a cool-season, perennial C3 grass species native to Europe and introduced to North America and other parts of the world. The tillers (non-flowering stems) are typically shorter but otherwise similar to the culms. Recent DNA studies have shown that it should indeed be considered a ryegrass (Lolium) rather than a fescue (Festuca) because these species are more closely related to each other, despite the fact that ryegrasses have inflorescences of spikes rather than panicles. The fungus is asexual, and is transmitted to new generations of tall fescue only through seed, a mode known as vertical transmission. In the winter, a condition known as "fescue foot" might afflict cattle. Novel endophytes, also referred to as "friendly" endophytes, are symbiotic fungi that are associated with tall fescue, but do not produce target alkaloids in toxic concentrations.',
     expected: ['tall fescue'],
   },
+  {
+    name: 'Acer heldreichii ("Commonly called A, B, C, or D the species is native" resumptive subject terminates, no distribution junk)',
+    extract: 'Acer heldreichii is a species of maple in the flowering plant family Sapindaceae.  Commonly called Balkan maple, Greek maple, Heldreich\'s maple, or mountain maple the species is native to the Balkan Peninsula east along the southern and eastern coasts of the Black Sea. \nAcer heldreichii is a tree up to 20 m (65.6 ft) tall with smooth bark. Leaves are 5–14 cm (2.0–5.5 in) long, deeply cut into three to five lobes which turn yellow to golden brown during the fall.\n\n\n== References ==\n\n\n== External links ==\nPlant Systematics photo',
+    expected: ['Balkan maple', 'Greek maple', 'Heldreich\'s maple', 'mountain maple'],
+  },
 ];
 
 const GBIF_TESTS = [
