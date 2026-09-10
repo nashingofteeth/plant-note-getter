@@ -76,7 +76,10 @@ const ADD_SYSTEM_PROMPT =
   'combines a place or species qualifier with the head noun (e.g. ' +
   "'Pacific yew', 'Mexican yew' for the genus Taxus) names a member " +
   'species, NOT this taxon — never add it, even though it contains the ' +
-  'head noun. Never add scientific Latin genus or species names (e.g. ' +
+  "'head noun. Taxonomy sentences stating group membership (e.g. " +
+  "'considered a ryegrass rather than a fescue' places the species in the " +
+  'genus Lolium) never yield names either — belonging to a genus, family, ' +
+  'or other group is not a common name of the taxon. Never add scientific Latin genus or species names (e.g. ' +
   "'vicia', 'glycyrrhiza').\n" +
   '- Never add galls, diseases, or pests (e.g. \'oak apple\', ' +
   "'oak marble gall', 'pineapple gall') — those belong to other organisms, " +
@@ -84,6 +87,10 @@ const ADD_SYSTEM_PROMPT =
   '- Never add names of individual organisms: famous specimen trees ' +
   "(e.g. 'Major Oak', 'Bowthorpe Oak', 'Carroll Oak') name one particular " +
   'plant, not the taxon.\n' +
+  '- Never add a group-membership noun from taxonomy sentences (e.g. ' +
+  "'considered a ryegrass rather than a fescue' denotes membership in the " +
+  'genus Lolium, not a name of the species) — belonging to a genus, ' +
+  'family, or other group is not a common name of the taxon.\n' +
   "- Names built on the taxon's own head noun with a qualifier that " +
   'applies to the whole group are excellent (e.g. \'pea family\', ' +
   "'common oak', 'golden yews').\n" +
@@ -148,6 +155,11 @@ const REMOVE_SYSTEM_PROMPT =
   "them.\n" +
   'When unsure whether an entry is a genuine name, verdict keep.\n' +
   'Remove rules (verdict remove, with a category):\n' +
+  "- 'condition-or-process': livestock conditions and diseases stated in " +
+  "the article ('fescue foot'), and modes, processes, or mechanisms " +
+  "('vertical transmission') — these name an ailment or a mechanism, not " +
+  'the plant. (Fungus/bacterium/pest organism names stay ' +
+  "'other-organism'; plant parts stay 'morphological'.)\n" +
   "- 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
   "phrases from sloppy extraction (e.g. 'although once included', 'which " +
   "means shut happy', 'To add to the confusion', 'are also known as " +
@@ -284,7 +296,8 @@ function buildAddPrompt(text, base, taxon, rank) {
     promptHead(text, base, taxon, rank) +
     'Return the JSON object with "add" = common names FOR this taxon that ' +
     'are missing from the list (at most 10; leave "remove" empty). ' +
-    'Never add galls, diseases, pests, or individual specimen trees.'
+    'Never add group-membership nouns from taxonomy sentences, galls, ' +
+    'diseases, pests, or individual specimen trees.'
   );
 }
 
@@ -292,7 +305,9 @@ function buildRemovePrompt(text, base, taxon, rank) {
   return (
     promptHead(text, base, taxon, rank) +
     'Return the JSON object with a "remove" verdict ("keep" or "remove") ' +
-    'for EVERY listed entry, each with a category (leave "add" empty).'
+    'for EVERY listed entry, each with a category (leave "add" empty). ' +
+    'Remove livestock conditions and diseases, other-organism names, ' +
+    'plant parts, and mode/process terms; keep genuine names of the taxon.'
   );
 }
 

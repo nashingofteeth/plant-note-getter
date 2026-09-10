@@ -377,6 +377,15 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'shelf-fungus' });
       continue;
     }
+    // Segments naming other organisms (symbiont fungi, bacteria) are about
+    // those organisms, not a plant common name (Lolium arundinaceum:
+    // "Novel endophytes, also referred to as 'friendly' endophytes, are
+    // symbiotic fungi..." — "friendly endophytes" names the fungal
+    // endophyte, not the grass). Cf. 'disease-term', 'shelf-fungus' above.
+    if (/\b(?:endophytes?|fung(?:us|i)|bacteri(?:um|a)|microbes?|pathogens?)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'other-organism' });
+      continue;
+    }
     // Reject "Genus epithet 'Cultivar'" strings ("Salix alba
     // 'Vitellina-Tristis") — botanical nomenclature format, never a
     // vernacular name. The paren-held cultivar vernacular ("golden weeping
@@ -1432,8 +1441,12 @@ function _extractWikipediaCommonNames(text, trace) {
     // mechanism/process heads ("Secondary pollen presentation (...) ...",
     // cf. R6) are excluded; gloss guards mirror R6c. Predicates extend past
     // the copula because a glossed lead often continues with a growth verb.
+    // Article-led subjects are rejected explicitly: isSubjectBinomial
+    // accepts any capitalized lead, so "The tillers (non-flowering stems)
+    // are..." (Lolium arundinaceum — a parenthetical gloss of an anatomical
+    // term, not a name) would otherwise pass as a binomial lead.
     const r64 = sentence.match(/^([A-Z][a-zà-ÿ]+(?:\s+[a-zà-ÿ×.x'-]+){1,3})\s+\(([^()]+)\)(?:,?\s+(?:is|was|are|were|grows?|grew|flowers?|reaches?|occurs?)\b|\s*[.,]?\s*$)/i);
-    if (r64 && isSubjectBinomial(r64[1]) && !/\b(?:presentation|mechanism|process|syndrome|phenomenon|mode|method|system)\b/i.test(r64[1]) && !/\bacid\b/i.test(r64[1])) {
+    if (r64 && isSubjectBinomial(r64[1]) && !/^(?:the|a|an)\s+/i.test(r64[1]) && !/\b(?:presentation|mechanism|process|syndrome|phenomenon|mode|method|system)\b/i.test(r64[1]) && !/\bacid\b/i.test(r64[1])) {
       // Semicolon tails stripped before guards (see R6c). The gloss must
       // start lowercase (vernacular: "silver willow") — capitalized glosses
       // are places ("Cyprus"), regions ("western Mediterranean region"),
@@ -2079,7 +2092,12 @@ function _extractWikipediaCommonNames(text, trace) {
     const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|(?:,?\s*(?:and\s+)?there\s+)?(?:is|are|was|were)\b|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
-      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
+      // "a mode known as X" / "a condition known as X" name the mode or
+      // condition, not the plant (Lolium arundinaceum: "a mode known as
+      // vertical transmission", 'a condition known as "fescue foot" might
+      // afflict cattle'). Variety/cultivar preWords are NOT excluded —
+      // variety-level names still name the taxon.
+      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
         let capture = r41Match[3].replace(/\s*\(.*$/, '').trim();
         // Strip surrounding quotes and a trailing period ("Agave Noah". -> Agave Noah)
         capture = capture.replace(/^["'\u2018\u2019\u201C\u201D]+/, '').replace(/["'\u2018\u2019\u201C\u201D]+\.?\s*$/, '').trim();
@@ -2148,7 +2166,17 @@ function _extractWikipediaCommonNames(text, trace) {
       // Cultivar prologues ("The selected cultivar X 'Ernest Wilson' (...)"):
       // the quoted names are cultivar epithets, not vernacular names.
       const cultivarPrologue = /\bcultivar\b/i.test(beforeMatch);
-      if (!(isSingleWord && isExplanatory) && !hasJargon && !otherTaxonAlias && !isPeopleAttribution && !cultivarPrologue) {
+      // A naming verb governed by an ailment noun ('a condition known as
+      // "fescue foot" might afflict cattle', Lolium arundinaceum) names the
+      // ailment, not the plant — cf. R8's prologue disease guard, R1's
+      // diseaseRemainder.
+      const ailmentPrologue = /\b(?:condition|disease|disorder|syndrome|symptom|infection)\s+(?:referred\s+to\s+as|called|known\s+as)\s+["'\u201C\u2018]/i.test(sentence);
+      // The quoted word is an epithet of another organism, not a name of
+      // the taxon ("also referred to as 'friendly' endophytes" — the
+      // endophyte is a symbiotic fungus). A vernacular name never needs a
+      // following organism noun to complete it.
+      const otherOrganismHead = /^\s+(?:endophytes?|fung(?:us|i)|bacteri(?:um|a)|microbes?|pathogens?)\b/i.test(sentence.slice(nameEnd));
+      if (!(isSingleWord && isExplanatory) && !hasJargon && !otherTaxonAlias && !isPeopleAttribution && !cultivarPrologue && !ailmentPrologue && !otherOrganismHead) {
         // Expand "winter (or spring) heather" → "winter heather", "spring heather"
         const alt = inner.match(/^(.+?)\s+\(\s*(?:also\s+)?(?:or|and)\s+(.+?)\s*\)\s+(.+)$/i);
         if (alt) {

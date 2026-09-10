@@ -404,7 +404,25 @@ test('ADD_SYSTEM_PROMPT: add-pass overflow guards (Quercus robur)', () => {
 
 test('buildAddPrompt: reinforces gall/individual exclusion in the task line', () => {
   const add = buildAddPrompt('Some wiki text.', ['oak'], 'Quercus robur', 'species');
-  assert.match(add, /Never add galls, diseases, pests, or individual specimen trees/);
+  assert.match(add, /Never add group-membership nouns from taxonomy sentences, galls, diseases, pests, or individual specimen trees/);
+});
+
+test('Lolium-driven prompt rules: group-membership adds, condition/process removals', () => {
+  // The reviewer kept all six deterministic junk names and added
+  // 'ryegrass' from a genus-membership sentence — locked here.
+  assert.match(ADD_SYSTEM_PROMPT, /group-membership noun/);
+  assert.match(ADD_SYSTEM_PROMPT, /considered a ryegrass rather than a fescue/);
+  assert.match(
+    buildAddPrompt('text', ['tall fescue'], 'Lolium arundinaceum', 'species'),
+    /group-membership nouns/
+  );
+  assert.match(REMOVE_SYSTEM_PROMPT, /'condition-or-process'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'fescue foot'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'vertical transmission'/);
+  assert.match(
+    buildRemovePrompt('text', ['tall fescue'], 'Lolium arundinaceum', 'species'),
+    /mode\/process terms/
+  );
 });
 
 test('reviewWikipediaNames: truncated add output yields llm-truncated (not silent llm-empty)', async () => {
