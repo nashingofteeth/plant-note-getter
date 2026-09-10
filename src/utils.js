@@ -57,7 +57,7 @@ function cleanName(name) {
 }
 
 function normalizeNameKey(name) {
-  return stripArticle(name).toLowerCase().replace(/'s\b/g, '');
+  return stripArticle(name).toLowerCase().replace(/'s\b/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // ——— Plant noun / Latin epithet helpers (externalized) ———

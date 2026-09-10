@@ -172,6 +172,17 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
 
   text = stripOuterParens(text);
 
+  // A stripped parenthetical between two members of a comma-separated name
+  // list leaves a run of 2+ spaces (the text-level normalization collapses
+  // every other double space): the article omitted the comma around the
+  // aside, e.g. Inga edulis "…, cuaniquil (both from Nahuatl: …) guama, or
+  // guaba…". Turn the artifact into the comma it stands for — but only
+  // when the bridged pair is comma-bracketed on both sides, so paren-wipe
+  // adjacencies inside plain prose (Erica's R11 'referred to as "winter
+  // (or spring) heather" to distinguish…', Claytonia's '(Cahuilla) people
+  // of Southern California') stay whole and keep dying at the length caps.
+  text = text.replace(/(,\s*[^,]*?) {2,}([^,]*?,)/g, '$1, $2');
+
   text = text
     .split(';')
     .filter(part => {
@@ -520,7 +531,14 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     // (ā ē ī ō ū): IAST/Sanskrit and Dravidian transliterations (Cynodon
     // dūrvāyugma, garikēhullu) are genuine vernacular names, while pinyin
     // tone marks (acute/grave/caron/breve, e.g. ù í ǒ) still reject.
-    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment) && ![...segment].every((ch) => /[\x00-\x7F]/.test(ch) || /[āēīōūĀĒĪŌŪ]/.test(ch))) {
+    // Allow words with exactly ONE non-ASCII character that is a
+    // Spanish/Portuguese-style acute vowel (á é í ó ú — e.g. "cushín",
+    // Inga edulis): Romance orthography writes at most one accent per word,
+    // while pinyin marks tone on every syllable, so all-accent words like
+    // "míhóutáo" still reject.
+    const nonAsciiChars = [...segment].filter((ch) => ch.codePointAt(0) > 0x7F);
+    const singleRomanceAccent = nonAsciiChars.length === 1 && /^[áéíóú]$/.test(nonAsciiChars[0]);
+    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment) && !singleRomanceAccent && ![...segment].every((ch) => /[\x00-\x7F]/.test(ch) || /[āēīōūĀĒĪŌŪ]/.test(ch))) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'phonetic-only' });
       continue;
     }

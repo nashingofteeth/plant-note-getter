@@ -81,6 +81,12 @@ const ADD_SYSTEM_PROMPT =
   'genus Lolium) never yield names either — belonging to a genus, family, ' +
   'or other group is not a common name of the taxon. Never add scientific Latin genus or species names (e.g. ' +
   "'vicia', 'glycyrrhiza').\n" +
+  '- Enumerated name lists ("known as A, B, C, D, E") are the highest-value ' +
+  'source: go through the list member by member against the extracted list ' +
+  'and add every member it is missing, even when it already has most ' +
+  "members (e.g. text names A, B, C, D, E but the list has only A, B, D → " +
+  'add C and E). A parenthetical after a name is a qualifier, never part ' +
+  "of the name: from 'cushín (short variety)' add \"cushín\".\n" +
   '- Never add galls, diseases, or pests (e.g. \'oak apple\', ' +
   "'oak marble gall', 'pineapple gall') — those belong to other organisms, " +
   'not this plant.\n' +
@@ -167,7 +173,12 @@ const REMOVE_SYSTEM_PROMPT =
   'wrapped in stray quotation marks (e.g. \'"figwort"\'), and phrases ' +
   "about other members of the family (e.g. 'other members of the " +
   'Scrophulariaceae\'). An entry that starts with a verb, conjunction, or ' +
-  'preposition is a fragment even when it embeds a real name inside.\n' +
+  'preposition is a fragment even when it embeds a real name inside. Two ' +
+  'separate names fused into one entry by sloppy extraction (e.g. ' +
+  "'cuaniquil guama' when the article names 'cuaniquil' and 'guama' as " +
+  'separate list members) are also broken-capture — a genuine name appears ' +
+  'consecutively in the text, and an entry that only exists by joining ' +
+  'non-adjacent words does not.\n' +
   "- 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
   "'plant'). A vernacular name is NOT generic just because it sounds " +
   "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
@@ -296,6 +307,8 @@ function buildAddPrompt(text, base, taxon, rank) {
     promptHead(text, base, taxon, rank) +
     'Return the JSON object with "add" = common names FOR this taxon that ' +
     'are missing from the list (at most 10; leave "remove" empty). ' +
+    'If a name in the text has a trailing parenthetical (e.g. "cushín ' +
+    '(short variety)"), add the name without the parenthetical: "cushín". ' +
     'Never add group-membership nouns from taxonomy sentences, galls, ' +
     'diseases, pests, or individual specimen trees.'
   );
