@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { NOTE_ROOT, LABEL_MAP_PATH } = require('./src/config');
+const { NOTE_ROOT, LABEL_MAP_PATH, LLM_MODEL } = require('./src/config');
 const { sanitizeFilename, loadLabelMap, normalizeNameKey } = require('./src/utils');
 const { resolveTaxon, getParentChain } = require('./src/wikidata');
 const { collectCommonNames } = require('./src/names');
@@ -17,22 +17,17 @@ function printSection(title) {
   console.log('\n' + line + '\n');
 }
 
-function formatList(items, maxInline) {
-  if (!items || items.length === 0) return '';
-  if (items.length <= (maxInline || 10)) return items.join(', ');
-  return items.slice(0, maxInline || 10).join(', ') + ', ...';
-}
-
 async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N]');
+    console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N] [--disable]');
     console.error('       plant-note --check "Note Name"');
     console.error('');
     console.error('Options:');
     console.error('  --apply    Auto-apply updates to existing files without prompting');
     console.error('  --select=N Select result N from search (bypasses prompt)');
+    console.error('  --disable  Skip the LLM common-name review (regex extraction only)');
     console.error('  --check    Show tag hierarchy child counts for a note');
     console.error('');
     console.error('Examples:');
@@ -44,7 +39,7 @@ async function main() {
   }
 
   if (args.includes('--check')) {
-    const checkName = args.filter(a => a !== '--check' && a !== '--apply').join(' ').trim();
+    const checkName = args.filter(a => a !== '--check' && a !== '--apply' && a !== '--disable').join(' ').trim();
     if (!checkName) {
       console.error('Error: --check requires a note name');
       console.error('Usage: plant-note --check "Note Name"');
@@ -63,7 +58,7 @@ async function main() {
   const autoApply = args.includes('--apply');
   const selectArg = args.find(a => a.startsWith('--select='));
   const selectIndex = selectArg ? parseInt(selectArg.split('=')[1], 10) - 1 : undefined;
-  const input = args.filter(a => a !== '--apply' && !a.startsWith('--select=')).join(' ');
+  const input = args.filter(a => a !== '--apply' && a !== '--disable' && !a.startsWith('--select=')).join(' ');
 
   printSection('Wikidata Search');
 
@@ -91,7 +86,12 @@ async function main() {
       }
     }
 
-    const { names: aliases, bySource } = await collectCommonNames(entity, candidateEntities);
+    const { names: aliases, bySource, logReview } = await collectCommonNames(entity, candidateEntities, {
+      onReviewStart: () => {
+        console.log(`\n  Reviewing Wikipedia names with ${LLM_MODEL} — this can take up to a minute...`);
+      }
+    });
+    const llmAdded = bySource.llmAdded || [];
 
     printSection('Entity');
 
@@ -101,7 +101,15 @@ async function main() {
     if (bySource.wikidata.length > 0) console.log(`    (Wikidata common names): ${bySource.wikidata.join(', ')}`);
     if (bySource.wikidataAliases.length > 0) console.log(`    (Wikidata aliases): ${bySource.wikidataAliases.join(', ')}`);
     if (bySource.gbif && bySource.gbif.length > 0) console.log(`    (GBIF): ${bySource.gbif.join(', ')}`);
-    if (bySource.wikipedia && bySource.wikipedia.length > 0) console.log(`    (Wikipedia): ${bySource.wikipedia.join(', ')}`);
+    const wikiList = bySource.wikipediaBase || bySource.wikipedia || [];
+    if (wikiList.length > 0) console.log(`    (Wikipedia): ${wikiList.join(', ')}`);
+    const llmRemoved = bySource.llmRemoved || [];
+    if (llmAdded.length > 0 || llmRemoved.length > 0) {
+      const parts = [];
+      if (llmAdded.length > 0) parts.push(`+ ${llmAdded.join(', ')}`);
+      if (llmRemoved.length > 0) parts.push(`- ${llmRemoved.join(', ')}`);
+      console.log(`      (LLM review): ${parts.join('; ')}`);
+    }
     console.log(`    (Combined): ${aliases ? aliases.join(', ') : '(none)'}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
 
@@ -124,15 +132,25 @@ async function main() {
     tag = await checkAndPruneTag(tag, originals, noteName, autoApply, isNew, ancestors, entity.id);
 
     const finalLabelMap = loadLabelMap(LABEL_MAP_PATH);
+    const finalAliases = aliases;
+
     const content = generateFrontMatter(entity, ancestors, finalLabelMap);
 
     printSection('Note');
 
     console.log(`  Filename: ${filename}`);
     console.log(`  Tag: ${tag}`);
-    if (aliases) console.log(`  Aliases: ${aliases.join(', ')}`);
+    if (finalAliases) console.log(`  Aliases: ${finalAliases.join(', ')}`);
     console.log(`  Rank: ${entity.rankLabel}`);
     if (entity.wikipediaUrl) console.log(`  Wikipedia: ${entity.wikipediaUrl}`);
+
+    // General creation confirmation; --apply overrides. A pending LLM
+    // review is already merged into the displayed aliases — answering no
+    // creates nothing and records nothing.
+    if (isNew && !autoApply && !(await askYesNo('\n  Create note? [y/N] '))) {
+      console.log('\n  Note not created. Run with --apply to create it.');
+      return;
+    }
 
     const result = createNoteFile(filename, content);
 
@@ -140,6 +158,7 @@ async function main() {
 
     if (result.created) {
       console.log('  File created.');
+      if (logReview) logReview();
     } else if (result.exists) {
       const { missing, updates } = analyzeMissingProperties(
         result.frontMatter,
@@ -167,16 +186,14 @@ async function main() {
         }
         if (autoApply) {
           console.log('\n  --apply flag detected, updating...');
-          const updatedContent = updateFrontMatter(result.content, updates);
-          fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
-          console.log('  Updated successfully.');
-        } else if (await askYesNo('\n  Apply available updates? [y/N] ')) {
-          const updatedContent = updateFrontMatter(result.content, updates);
-          fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
-          console.log('  Updated successfully.');
-        } else {
+        } else if (!(await askYesNo('\n  Apply available updates? [y/N] '))) {
           console.log('\n  Run with --apply to apply updates.');
+          return;
         }
+        const updatedContent = updateFrontMatter(result.content, updates);
+        fs.writeFileSync(result.filepath, updatedContent, 'utf-8');
+        console.log('  Updated successfully.');
+        if (logReview) logReview();
       }
     }
   } catch (error) {

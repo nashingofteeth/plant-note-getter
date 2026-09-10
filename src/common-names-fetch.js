@@ -44,9 +44,14 @@ async function fetchWikipediaArticle(wikipediaTitle) {
   if (!page || page.missing || !page.extract) return null;
 
   const title = page.title || wikipediaTitle;
+
+  // Pure deterministic extraction. The LLM reviewer (if enabled) runs later
+  // at the end of the Wikipedia step in names.js, where it receives the
+  // extract plus this base list.
   return {
     wikipediaTitle: title,
     wikipediaUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+    extract: page.extract,
     names: extractWikipediaCommonNames(page.extract)
   };
 }
