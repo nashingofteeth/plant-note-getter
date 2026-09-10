@@ -347,6 +347,14 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'relative-clause' });
       continue;
     }
+    // Demonstrative-led fragments ("this grass is used in ..." truncated by
+    // the participial strip to "this grass", Cynodon dactylon) describe the
+    // plant rather than name it — no genuine common name starts with
+    // this/that/these/those.
+    if (/^(?:this|that|these|those)\s+/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'demonstrative-fragment' });
+      continue;
+    }
     // Leading infinitive purpose clauses ("To add to the confusion") and
     // meaning-verbs ("symbolizes a happy couple in bed") are explanations,
     // not names. No genuine common name starts this way.
@@ -508,7 +516,11 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     // Allow words with ñ (common in Spanish common names like "cuaresmeñas").
     // Allow words containing IPA characters (e.g. "psíŋ" — Wild rice) that
     // appear in native-language transliterations.
-    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment)) {
+    // Allow words whose every non-ASCII character is a macron vowel
+    // (ā ē ī ō ū): IAST/Sanskrit and Dravidian transliterations (Cynodon
+    // dūrvāyugma, garikēhullu) are genuine vernacular names, while pinyin
+    // tone marks (acute/grave/caron/breve, e.g. ù í ǒ) still reject.
+    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment) && ![...segment].every((ch) => /[\x00-\x7F]/.test(ch) || /[āēīōūĀĒĪŌŪ]/.test(ch))) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'phonetic-only' });
       continue;
     }
@@ -655,7 +667,7 @@ const GENERIC_JUNK = new Set([
   'taxa', 'taxon',
 ]);
 
-const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
+const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|new\s+zealand|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
 
 const PROCEDURE_WORDS = /^(?:consists|grows|ranging|occurs|includes|especially|within|found|cultivated|grown|harvested|used|produced|distributed|sold|shipped|marketed|selected|applied|obtained|derived|extracted|processed|manufactured|imported|exported|introduced|naturalized|endemic|originating|hailing|coming|native\s+to|referred\s+to\s+as\s+a|of\s+flowering\s+plants|of\s+plants|denoting|often)/i;
 
@@ -1183,10 +1195,10 @@ function _extractWikipediaCommonNames(text, trace) {
   // ─── RULE INDEX (construction → rule; category banners below) ─────────────
   // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44, R53, R56, R57, R59, R60
   // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
-  //                                    R15, R16, R21, R23, R24, R25, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
+  //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
@@ -1904,6 +1916,20 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R73', capture: r73[1].trim() });
     }
 
+    // R74: "give it/them the name (of) X" — gardener's-nickname construction
+    // (Cynodon dactylon: "leads some gardeners to give it the name of devil
+    // grass"). Captures to clause/sentence end; downstream classifiers vet
+    // the name itself. A bare-binomial capture ("gave it the name Ziziphus
+    // jujuba" — a botanist's genus placement, Ziziphus jujuba test) is a
+    // taxonomic act, not a vernacular name, so it is skipped here.
+    const r74 = sentence.match(/\b(?:give|gives|gave|given|giving)\s+(?:it|them)\s+the\s+name\s+(?:of\s+)?(.+?)(?:\s*[.,;]\s*|$)/i);
+    if (r74) {
+      const capture = finalizeCapture(r74[1], 200);
+      // Paren-stripped for the shape test: the binomial may carry a gloss
+      // ("Ziziphus jujuba (using Tournefort's spelling ...)").
+      if (capture && !/^[A-Z][a-zà-ÿ]+\s+[a-zà-ÿ]+$/.test(stripOuterParens(capture).trim())) caps.push({ rule: 'R74', capture: capture });
+    }
+
     // R71: "A ... name(s) that is now <adj> is X" — name predicate with a
     // relative clause between "name" and the copula ("A formerly used name
     // that is now rare is plantain tree"). The "now <adj>" slot keeps bare
@@ -1918,12 +1944,16 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R25: "is known as X" — passive form. The tail terminates the capture at
+    // R25: "is known as X" — passive form. The head also covers the
+    // perfect tense ("has/have/had been known as", e.g. Cynodon dactylon's
+    // "it has been known as crabgrass"). The tail terminates the capture at
     // a place/language qualifier ("in <Place>"), a subordinate-clause
-    // introducer (because/which/where/…), or a clause/sentence end, so that
+    // introducer (because/which/where/…), a shared-name aside (", also a
+    // name for <Other taxon>" — the alias belongs to the subject; the other
+    // taxon is not emitted), or a clause/sentence end, so that
     // name-list connectors ("and"/"or") and multi-word names ("mañío hembra")
     // are never treated as truncation points.
-    const r25 = sentence.match(/is\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+in\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*(?:\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*)*|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|[.;]\s*$)/i);
+    const r25 = sentence.match(/(?:is|has\s+been|have\s+been|had\s+been)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+in\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*(?:\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*)*|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|,\s+also\s+a\s+name\s+for\b|[.;]\s*$)/i);
     if (r25) {
       let capture = r25[1].trim();
       // Reject explanatory single-word nicknames: "is known as "stinking" because..."
@@ -1936,6 +1966,28 @@ function _extractWikipediaCommonNames(text, trace) {
       if (!(isSingleWord && isExplanatory)) {
         capture = capture.replace(/\s*[.,]\s*$/, '');
         if (capture.length < 200) caps.push({ rule: 'R25', capture: capture });
+      }
+    }
+
+    // R25b: multilingual name lists — "is known as X in <A>, Y in <B> (and Z
+    // in <C>)" (Cynodon dactylon: "arugampull in Tamil, garikēhullu in
+    // Kannada and karuka in Malayalam"). R25's "in <Place>" terminator keeps
+    // only the first item, so this rule captures the whole list when the
+    // post-"known as" text carries two or more "in <Capitalized>" qualifiers
+    // with a comma. Terminators mirror R25 (minus the "in <Place>" cut) plus
+    // a ", and is/are" clause stop (cf. DESCRIPTIVE_CONTINUATION) so
+    // non-name tails ("and is part of ...") stay out; the per-segment
+    // trailing "in <Place>" strip downstream reduces each item to its name.
+    const r25bKnownAsIdx = sentence.search(/known\s+as\s+/i);
+    if (r25bKnownAsIdx !== -1) {
+      const r25bAfter = sentence.slice(r25bKnownAsIdx);
+      const r25bQuals = r25bAfter.match(/\sin\s+[A-Z][A-Za-z-]*/g) || [];
+      if (r25bQuals.length >= 2 && /,/.test(r25bAfter)) {
+        const r25b = sentence.match(/known\s+as\s+(?:the\s+)?(.+?)(?:,\s+and\s+(?:is|are|was|were|usually|typically|generally|commonly|widely|often)\b|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|[.;]\s*$)/i);
+        if (r25b) {
+          const capture = finalizeCapture(r25b[1], 300);
+          if (capture) caps.push({ rule: 'R25b', capture: capture });
+        }
       }
     }
 
