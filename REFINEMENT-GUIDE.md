@@ -6,7 +6,7 @@ Per-taxon pipeline for improving Wikipedia common-name extraction. Each fix is d
 
 - **Taxon name(s) in prompt, no other context** — refine those taxa (per the `AGENTS.md` bare-name convention). Taxa must come from notes already in `NOTE_ROOT`.
 - **Random pick from the plant-note library** — filter `NOTE_ROOT` for notes tagged `life/eukaryota/plantae` and refine for coverage.
-- **Review-data triage** — `npm run tally` surfaces recurring LLM additions (names the deterministic pipeline keeps missing) and removals by category; `npm run tally -- --regressions=N` prints ready-to-paste red tests. Work the top cases, then clear the absorbed records from `.review-data/review-gaps.jsonl`.
+- **Review-data triage** — `npm run tally` surfaces recurring LLM additions (names the deterministic pipeline keeps missing) and removals by category; `npm run tally -- --regressions=N` prints ready-to-paste red tests. Work the top cases, then clear the absorbed records from `.review-data/review-gaps.jsonl` and commit the cleanup.
 
 ## 2. The loop
 
