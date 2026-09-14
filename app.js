@@ -21,13 +21,13 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N] [--disable]');
+    console.error('Usage: plant-note "Scientific Name" [--apply] [--select=N] [--no-review]');
     console.error('       plant-note --check "Note Name"');
     console.error('');
     console.error('Options:');
     console.error('  --apply    Auto-apply updates to existing files without prompting');
     console.error('  --select=N Select result N from search (bypasses prompt)');
-    console.error('  --disable  Skip the LLM common-name review (regex extraction only)');
+    console.error('  --no-review  Skip the LLM common-name review (regex extraction only)');
     console.error('  --check    Show tag hierarchy child counts for a note');
     console.error('');
     console.error('Examples:');
@@ -39,7 +39,7 @@ async function main() {
   }
 
   if (args.includes('--check')) {
-    const checkName = args.filter(a => a !== '--check' && a !== '--apply' && a !== '--disable').join(' ').trim();
+    const checkName = args.filter(a => a !== '--check' && a !== '--apply' && a !== '--no-review').join(' ').trim();
     if (!checkName) {
       console.error('Error: --check requires a note name');
       console.error('Usage: plant-note --check "Note Name"');
@@ -58,7 +58,7 @@ async function main() {
   const autoApply = args.includes('--apply');
   const selectArg = args.find(a => a.startsWith('--select='));
   const selectIndex = selectArg ? parseInt(selectArg.split('=')[1], 10) - 1 : undefined;
-  const input = args.filter(a => a !== '--apply' && a !== '--disable' && !a.startsWith('--select=')).join(' ');
+  const input = args.filter(a => a !== '--apply' && a !== '--no-review' && !a.startsWith('--select=')).join(' ');
 
   printSection('Wikidata Search');
 

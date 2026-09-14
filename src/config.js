@@ -20,12 +20,12 @@ const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 
 // End-of-Wikipedia LLM reviewer (advisory second pass; see src/llm-reviewer.js)
 // via an external Ollama daemon. Runs by default when a model is
-// configured; disabled by LLM_DISABLED=true, a --disable CLI flag, or no
+// configured; disabled by LLM_DISABLED=true, a --no-review CLI flag, or no
 // LLM_MODEL. There is no default model.
 const LLM_MODEL = process.env.LLM_MODEL || '';
 const LLM_DISABLED =
   process.env.LLM_DISABLED === 'true' ||
-  process.argv.includes('--disable') ||
+  process.argv.includes('--no-review') ||
   !LLM_MODEL;
 const LLM_ENABLED = !LLM_DISABLED;
 const LLM_SERVER_URL = process.env.LLM_SERVER_URL || 'http://localhost:11434';
