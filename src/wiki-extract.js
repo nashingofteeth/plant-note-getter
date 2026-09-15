@@ -268,6 +268,20 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
 
     if (!segment) continue;
 
+    // Subject-led naming scaffolding ("the plant is called X", "it is also
+    // known as X") left whole by a comma-split — the subject + copula +
+    // naming verb name the construction, not the plant; the name follows.
+    // Reduce to the name so pronoun-led indigenous names ("In the Ojibwe
+    // language, it is called mnidoo-biimaakwad bebaamooded") survive the
+    // descriptive-clause classifier below, and category-led scaffolding
+    // ("the plant is called kontiráthens") can't leak through as junk
+    // (Parthenocissus quinquefolia). The remainder faces all downstream
+    // classifiers. Subjects mirror R67's category set plus the it/they
+    // pronouns R67 leaves for this shared path; "named" is excluded —
+    // "named after/for X" etymologies would otherwise resurrect person
+    // names the descriptive-clause classifier currently eats.
+    segment = segment.replace(/^(?:the\s+)?(?:plant|species|tree|shrub|herb|vine|fern|grass|flower|it|they)\s+(?:is|are|was|were)\s+(?:(?:also|usually|commonly|often|generally|sometimes|frequently|widely)\s+)?(?:called|known\s+as|referred\s+to\s+as)\s+(.+)$/i, '$1').trim();
+
     // "aka X." is a taxonomic author abbreviation, never a common name.
     if (/^aka\s+/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'aka-author' });
@@ -1288,7 +1302,19 @@ function _extractWikipediaCommonNames(text, trace) {
       // the plant, not the plant itself.
       const diseaseRemainder = /\b(?:fungal|bacterial|viral|infection|disease|pathogen)\b/i.test(sentence.slice(r1[0].length));
       if ((isSubjectBinomial(subject) || /^The\s+/i.test(subject)) && !prepositionalSubject.test(subject) && !diseaseRemainder) {
-        caps.push({ rule: 'R1', capture: nameList });
+        // Etymology glosses restate the Latin term being defined ("The genus
+        // name, Parthenocissus, is a Latinisation of ..." — Parthenocissus
+        // quinquefolia): a lone capitalized word in appositive position
+        // there is the Latin name, never a vernacular. Genuine R1
+        // vernacular lists are lowercase-led or multi-word, so the guard
+        // requires both the single-capitalized-word shape and the
+        // Latinisation predicate in the sentence.
+        const etymologyLatin = /^[A-ZÀ-Ÿ][\w''\u2019-]*,?\s*$/.test(nameList) && /\blatinis(?:ation|ation)\b/i.test(sentence);
+        if (etymologyLatin) {
+          if (trace) trace.rejected.push({ name: nameList.replace(/,\s*$/, '').trim(), rule: 'R1', by: 'etymology-latin' });
+        } else {
+          caps.push({ rule: 'R1', capture: nameList });
+        }
       }
     }
 

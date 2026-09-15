@@ -79,15 +79,22 @@ const ADD_SYSTEM_PROMPT =
   "'head noun. Taxonomy sentences stating group membership (e.g. " +
   "'considered a ryegrass rather than a fescue' places the species in the " +
   'genus Lolium) never yield names either — belonging to a genus, family, ' +
-  'or other group is not a common name of the taxon. Never add scientific Latin genus or species names (e.g. ' +
+  'or other group is not a common name of the taxon. Names the article ' +
+  'attributes to a DIFFERENT taxon are never adds for this one — confusion ' +
+  'disclaimers (e.g. \'often confused with P. vitacea or "False Virginia ' +
+  "creeper\"'), mistaken-identity notes ('sometimes mistaken for ...'), " +
+  "and 'See also' species lists name other plants, not this taxon. " +
+  'Never add scientific Latin genus or species names (e.g. ' +
   "'vicia', 'glycyrrhiza').\n" +
   '- Naming verbs take many shapes beyond "commonly known as": "usually ' +
   'called" (often a regional name, e.g. "usually called Yellow Rose of ' +
   'Texas"), "also known as" (including "it is also known as X or Y in ' +
   '<place>"), "is (also) a common name for" (e.g. "The genus name Kerria ' +
-  'is also a common name for the species"), and "its <Language> name is X" ' +
-  '(e.g. "its Chinese name is dìtáng") are all naming constructions — ' +
-  'check every one of them against the extracted list.\n' +
+  'is also a common name for the species"), "its <Language> name is X" ' +
+  '(e.g. "its Chinese name is dìtáng"), and language-first "In the ' +
+  '<Language> language, it is called X" (e.g. "In the Ojibwe language, it ' +
+  'is called mnidoo-biimaakwad bebaamooded") are all naming constructions ' +
+  '— check every one of them against the extracted list.\n' +
   '- Enumerated name lists ("known as A, B, C, D, E") are the highest-value ' +
   'source: go through the list member by member against the extracted list ' +
   'and add every member it is missing, even when it already has most ' +
@@ -185,7 +192,11 @@ const REMOVE_SYSTEM_PROMPT =
   "'cuaniquil guama' when the article names 'cuaniquil' and 'guama' as " +
   'separate list members) are also broken-capture — a genuine name appears ' +
   'consecutively in the text, and an entry that only exists by joining ' +
-  'non-adjacent words does not.\n' +
+  'non-adjacent words does not. Naming scaffolding wrapped around a name ' +
+  "(e.g. 'plant is called kontiráthens') is a fragment even though it " +
+  'starts with a noun, not a verb — when the list also holds the bare ' +
+  "trailing name ('kontiráthens'), remove the scaffolded entry and keep " +
+  'the bare one, never the reverse.\n' +
   "- 'generic': a bare category word only ('tree', 'shrub', 'berry', " +
   "'plant'). A vernacular name is NOT generic just because it sounds " +
   "descriptive (e.g. 'shadberries', 'sleeping tree' are genuine names).\n" +
@@ -322,10 +333,12 @@ function buildAddPrompt(text, base, taxon, rank) {
     'Return the JSON object with "add" = common names FOR this taxon that ' +
     'are missing from the list (at most 10; leave "remove" empty). ' +
     'Pay special attention to "usually called", "also known as", ' +
-    '"common name for", and "its <Language> name is" constructions. ' +
+    '"common name for", "its <Language> name is", and "In the <Language> ' +
+    'language, it is called" constructions. ' +
     'If a name in the text has a trailing parenthetical (e.g. "cushín ' +
     '(short variety)"), add the name without the parenthetical: "cushín". ' +
-    'Never add group-membership nouns from taxonomy sentences, galls, ' +
+    'Never add group-membership nouns from taxonomy sentences, ' +
+    'confusion-disclaimer names of other taxa, galls, ' +
     'diseases, pests, or individual specimen trees.'
   );
 }
@@ -337,7 +350,10 @@ function buildRemovePrompt(text, base, taxon, rank) {
     'for EVERY listed entry, each with a category (leave "add" empty). ' +
     'Remove livestock conditions and diseases, other-organism names, ' +
     'plant parts, color names, alternative literal-translation glosses, ' +
-    'and mode/process terms; keep genuine names of the taxon.'
+    "sentence-fragment extractions (naming scaffolding like 'plant is " +
+    "called X' when the bare name X is also listed — remove the fragment, " +
+    'keep the bare name), and mode/process terms; keep genuine names of ' +
+    'the taxon.'
   );
 }
 

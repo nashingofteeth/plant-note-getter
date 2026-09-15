@@ -376,6 +376,8 @@ test('ADD_SYSTEM_PROMPT: scope, head-noun, and exclusion rules', () => {
   assert.match(ADD_SYSTEM_PROMPT, /'Darjeeling tea', 'Nilgiri tea'/);
   assert.match(ADD_SYSTEM_PROMPT, /never merge or splice/);
   assert.match(ADD_SYSTEM_PROMPT, /scientific Latin names/);
+  assert.match(ADD_SYSTEM_PROMPT, /mnidoo-biimaakwad bebaamooded/);
+  assert.match(ADD_SYSTEM_PROMPT, /False Virginia creeper/);
   assert.match(ADD_SYSTEM_PROMPT, /fo\., var\., subsp\./);
   assert.match(ADD_SYSTEM_PROMPT, /When unsure, leave it out/);
 });
@@ -404,7 +406,7 @@ test('ADD_SYSTEM_PROMPT: add-pass overflow guards (Quercus robur)', () => {
 
 test('buildAddPrompt: reinforces gall/individual exclusion in the task line', () => {
   const add = buildAddPrompt('Some wiki text.', ['oak'], 'Quercus robur', 'species');
-  assert.match(add, /Never add group-membership nouns from taxonomy sentences, galls, diseases, pests, or individual specimen trees/);
+  assert.match(add, /Never add group-membership nouns from taxonomy sentences, confusion-disclaimer names of other taxa, galls, diseases, pests, or individual specimen trees/);
 });
 
 test('Lolium-driven prompt rules: group-membership adds, condition/process removals', () => {
@@ -422,6 +424,11 @@ test('Lolium-driven prompt rules: group-membership adds, condition/process remov
   assert.match(
     buildRemovePrompt('text', ['tall fescue'], 'Lolium arundinaceum', 'species'),
     /mode\/process terms/
+  );
+  assert.match(REMOVE_SYSTEM_PROMPT, /plant is called kontiráthens/);
+  assert.match(
+    buildRemovePrompt('text', ['kontiráthens'], 'Parthenocissus quinquefolia', 'species'),
+    /naming scaffolding/
   );
 });
 
