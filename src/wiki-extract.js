@@ -536,9 +536,14 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     // Inga edulis): Romance orthography writes at most one accent per word,
     // while pinyin marks tone on every syllable, so all-accent words like
     // "míhóutáo" still reject.
+    // Bypassed for captures from explicit naming sentences (R68's
+    // allowPhonetic): "its Chinese name is dìtáng" asserts the token IS the
+    // taxon's name, unlike bare pinyin fragments floating in parens (Acer
+    // buergerianum's "pinyin: sānjiǎofēng" still rejects via the paren
+    // rules, which don't set the flag).
     const nonAsciiChars = [...segment].filter((ch) => ch.codePointAt(0) > 0x7F);
     const singleRomanceAccent = nonAsciiChars.length === 1 && /^[áéíóú]$/.test(nonAsciiChars[0]);
-    if (/^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment) && !singleRomanceAccent && ![...segment].every((ch) => /[\x00-\x7F]/.test(ch) || /[āēīōūĀĒĪŌŪ]/.test(ch))) {
+    if (!opts.allowPhonetic && /^[a-z\u00C0-\u024F]+$/i.test(segment) && /[^\x00-\x7F]/.test(segment) && !/\s/.test(segment) && !/[\u00F1\u00D1]/.test(segment) && !PHONETIC_IPA.test(segment) && !singleRomanceAccent && ![...segment].every((ch) => /[\x00-\x7F]/.test(ch) || /[āēīōūĀĒĪŌŪ]/.test(ch))) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'phonetic-only' });
       continue;
     }
@@ -911,8 +916,9 @@ function isTaxonomicSentence(sentence, isFirst) {
   // Narrow "called" gates mirroring R67/R70 cores — a bare
   // "(is|are) called" gate admits sentences whose "called" is incidental
   // (e.g. "...bok choy is called baby bok choy" inside a lit-gloss
-  // sentence that R9b then misreads).
-  if (/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:also\s+)?called\b/i.test(sentence)) return true;
+  // sentence that R9b then misreads). "usually" admitted alongside "also"
+  // (Kerria japonica: "the plant is usually called Yellow Rose of Texas").
+  if (/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:(?:also|usually)\s+)?called\b/i.test(sentence)) return true;
   if (/^Some\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}species\s+are\s+called\b/i.test(sentence)) return true;
   if (/\bas\s+it\s+is\s+known\s+to\b/i.test(sentence)) return true;
   if (/(?:Its|Their|The)\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}names?\s+[A-Za-zÀ-ÿ]/i.test(sentence)) return true;
@@ -920,7 +926,7 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/^The\s+(?:fruits?|trees?|plants?|shrubs?|herbs?|flowers?|leaves?|seeds?|roots?|bark|wood|nuts?|berr(?:y|ies)|vines?|bushes)\s+[A-Za-zÀ-ÿ].+?\s+(?:is|was)\b/i.test(sentence)) return true;
   if (/\balso\s+called\b/i.test(sentence)) return true;
   if (/\b(?:is|are)\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
-  if (/\b(?:often|sometimes|frequently)\s+called\b/i.test(sentence)) return true;
+  if (/\b(?:often|sometimes|frequently|usually)\s+called\b/i.test(sentence)) return true;
   // "Southern or annual wild rice (Z. aquatica), also an annual, grows..." —
   // "X or Y (abbreviated binomial)" alternative-name constructions (R59).
   // Generalized to allow optional article "The" and capitalized second element (e.g., "Northern wild rice (Z. palustris) is ...").
@@ -999,7 +1005,7 @@ function pushResult(results, seenKeys, name, trace, rule) {
 // callers that already pass the sentence as capture); used for capture-level
 // classifiers like family-restatement that need sentence context.
 function addNames(captures, results, seenKeys, trace, sentence = null) {
-  for (const { rule, capture, allowBinomialLike } of captures) {
+  for (const { rule, capture, allowBinomialLike, allowPhonetic } of captures) {
     if (!capture || !capture.trim()) continue;
     // Capture-level: family-name restatements (e.g. "family Fabaceae or commonly
     // known as legume or bean family") are taxonomic synonyms of the family,
@@ -1047,7 +1053,7 @@ function addNames(captures, results, seenKeys, trace, sentence = null) {
       if (trace) trace.rejected.push({ name: capture, rule, by: 'of-which-relative' });
       continue;
     }
-    const names = extractNamesFromCapture(capture, trace, rule, { allowBinomialLike });
+    const names = extractNamesFromCapture(capture, trace, rule, { allowBinomialLike, allowPhonetic });
     for (const name of names) {
       if (isGenericJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGenericJunk' }); continue; }
       if (isGeographicJunk(name)) { if (trace) trace.rejected.push({ name, rule, by: 'isGeographicJunk' }); continue; }
@@ -1598,9 +1604,14 @@ function _extractWikipediaCommonNames(text, trace) {
     }
 
     // R9b: Parenthetical literal-gloss — "(lit. 'Alishan azalea')" yields the
-    // translated common name.
+    // translated common name. A gloss split across "or"-joined alternatives
+    // (lit. "mountain butterbur" or "mountain breeze") lists alternative
+    // dictionary meanings of a foreign word (Kerria japonica glosses
+    // yamabuki), not a stable translated name — skip those, while single
+    // glosses (Sorbaria sorbifolia: lit. 'pearl plum') still yield theirs.
     const r9b = sentence.match(/lit\.?\s*['"“]([^'"]+)['"”]/i);
-    if (r9b) {
+    const r9bOrGloss = /lit\.?\s*['"“][^'"“”]+['"”]\s+or\s+['"“]/i.test(sentence);
+    if (r9b && !r9bOrGloss) {
       const capture = finalizeCapture(r9b[1], 200);
       if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R9b', capture: capture });
     }
@@ -1711,20 +1722,31 @@ function _extractWikipediaCommonNames(text, trace) {
 
     // R68: "<possessive/lang> [adjectives] name(s) <Name>" — "Its modern
     // Persian name shabkhosb ... means", "the Chinese common name hehuan,
-    // which means ...". Single-token name right after "name(s)"; meaning
-    // tails never enter the capture. The lookahead requires the name to be
-    // followed by punctuation, end, or a verb/preposition — a following
-    // bare noun ("Siskiyou lewisia", "Peruvian lily") means the name
-    // continues and the list rules own it, so R68 stays silent. Skipped
-    // for scientific/botanical/Latin names (the captured word would be
-    // Latin, not vernacular) and for stopword captures ("names are X").
-    const r68 = sentence.match(/(?:Its|Their|The)\s+((?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2})names?\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)(?=\s*(?:[,();.]|$|\s+(?:which|who|means?|is|are|was|were)\b))/i);
-    if (r68
-        && !/\bother\s+than\b/i.test(sentence)
+    // which means ...". Single-token name right after "name(s)", or after
+    // a copula ("its Chinese name is dìtáng" — Kerria japonica); meaning
+    // tails never enter the capture. The name token allows diacritics
+    // (dìtáng) matching the CJK-annotated extractor's range. The lookahead
+    // requires the name to be followed by punctuation, end, or a
+    // verb/preposition — a following bare noun ("Siskiyou lewisia",
+    // "Peruvian lily") means the name continues and the list rules own it,
+    // so R68 stays silent. Skipped for scientific/botanical/Latin names
+    // (the captured word would be Latin, not vernacular) and for stopword
+    // captures ("names are X"). Global: a sentence can state two names
+    // ("its Japanese name yamabuki ...; its Chinese name is dìtáng" —
+    // Kerria japonica), so every match is evaluated, not just the first.
+    const r68All = sentence.matchAll(/(?:Its|Their|The)\s+((?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2})names?\s+(?:is\s+)?([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\w''\u2019-]*)(?=\s*(?:[,();.]|$|\s+(?:which|who|means?|is|are|was|were)\b))/gi);
+    for (const r68 of r68All) {
+      if (
+        !/\bother\s+than\b/i.test(sentence)
         && !/\bBotanical\s+Latin\b/i.test(sentence)
         && !/\b(?:scientific|botanical|latin|binomial|specific|epithet|genus|generic|species|family|order|tribe|taxon)\b/i.test(r68[1])
         && !/^(?:is|are|was|were|be|been|being|a|an|the|and|or|also|often|sometimes|usually|commonly|generally|widely|rarely|mainly|mostly|typically|frequently|therefore|however|instead|indeed|already|never|ever|always|quite|rather|largely|chiefly|primarily|broadly|loosely|strictly|formally|apparently|actually|index|list|page|section|table|figure|database|known|called|named|given|considered)\b/i.test(r68[2])) {
-      caps.push({ rule: 'R68', capture: r68[2] });
+        // Explicit naming sentence ("its Chinese name is dìtáng") — the
+        // captured token is asserted as the taxon's name, so the
+        // pinyin-style phonetic gate is bypassed for it (cf. R7's
+        // allowBinomialLike).
+        caps.push({ rule: 'R68', capture: r68[2], allowPhonetic: true });
+      }
     }
 
     // R11c: "Members are commonly known as X, Y, or Z" and "Some species of
@@ -1962,7 +1984,14 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R25: "is known as X" — passive form. The head also covers the
+    // R25: "is known as X" — passive form (also "is also known as X":
+    // Kerria japonica's "it is also known as Japanese marigold bush or
+    // miracle marigold bush in northern New England" fires here; R10 owns
+    // only the sentence-initial and bare-comma shapes). Skipped inside
+    // parens: subordinate "where it is also known as" cultivar clauses
+    // (Valencia orange's 'Italy (where it is also known as "Liscio")')
+    // name cultivar/infraspecific forms, not the taxon — cf. R41/R46's
+    // isInsideParens guards. The head also covers the
     // perfect tense ("has/have/had been known as", e.g. Cynodon dactylon's
     // "it has been known as crabgrass"). The tail terminates the capture at
     // a place/language qualifier ("in <Place>"), a subordinate-clause
@@ -1971,8 +2000,8 @@ function _extractWikipediaCommonNames(text, trace) {
     // taxon is not emitted), or a clause/sentence end, so that
     // name-list connectors ("and"/"or") and multi-word names ("mañío hembra")
     // are never treated as truncation points.
-    const r25 = sentence.match(/(?:is|has\s+been|have\s+been|had\s+been)\s+known\s+as\s+(?:the\s+)?(.+?)(?:\s+in\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*(?:\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*)*|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|,\s+also\s+a\s+name\s+for\b|[.;]\s*$)/i);
-    if (r25) {
+    const r25 = sentence.match(/(?:is|has\s+been|have\s+been|had\s+been)\s+(?:also\s+)?known\s+as\s+(?:the\s+)?(.+?)(?:\s+in\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*(?:\s+[A-Z\u00C0-\u024F][\w.''\u2019-]*)*|\s+(?:because|since|which|who|whose|that|where|when|while|although|though|if|unless|until|but)\b|,\s+(?:which|who|whose|that|because|since|where|when|while|although|though|if|unless|but)\b|,\s+also\s+a\s+name\s+for\b|[.;]\s*$)/i);
+    if (r25 && !isInsideParens(sentence, r25.index)) {
       let capture = r25[1].trim();
       // Reject explanatory single-word nicknames: "is known as "stinking" because..."
       const bare = capture.replace(/["']/g, '').trim();
@@ -2081,10 +2110,14 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
-    // R31: "is a common name" / "is commonly called" 
-    const r31 = sentence.match(/(?:is|are)\s+(?:a\s+)?common\s+name(?:\s+in\s+.+?)?(?:\s+for\s+.+?)?\s*$/i);
+    // R31: "is a common name" / "is commonly called" / "is also a common
+    // name for" — the subject is the name (Kerria japonica: "The genus
+    // name Kerria is also a common name for the species" yields Kerria;
+    // the "genus name" framing is stripped). Thalictrum's end-anchored
+    // "Meadow-rue is a common name for plants in this genus" still matches.
+    const r31 = sentence.match(/(?:is|are)\s+(?:also\s+)?(?:a\s+)?common\s+name\b/i);
     if (r31) {
-      const subject = sentence.split(/\s+(?:is|are)\s+/i)[0].trim();
+      const subject = sentence.split(/\s+(?:is|are)\s+/i)[0].trim().replace(/^(?:the\s+)?(?:genus\s+)?name\s+/i, '');
       if (subject && !isSubjectBinomial(subject)) {
         caps.push({ rule: 'R31', capture: subject });
       }
@@ -2286,8 +2319,11 @@ function _extractWikipediaCommonNames(text, trace) {
     // R52: native-script name paired with romanized transliteration in a naming
     // sentence — "the Standard Chinese name 七子花 qī zi huā" (bare) and
     // "common name in Standard Chinese 七子花 (qī zi huā)" (parenthetical).
+    // Skipped when "color" precedes the pair: the CJK+roman names a COLOR
+    // derived from the plant, not the plant itself (Kerria japonica: "they
+    // call the golden yellow color ... yamabuki color (山吹色 yamabuki-iro)").
     const r52 = sentence.match(/([\u4e00-\u9fff\u3400-\u4dbf]+)\s*(?:\(\s*([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40})\s*\)|([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F' -]{1,40})(?=[\s.,;)\u2014-]|$))/);
-    if (r52 && /\bnames?\b/i.test(sentence)) {
+    if (r52 && /\bnames?\b/i.test(sentence) && !/\bcolou?r\b/i.test(sentence.slice(0, r52.index))) {
       const roman = (r52[2] || r52[3] || '').trim();
       if (roman && roman.length > 1 && !hasCJK(roman)) {
         caps.push({ rule: 'R52', capture: roman });

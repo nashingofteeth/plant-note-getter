@@ -81,6 +81,13 @@ const ADD_SYSTEM_PROMPT =
   'genus Lolium) never yield names either — belonging to a genus, family, ' +
   'or other group is not a common name of the taxon. Never add scientific Latin genus or species names (e.g. ' +
   "'vicia', 'glycyrrhiza').\n" +
+  '- Naming verbs take many shapes beyond "commonly known as": "usually ' +
+  'called" (often a regional name, e.g. "usually called Yellow Rose of ' +
+  'Texas"), "also known as" (including "it is also known as X or Y in ' +
+  '<place>"), "is (also) a common name for" (e.g. "The genus name Kerria ' +
+  'is also a common name for the species"), and "its <Language> name is X" ' +
+  '(e.g. "its Chinese name is dìtáng") are all naming constructions — ' +
+  'check every one of them against the extracted list.\n' +
   '- Enumerated name lists ("known as A, B, C, D, E") are the highest-value ' +
   'source: go through the list member by member against the extracted list ' +
   'and add every member it is missing, even when it already has most ' +
@@ -206,6 +213,13 @@ const REMOVE_SYSTEM_PROMPT =
   "bacteria, fungi, pests, diseases (e.g. 'diazotrophs', 'Fusarium'), and " +
   'scientific Latin names of any organism. Do NOT use this for regional ' +
   'plant names of this taxon.\n' +
+  "- 'color': a color or shade named after the plant (e.g. 'yamabuki-iro', " +
+  "'yamabuki color' — the article names a golden-yellow color after Kerria " +
+  'japonica) names the color, not the plant.\n' +
+  "- 'meaning-gloss': alternative literal translations of a foreign word " +
+  'joined by "or" (lit. "mountain butterbur" or "mountain breeze") are ' +
+  'dictionary meanings of that word, not English names of the taxon — ' +
+  'even though a single lit. gloss can be a translated name.\n' +
   'Do not invent or paraphrase. Empty arrays allowed.';
 
 function capInput(text, maxInputChars) {
@@ -307,6 +321,8 @@ function buildAddPrompt(text, base, taxon, rank) {
     promptHead(text, base, taxon, rank) +
     'Return the JSON object with "add" = common names FOR this taxon that ' +
     'are missing from the list (at most 10; leave "remove" empty). ' +
+    'Pay special attention to "usually called", "also known as", ' +
+    '"common name for", and "its <Language> name is" constructions. ' +
     'If a name in the text has a trailing parenthetical (e.g. "cushín ' +
     '(short variety)"), add the name without the parenthetical: "cushín". ' +
     'Never add group-membership nouns from taxonomy sentences, galls, ' +
@@ -320,7 +336,8 @@ function buildRemovePrompt(text, base, taxon, rank) {
     'Return the JSON object with a "remove" verdict ("keep" or "remove") ' +
     'for EVERY listed entry, each with a category (leave "add" empty). ' +
     'Remove livestock conditions and diseases, other-organism names, ' +
-    'plant parts, and mode/process terms; keep genuine names of the taxon.'
+    'plant parts, color names, alternative literal-translation glosses, ' +
+    'and mode/process terms; keep genuine names of the taxon.'
   );
 }
 
