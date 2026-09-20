@@ -14,7 +14,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
        → common-names-fetch.js (GBIF API fetch, Wikipedia API fetch + deterministic extraction)
        → wiki-extract.js (pure text extraction, no API)
        → llm-reviewer.js (end-of-Wikipedia LLM review in names.js: add/remove vs the deterministic list, applied verbatim)
-       → llm-backend.js (Ollama daemon completer; null-completer fallback keeps regex-only)
+       → llm-backend.js (completer: opencode server default / Ollama daemon; null-completer fallback keeps regex-only)
        → review-log.js (JSONL review-gap tally; consumed by scripts/review-tally.js)
        → taxonomy.js (buildTagSegments: remaps + injections + rank-skipping via label-map.json)
        → tagcheck.js (hierarchy consistency against existing notes)
@@ -33,7 +33,7 @@ app.js → wikidata.js (search, entity data, synonyms, parent chain)
 | `src/common-names-fetch.js` | Async API wrappers: `fetchGbifCommonNames`, `fetchWikipediaArticle` (deterministic: extract + `extractWikipediaCommonNames`), `fetchWikipediaCommonNames` |
 | `src/wiki-extract.js` | Common-name extraction from Wikipedia text (pure, no API). `extractWikipediaCommonNames` / `extractNamesFromCapture` + `traceExtraction` debug helper, locked by regression tests. |
 | `src/llm-reviewer.js` | End-of-Wikipedia LLM review, two focused passes: (1) remove pass returns a **keep/remove verdict for every entry** in the deterministic list (key-match enforced, categories informational — keep-bias prompt, keep rules stated before remove rules), (2) add pass finds missed names against the **original** base list so it can't re-propose removals (capped at 10 names; gall/individual exclusions lead the prompt). Receives the extract, the taxon's scientific name + rank, and the base list. Decisions applied verbatim — trim, empty-filter, case-insensitive dedup; **no junk classifiers or other deterministic gates after the LLM**. Only Wikipedia-derived names are in scope. Pure, DI of the completer; missing/broken completer degrades to the deterministic list, truncated completions yield reason `llm-truncated`. No default model — requires explicit `LLM_MODEL` (keep-bias tuned for small instruct models; reviewer ops facts in REFINEMENT-GUIDE §3). Exports `reviewWikipediaNames`, `parseReviewJson`, `parseNamesJson`, `buildAddPrompt`/`buildRemovePrompt`, `ADD_SYSTEM_PROMPT`/`REMOVE_SYSTEM_PROMPT`, `REVIEWER_JSON_SCHEMA`, `REMOVE_JSON_SCHEMA`. |
-| `src/llm-backend.js` | Ollama daemon completer (greedy decoding) via `LLM_SERVER_URL`/`LLM_MODEL`: native `/api/chat` with `format: REVIEWER_JSON_SCHEMA`, `temperature: 0`, `num_predict: 2048`, `think: false`. Lazy singleton; any load failure yields a null completer so regex-only extraction keeps working. |
+| `src/llm-backend.js` | Dual-backend completer via `LLM_BACKEND` (default `opencode`): remote models through the opencode server API (`OPENCODE_SERVER_URL`, `LLM_MODEL=provider/model`, credentials live in opencode; per-call one-shot session with `format: {type:'json_schema'}` structured output, `system` prompt, auto-started `opencode serve` daemon unless `OPENCODE_AUTOSTART=false`) or the local Ollama daemon (`LLM_SERVER_URL`/`LLM_MODEL`: native `/api/chat` with `format: REVIEWER_JSON_SCHEMA`, `temperature: 0`, `num_predict: 2048`, `think: false`). Lazy singleton; any load failure yields a null completer so regex-only extraction keeps working. |
 | `src/review-log.js` | `appendReviewRecord` JSONL writer for `.review-data/review-gaps.jsonl` (tracked in git). Records include `baseNames`, `llmAdded`, and `llmRemoved` (with informational category). |
 | `scripts/review-tally.js` | `npm run tally` — tallies LLM additions and removals across taxa and by removal category; `--regressions=N` prints copy-paste test snippets. |
 | `src/taxonomy.js` | Builds tag segments from Wikidata ancestor chain (re-exports `buildAliases` from names.js) |
@@ -108,7 +108,7 @@ and verify with `npm test` after any change.
 - `test/names.test.js` — `collectCommonNames` merge order/dedup/provenance + end-of-Wikipedia LLM review wiring (stubbed fetches/completer, no API calls).
 - `test/trace.test.js` — `traceExtraction` parity/rule-label/rejection tests (no API calls).
 - `test/reviewer.test.js` — `reviewWikipediaNames` add/remove application, dedup, fallbacks, `parseReviewJson`/`parseNamesJson`, REVIEWER_JSON_SCHEMA passthrough (stubbed completer, no API calls).
-- `test/llm-backend.test.js` — Ollama completer request shape (`/api/chat`, `format` schema, greedy options), env overrides, probe/connection failure → null completer (stubbed fetch, no API calls).
+- `test/llm-backend.test.js` — completer request shape for both backends: opencode server (`/session`, `/session/:id/message` with `format: {type:'json_schema'}` structured output, session delete, basic auth, autostart spawn path) and Ollama (`/api/chat`, `format` schema, greedy options), env overrides, probe/connection failure → null completer (stubbed fetch, no API calls).
 - `test/review-log.test.js` — `appendReviewRecord` JSONL write/append/no-op/null-path/no-throw (no API calls).
 - When modifying `label-map.json`, run hierarchy tests first. When modifying patterns or `extractNamesFromCapture`, run common-names tests first. When modifying `collectCommonNames` in `src/names.js`, run names tests first.
 
