@@ -85,7 +85,9 @@ const ADD_SYSTEM_PROMPT =
   "creeper\"'), mistaken-identity notes ('sometimes mistaken for ...'), " +
   "and 'See also' species lists name other plants, not this taxon. " +
   'Never add scientific Latin genus or species names (e.g. ' +
-  "'vicia', 'glycyrrhiza').\n" +
+  "'vicia', 'glycyrrhiza') — EXCEPT the taxon's own genus name written " +
+  "lowercase as a vernacular name of this taxon (e.g. 'camellia' for " +
+  'Camellia) is acceptable.\n' +
   '- Naming verbs take many shapes beyond "commonly known as": "usually ' +
   'called" (often a regional name, e.g. "usually called Yellow Rose of ' +
   'Texas"), "also known as" (including "it is also known as X or Y in ' +
@@ -155,6 +157,9 @@ const REMOVE_SYSTEM_PROMPT =
   'every member of such an enumeration is keep.\n' +
   "- Genuine family or genus names (e.g. 'pea family', 'legume family') and " +
   "the taxon's single best-known name.\n" +
+  "- The taxon's own genus name written lowercase in the article (e.g. " +
+  "'camellia' for a Camellia note) is vernacular usage, not a " +
+  'scientific-form string — keep it.\n' +
   "- 'common' + head-noun forms (e.g. 'common chicory', 'common oak'), " +
   'hyphenated compounds (e.g. \'eastern hemlock-spruce\'), and names built ' +
   "from a head noun plus a modifier of this taxon (e.g. 'silk tree', " +
@@ -219,7 +224,9 @@ const REMOVE_SYSTEM_PROMPT =
   'strings — entries whose wording is a Latin binomial or contains a ' +
   "quote-epithet (e.g. \"Salix alba 'Vitellina-Tristis'\") are not " +
   'vernacular names. But a plain-English vernacular name of a cultivar ' +
-  "(e.g. 'golden weeping willow') is a genuine regional name — keep it.\n" +
+  "(e.g. 'golden weeping willow') is a genuine regional name — keep it. " +
+  "A lowercase vernacular use of the taxon's own genus name (e.g. " +
+  "'camellia') is not scientific-form — keep it.\n" +
   "  - 'other-organism': names of other organisms mentioned in passing — " +
   "bacteria, fungi, pests, diseases (e.g. 'diazotrophs', 'Fusarium'), and " +
   'scientific Latin names of any organism. Do NOT use this for regional ' +

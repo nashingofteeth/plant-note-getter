@@ -29,6 +29,20 @@ test('buildAliases: scientific name excluded even with different casing', () => 
   assert.deepStrictEqual(buildAliases(entity), ['red oak']);
 });
 
+test('buildAliases: lowercased genus name kept even though it matches the scientific name', () => {
+  const commonOnly = { commonNames: ['camellia'], aliases: [], scientificName: 'Camellia' };
+  assert.deepStrictEqual(buildAliases(commonOnly), ['camellia']);
+  const aliasOnly = { commonNames: [], aliases: ['camellia'], scientificName: 'Camellia' };
+  assert.deepStrictEqual(buildAliases(aliasOnly), ['camellia']);
+});
+
+test('buildAliases: only the all-lowercase form of the genus name survives', () => {
+  const entity = { commonNames: ['Camellia', 'CAMELLIA', 'camellia'], aliases: [], scientificName: 'Camellia' };
+  assert.deepStrictEqual(buildAliases(entity), ['camellia']);
+  const viaAlias = { commonNames: [], aliases: ['Iris'], scientificName: 'Iris' };
+  assert.strictEqual(buildAliases(viaAlias), null);
+});
+
 test('buildAliases: strips leading articles from common names', () => {
   const entity = { commonNames: ['the oak', 'a shrub'], aliases: [], scientificName: 'X' };
   assert.deepStrictEqual(buildAliases(entity), ['oak', 'shrub']);

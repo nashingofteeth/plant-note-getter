@@ -376,6 +376,9 @@ test('ADD_SYSTEM_PROMPT: scope, head-noun, and exclusion rules', () => {
   assert.match(ADD_SYSTEM_PROMPT, /'Darjeeling tea', 'Nilgiri tea'/);
   assert.match(ADD_SYSTEM_PROMPT, /never merge or splice/);
   assert.match(ADD_SYSTEM_PROMPT, /scientific Latin names/);
+  // Carve-out: the taxon's own genus name in lowercase is vernacular, addable.
+  assert.match(ADD_SYSTEM_PROMPT, /EXCEPT the taxon's own genus name written lowercase/);
+  assert.match(ADD_SYSTEM_PROMPT, /'camellia' for\s+Camellia/);
   assert.match(ADD_SYSTEM_PROMPT, /mnidoo-biimaakwad bebaamooded/);
   assert.match(ADD_SYSTEM_PROMPT, /False Virginia creeper/);
   assert.match(ADD_SYSTEM_PROMPT, /fo\., var\., subsp\./);
@@ -486,6 +489,10 @@ test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias'
     /commonly known as\s+licorice fern, many-footed fern, and sweet root/
   );
   assert.match(REMOVE_SYSTEM_PROMPT, /[Gg]enuine family or genus names/);
+  // Carve-out: the taxon's own genus name in lowercase is vernacular usage.
+  assert.match(REMOVE_SYSTEM_PROMPT, /taxon's own genus name written lowercase/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /'camellia' for a Camellia note/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /is not scientific-form/);
   assert.match(REMOVE_SYSTEM_PROMPT, /best-known name/);
   assert.match(REMOVE_SYSTEM_PROMPT, /'common' \+ head-noun forms/);
   assert.match(REMOVE_SYSTEM_PROMPT, /eastern hemlock-spruce/);

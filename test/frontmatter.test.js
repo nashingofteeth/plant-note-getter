@@ -277,3 +277,19 @@ test('generateFrontMatter: produces parseable round-trip', () => {
   assert.strictEqual(parsed.rank, 'species');
   assert.strictEqual(parsed.wikipedia, 'https://en.wikipedia.org/wiki/Quercus_rubra');
 });
+
+test('generateFrontMatter: keeps a lowercased genus-name alias for genus notes', () => {
+  const entity = {
+    id: 'Q158794',
+    rankLabel: 'genus',
+    commonNames: ['camellia', 'camellias'],
+    aliases: [],
+    scientificName: 'Camellia',
+    wikipediaUrl: 'https://en.wikipedia.org/wiki/Camellia'
+  };
+  const fm = generateFrontMatter(entity, [], {});
+  const parsed = parseFrontMatter(fm);
+  assert.ok(parsed, 'generated front matter should be parseable');
+  assert.deepStrictEqual(parsed.aliases, ['camellia', 'camellias']);
+  assert.strictEqual(parsed.rank, 'genus');
+});

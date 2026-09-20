@@ -4,14 +4,23 @@ const commonNamesModule = require('./common-names-fetch');
 
 function buildAliases(entity) {
   const aliases = [];
+  const sciName = (entity.scientificName || '').trim();
+  const sciKey = normalizeNameKey(sciName);
+  // A lowercased genus name ("camellia" for Camellia) is genuine vernacular
+  // usage, not a restatement of the scientific name — keep it as an alias.
+  // Scope: single-word scientific names (genus-rank notes) only, and only
+  // the all-lowercase form ("Camellia"/"CAMELLIA" still drop).
+  const isLowercasedGenusMatch = (name) =>
+    sciName && !/\s/.test(sciName) &&
+    name === name.toLowerCase() &&
+    normalizeNameKey(name) === sciKey;
   if (entity.commonNames && entity.commonNames.length > 0) {
-    const sciKey = normalizeNameKey(entity.scientificName || '');
     const seen = new Set();
     for (const name of entity.commonNames) {
       const normalized = stripArticle(name);
       if (isAbbreviatedBinomial(normalized)) continue;
       const key = normalizeNameKey(normalized);
-      if (!seen.has(key) && key !== sciKey) {
+      if (!seen.has(key) && (key !== sciKey || isLowercasedGenusMatch(normalized))) {
         seen.add(key);
         aliases.push(normalized);
       }
@@ -26,7 +35,7 @@ function buildAliases(entity) {
         if (!trimmed) continue;
         if (isAbbreviatedBinomial(trimmed)) continue;
         const key = normalizeNameKey(trimmed);
-        if (!aliasKeys.includes(key) && key !== normalizeNameKey(entity.scientificName || '')) {
+        if (!aliasKeys.includes(key) && (key !== sciKey || isLowercasedGenusMatch(trimmed))) {
           aliasKeys.push(key);
           aliases.push(trimmed);
         }
