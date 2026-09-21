@@ -129,6 +129,33 @@ const TESTS = [
     expected: 'life/eukaryota/plantae/tracheophytes/spermatophytes/angiosperms/monocots/asparagales/asparagaceae/maianthemum',
   },
   {
+    name: 'psilotum genus (whisk fern remaps psilotophyta/psilotopsida into fern lineage)',
+    ancestors: [
+      { id: 'Q756', label: 'plant', rankLabel: 'kingdom' },
+      { id: 'Q12844031', label: 'Psilotophyta', rankLabel: 'division' },
+      { id: 'Q132139', label: 'Psilotopsida', rankLabel: 'class' },
+      { id: 'Q1935915', label: 'Psilotales', rankLabel: 'order' },
+      { id: 'Q500230', label: 'Psilotaceae', rankLabel: 'family' },
+      { id: 'Q139732', label: 'Psilotum', rankLabel: 'genus' },
+    ],
+    ownId: 'Q139732',
+    expected: 'life/eukaryota/plantae/tracheophytes/pteridophyta/polypodiophyta/polypodiopsida/psilotales/psilotaceae',
+  },
+  {
+    name: 'psilotum nudum (species appends genus via remapped fern lineage)',
+    ancestors: [
+      { id: 'Q756', label: 'plant', rankLabel: 'kingdom' },
+      { id: 'Q12844031', label: 'Psilotophyta', rankLabel: 'division' },
+      { id: 'Q132139', label: 'Psilotopsida', rankLabel: 'class' },
+      { id: 'Q1935915', label: 'Psilotales', rankLabel: 'order' },
+      { id: 'Q500230', label: 'Psilotaceae', rankLabel: 'family' },
+      { id: 'Q139732', label: 'Psilotum', rankLabel: 'genus' },
+      { id: 'Q1197925', label: 'Psilotum nudum', rankLabel: 'species' },
+    ],
+    ownId: 'Q1197925',
+    expected: 'life/eukaryota/plantae/tracheophytes/pteridophyta/polypodiophyta/polypodiopsida/psilotales/psilotaceae/psilotum',
+  },
+  {
     name: 'oak (rosid tree, uses quercus mapping)',
     ancestors: [
       { id: 'Q756', label: 'plant', rankLabel: 'kingdom' },

@@ -58,6 +58,8 @@
   "conifer": "pinophyta",
   "genistoids": null,
   "aspleniales": "polypodiales",
+  "psilotophyta": "pteridophyta",
+  "psilotopsida": "polypodiopsida",
   "orchid": "orchidaceae",
   "_inject": {
     "pteridophyta": [
