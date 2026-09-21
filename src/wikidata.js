@@ -1,4 +1,4 @@
-const { fetchJSON, fetchSparql, rateLimit, WIKIDATA_API, GBIF_API } = require('./api-client');
+const { fetchJSON, fetchSparql, rateLimit, WIKIDATA_API, GBIF_API, WIKIPEDIA_MEDIAWIKI_API } = require('./api-client');
 const { stripArticle, normalizeNameKey, TAXON_Q_IDS } = require('./utils');
 const { RANK_LABELS, RANK_PREFERENCE } = require('./ranks');
 const { askChoice } = require('./prompt');
@@ -229,6 +229,69 @@ async function getEntityData(id) {
   return map.get(id) || null;
 }
 
+async function fetchEntityByWikipediaTitle(title) {
+  await rateLimit();
+  const params = new URLSearchParams({
+    action: 'wbgetentities',
+    sites: 'enwiki',
+    titles: title,
+    props: 'claims|aliases|sitelinks|labels|descriptions',
+    languages: 'en|mul',
+    format: 'json'
+  });
+  const data = await fetchJSON(`${WIKIDATA_API}?${params}`);
+  for (const [id, raw] of Object.entries(data.entities || {})) {
+    if (!id.startsWith('Q')) continue;
+    return parseEntity(id, raw);
+  }
+  return null;
+}
+
+async function resolveWikipediaRedirect(title) {
+  await rateLimit();
+  const params = new URLSearchParams({
+    action: 'query',
+    titles: title,
+    redirects: '1',
+    format: 'json',
+    formatversion: '2'
+  });
+  const data = await fetchJSON(`${WIKIPEDIA_MEDIAWIKI_API}?${params}`);
+  const page = data?.query?.pages?.[0];
+  if (!page || page.missing) return null;
+  return page.title;
+}
+
+async function getEntityByWikipediaTitle(title) {
+  let entity = await fetchEntityByWikipediaTitle(title);
+  if (!entity) {
+    const canonical = await resolveWikipediaRedirect(title);
+    if (canonical && canonical !== title) {
+      console.log(`  Wikipedia redirect: ${title} → ${canonical}`);
+      entity = await fetchEntityByWikipediaTitle(canonical);
+    }
+  }
+  return entity;
+}
+
+async function resolveTaxonFromWikipediaTitle(title) {
+  const entity = await getEntityByWikipediaTitle(title);
+  if (!entity) {
+    throw new Error(`No Wikidata item found for the English Wikipedia article '${title}'`);
+  }
+  if (!entity.instanceOf.some(id => TAXON_Q_IDS.includes(id))) {
+    throw new Error(`'${entity.label}' (Wikipedia article '${title}') is not a taxon or clade on Wikidata`);
+  }
+  console.log(`  Resolved via Wikipedia article: ${entity.label} (${entity.id})`);
+  const selected = {
+    id: entity.id,
+    label: entity.label,
+    description: null,
+    match: { type: 'wikipedia_url' }
+  };
+  return { selected, entity, candidateEntities: [] };
+}
+
 function pickBestParent(parentIds, ancestorMap) {
   const valid = parentIds.filter(pid => ancestorMap.has(pid));
   if (valid.length === 0) return parentIds[0] || null;
@@ -410,6 +473,7 @@ async function collectSynonymData(primaryEntity, candidateEntities) {
 module.exports = {
   searchTaxon,
   resolveTaxon,
+  resolveTaxonFromWikipediaTitle,
   getEntityData,
   getParentChain,
   isSynonymOf,

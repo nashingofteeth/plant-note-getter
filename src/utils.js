@@ -52,6 +52,23 @@ const TAXON_Q_IDS = ['Q16521', 'Q7136226'];
 const PLANT_TAG_BASE = ['life', 'eukaryota', 'plantae'];
 const PLANT_TAG_PREFIX = PLANT_TAG_BASE.join('/');
 
+const WIKIPEDIA_URL_RE = /^https?:\/\/([a-z-]+)(?:\.m)?\.wikipedia\.org\/wiki\/([^\s?#]+)(?:[?#].*)?$/i;
+
+function parseWikipediaUrl(input) {
+  if (typeof input !== 'string') return null;
+  const m = input.trim().match(WIKIPEDIA_URL_RE);
+  if (!m) return null;
+  let title;
+  try {
+    title = decodeURIComponent(m[2]);
+  } catch {
+    title = m[2];
+  }
+  title = title.replace(/_/g, ' ').trim();
+  if (!title) return null;
+  return { lang: m[1].toLowerCase(), title };
+}
+
 function cleanName(name) {
   return stripArticle(name).replace(/\.+$/, '').trim();
 }
@@ -124,6 +141,7 @@ module.exports = {
   PLANT_TAG_BASE,
   cleanName,
   normalizeNameKey,
+  parseWikipediaUrl,
   loadPlantNouns,
   loadLatinEpithets,
   isPlantNoun,

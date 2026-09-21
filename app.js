@@ -3,8 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { NOTE_ROOT, LABEL_MAP_PATH, LLM_MODEL } = require('./src/config');
-const { sanitizeFilename, loadLabelMap, normalizeNameKey } = require('./src/utils');
-const { resolveTaxon, getParentChain } = require('./src/wikidata');
+const { sanitizeFilename, loadLabelMap, normalizeNameKey, parseWikipediaUrl } = require('./src/utils');
+const { resolveTaxon, resolveTaxonFromWikipediaTitle, getParentChain } = require('./src/wikidata');
 const { collectCommonNames } = require('./src/names');
 const { buildTagSegmentsWithOriginals } = require('./src/taxonomy');
 const { generateFrontMatter, parseFrontMatter, analyzeMissingProperties, updateFrontMatter } = require('./src/frontmatter');
@@ -34,6 +34,7 @@ async function main() {
     console.error('  plant-note "Populus"');
     console.error('  plant-note "Populus" --apply');
     console.error('  plant-note "Eschscholzia californica" --select=2');
+    console.error('  plant-note "https://en.wikipedia.org/wiki/Quercus_robur"');
     console.error('  plant-note --check "Lysimachia borealis"');
     process.exit(1);
   }
@@ -62,10 +63,22 @@ async function main() {
 
   printSection('Wikidata Search');
 
-  console.log(`  Searching for: ${input}`);
+  const wikiRef = parseWikipediaUrl(input);
+  if (wikiRef && wikiRef.lang !== 'en') {
+    console.error(`Error: only English Wikipedia links are supported (got ${wikiRef.lang}.wikipedia.org)`);
+    process.exit(1);
+  }
+
+  if (wikiRef) {
+    console.log(`  Resolving Wikipedia article: ${wikiRef.title}`);
+  } else {
+    console.log(`  Searching for: ${input}`);
+  }
 
   try {
-    const { entity, candidateEntities } = await resolveTaxon(input, selectIndex);
+    const { entity, candidateEntities } = wikiRef
+      ? await resolveTaxonFromWikipediaTitle(wikiRef.title)
+      : await resolveTaxon(input, selectIndex);
 
     if (!entity.wikipediaUrl && candidateEntities && candidateEntities.length > 0) {
       const wikiCandidates = candidateEntities.filter(c => c && c.id !== entity.id && c.wikipediaUrl);
