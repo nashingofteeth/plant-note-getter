@@ -938,6 +938,10 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/(?:Its|Their|The)\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}names?\s+[A-Za-zÀ-ÿ]/i.test(sentence)) return true;
   if (/\bnames?\s+that\s+is\s+(?:now\s+)?[a-z]+\s+is\b/i.test(sentence)) return true;
   if (/^The\s+(?:fruits?|trees?|plants?|shrubs?|herbs?|flowers?|leaves?|seeds?|roots?|bark|wood|nuts?|berr(?:y|ies)|vines?|bushes)\s+[A-Za-zÀ-ÿ].+?\s+(?:is|was)\b/i.test(sentence)) return true;
+  // Definite-description re-statements ("The areca palm is also used as ...",
+  // "... where the areca palm is native") — mirrors R75. The plant-form head
+  // noun is load-bearing: bare "The fruit is ..." part-descriptions stay out.
+  if (/(?:^|,\s*|\bwhere\s+|\band\s+)the\s+[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*){0,2}\s+(?:palms?|trees?|shrubs?|bushes|vines?|herbs?|grasses?|ferns?)\s+(?:is|are|was|were)\s+(?:also\s+)?(?:native|endemic|distributed|found|common|widely\s+found|cultivated|grown|used|valued|eaten|harvested)\b/i.test(sentence)) return true;
   if (/\balso\s+called\b/i.test(sentence)) return true;
   if (/\b(?:is|are)\s+(?:native|endemic|distributed|found|common|widely\s+found)\b/i.test(sentence)) return true;
   if (/\b(?:often|sometimes|frequently|usually)\s+called\b/i.test(sentence)) return true;
@@ -1236,7 +1240,7 @@ function _extractWikipediaCommonNames(text, trace) {
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
@@ -2007,6 +2011,27 @@ function _extractWikipediaCommonNames(text, trace) {
       const capture = finalizeCapture(r71[1], 200);
       if (capture && !/^(?:into|in|on|at|to|for|with|by|of|from|derived|comes?|means?|refers?)\b/i.test(capture)) {
         caps.push({ rule: 'R71', capture: capture });
+      }
+    }
+
+    // R75: definite-description re-statements — "The areca palm is also used
+    // as an interior landscaping", "... where the areca palm is native"
+    // (Areca catechu). Articles whose lead never states the vernacular still
+    // re-use it as a definite referring NP with a distribution/use
+    // predicate. The plant-form head noun (never a part word like
+    // fruit/leaf/seed, never bare "plant"/"species") plus the predicate set
+    // keeps part-descriptions ("The fruit is green ...", "The resin is also
+    // used ...") silent; the trait-descriptor denylist keeps "The young tree
+    // is ..." out. The sentence gate above mirrors this shape. Downstream
+    // junk classifiers vet the name itself.
+    const r75 = sentence.match(/(?:^|,\s*|\bwhere\s+|\band\s+)the\s+([A-Za-z][\w''\u2019-]*(?:\s+[A-Za-z][\w''\u2019-]*){0,2})\s+(palms?|trees?|shrubs?|bushes|vines?|herbs?|grasses?|ferns?)\s+(?:is|are|was|were)\s+(?:also\s+)?(?:native|endemic|distributed|found|common|widely\s+found|cultivated|grown|used|valued|eaten|harvested)\b/i);
+    if (r75) {
+      const mods = r75[1].split(/\s+/);
+      const traitDescriptor = /^(?:whole|entire|young|mature|matured|old|dead|living|fallen|flowering|fruiting|dried|fresh|deciduous|evergreen|annual|perennial|biennial|woody|herbaceous|tall|short|large|small|big|little|host|parent|mother|neighboring|neighbouring|nearby|surrounding|adjacent|shade)$/i;
+      if (!mods.some((w) => traitDescriptor.test(w))) {
+        caps.push({ rule: 'R75', capture: `${r75[1]} ${r75[2]}` });
+      } else if (trace) {
+        trace.rejected.push({ name: `${r75[1]} ${r75[2]}`, rule: 'R75', by: 'trait-descriptor' });
       }
     }
 
