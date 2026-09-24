@@ -77,9 +77,13 @@ function hasPlantTag(frontMatter) {
   return frontMatter.tags.some(t => t.startsWith(PLANT_TAG_PREFIX));
 }
 
-function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, labelMap = {}) {
+function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, labelMap = {}, options = {}) {
+  const fm = frontMatter || {};
   const updates = {};
   const missing = [];
+  // `created` backfills from file metadata when available; `modified` is
+  // always today. Callers pass { fileCreated } from createNoteFile's stat.
+  const fileCreated = options.fileCreated || getCurrentDate();
 
   const checks = [
     {
@@ -87,6 +91,18 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
       isEmpty: (v) => !Array.isArray(v) || v.length === 0 || !v.some(t => t.startsWith(PLANT_TAG_PREFIX)),
       hasNew: true,
       newValue: () => [buildTag(ancestors || [], entity?.id, labelMap)]
+    },
+    {
+      key: 'created',
+      isEmpty: (v) => !v,
+      hasNew: true,
+      newValue: () => fileCreated
+    },
+    {
+      key: 'modified',
+      isEmpty: (v) => !v,
+      hasNew: true,
+      newValue: () => getCurrentDate()
     },
     {
       key: 'rank',
@@ -103,7 +119,7 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
   ];
 
   for (const check of checks) {
-    const value = frontMatter[check.key];
+    const value = fm[check.key];
     if (check.isEmpty(value)) {
       missing.push(check.key);
       if (check.hasNew) {
@@ -113,7 +129,7 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
   }
 
   const newAliases = (entity && buildAliases(entity)) || [];
-  const existingAliases = (frontMatter.aliases) || [];
+  const existingAliases = (fm.aliases) || [];
 
   if (newAliases.length > 0) {
     const seen = new Set(existingAliases.map(a => normalizeNameKey(a)));
@@ -138,10 +154,35 @@ function analyzeMissingProperties(frontMatter, entity = null, ancestors = null, 
 
 function updateFrontMatter(content, updates) {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return content;
+  const currentDate = getCurrentDate();
+  if (!match) {
+    // No front matter — build a fresh block from updates, ensuring
+    // created/modified are populated, then prepend preserving the body.
+    const lines = [];
+    if (Array.isArray(updates.tags)) {
+      lines.push('tags:');
+      for (const t of updates.tags) lines.push(`  - ${t}`);
+    }
+    if (Array.isArray(updates.aliases)) {
+      lines.push('aliases:');
+      for (const a of updates.aliases) lines.push(`  - ${formatAlias(a)}`);
+    }
+    lines.push(`created: ${updates.created || currentDate}`);
+    lines.push(`modified: ${updates.modified || currentDate}`);
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'tags' || key === 'aliases' || key === 'created' || key === 'modified') continue;
+      if (Array.isArray(value)) {
+        lines.push(`${key}:`);
+        for (const v of value) lines.push(`  - ${v}`);
+      } else {
+        lines.push(`${key}: ${value}`);
+      }
+    }
+    const body = content.replace(/^\s*\n/, '');
+    return `---\n${lines.join('\n')}\n---\n\n${body}`;
+  }
 
   let frontMatterText = match[1];
-  const currentDate = getCurrentDate();
   const lines = frontMatterText.split('\n');
   const updatedLines = [];
   const processedKeys = new Set();

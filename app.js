@@ -198,7 +198,8 @@ async function main() {
         result.frontMatter,
         entity,
         ancestors,
-        finalLabelMap
+        finalLabelMap,
+        { fileCreated: result.fileCreated }
       );
 
       if (missing.length === 0) {

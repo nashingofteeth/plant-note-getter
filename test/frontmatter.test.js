@@ -87,6 +87,8 @@ test('analyzeMissingProperties: detects all missing when empty front matter', ()
 test('analyzeMissingProperties: does not report present fields as missing', () => {
   const fm = {
     tags: ['life/eukaryota/plantae/tracheophytes'],
+    created: '2026-07-22',
+    modified: '2026-07-22',
     rank: 'species',
     wikipedia: 'https://example.com',
     aliases: ['oak']
@@ -176,9 +178,14 @@ test('updateFrontMatter: inserts new properties before created', () => {
   assert.ok(wikiIdx < createdIdx, 'wikipedia should come before created');
 });
 
-test('updateFrontMatter: passes through content with no front matter', () => {
+test('updateFrontMatter: creates front matter when none exists', () => {
   const content = 'No front matter here';
-  assert.strictEqual(updateFrontMatter(content, { rank: 'genus' }), content);
+  const result = updateFrontMatter(content, { rank: 'genus' });
+  assert.ok(result.startsWith('---\n'));
+  assert.ok(result.includes('rank: genus'));
+  assert.ok(result.includes('created:'));
+  assert.ok(result.includes('modified:'));
+  assert.ok(result.includes('No front matter here'));
 });
 
 test('updateFrontMatter: preserves full body after front matter', () => {
@@ -197,6 +204,53 @@ test('updateFrontMatter: output starts and ends with front matter delimiters', (
   const afterFirst = result.indexOf('---\n') + 4;
   const secondDash = result.indexOf('---', afterFirst);
   assert.ok(secondDash > 0, 'should have closing ---');
+});
+
+test('analyzeMissingProperties: reports missing created/modified and populates them', () => {
+  const fm = { tags: ['life/eukaryota/plantae'] };
+  const { missing, updates } = analyzeMissingProperties(fm, null, [], {});
+  assert.ok(missing.includes('created'));
+  assert.ok(missing.includes('modified'));
+  assert.ok(updates.created);
+  assert.ok(updates.modified);
+});
+
+test('analyzeMissingProperties: handles null front matter', () => {
+  const { missing, updates } = analyzeMissingProperties(null, null, [], {});
+  assert.ok(missing.includes('tags'));
+  assert.ok(missing.includes('created'));
+  assert.ok(missing.includes('modified'));
+  assert.ok(updates.created);
+  assert.ok(updates.modified);
+});
+
+test('updateFrontMatter: created block round-trips through parseFrontMatter', () => {
+  const content = '# Heracleum mantegazzianum\n\nSome body text.\n';
+  const result = updateFrontMatter(content, { tags: ['life/eukaryota/plantae'], rank: 'species' });
+  const parsed = parseFrontMatter(result);
+  assert.ok(parsed);
+  assert.deepStrictEqual(parsed.tags, ['life/eukaryota/plantae']);
+  assert.ok(parsed.created);
+  assert.ok(parsed.modified);
+  assert.strictEqual(parsed.rank, 'species');
+  assert.ok(result.includes('Some body text.'));
+});
+
+test('analyzeMissingProperties: created uses file metadata, modified uses today', () => {
+  const { getCurrentDate } = require('../src/utils');
+  const fm = {};
+  const { updates } = analyzeMissingProperties(fm, null, [], {}, { fileCreated: '2020-03-15' });
+  assert.strictEqual(updates.created, '2020-03-15');
+  assert.strictEqual(updates.modified, getCurrentDate());
+});
+
+test('updateFrontMatter: no-FM block keeps file-based created and today modified', () => {
+  const { getCurrentDate } = require('../src/utils');
+  const result = updateFrontMatter('Body text', { tags: ['life/eukaryota/plantae'], created: '2020-03-15', modified: getCurrentDate() });
+  const parsed = parseFrontMatter(result);
+  assert.strictEqual(parsed.created, '2020-03-15');
+  assert.strictEqual(parsed.modified, getCurrentDate());
+  assert.ok(result.includes('Body text'));
 });
 
 // ─── generateFrontMatter ────────────────────────────────────────────────────

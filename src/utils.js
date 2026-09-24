@@ -1,9 +1,36 @@
 const fs = require('fs');
 const path = require('path');
 
-function getCurrentDate() {
-  const d = new Date();
+function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getCurrentDate() {
+  return formatDate(new Date());
+}
+
+// Created date for an existing note, derived from file metadata.
+// Prefers birthtime; falls back to mtime when birthtime is unavailable
+// (epoch/zero, which is common on Linux filesystems without statx birthtime).
+function getFileCreatedDate(filepathOrStat) {
+  try {
+    const stat = typeof filepathOrStat === 'string'
+      ? fs.statSync(filepathOrStat)
+      : filepathOrStat;
+    const birth = stat.birthtime;
+    const mtime = stat.mtime;
+    let d = null;
+    if (birth instanceof Date && !isNaN(birth.getTime()) && birth.getTime() > 0) {
+      d = birth;
+    }
+    if (mtime instanceof Date && !isNaN(mtime.getTime())) {
+      if (!d || mtime.getTime() < d.getTime()) d = mtime;
+    }
+    if (!d) return getCurrentDate();
+    return formatDate(d);
+  } catch {
+    return getCurrentDate();
+  }
 }
 
 function sanitizeFilename(scientificName) {
@@ -129,6 +156,8 @@ function isLatinEpithet(word) {
 
 module.exports = {
   getCurrentDate,
+  formatDate,
+  getFileCreatedDate,
   sanitizeFilename,
   isEmptyValue,
   logUpdates,

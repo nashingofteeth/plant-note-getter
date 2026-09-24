@@ -33,6 +33,18 @@ test('getCurrentDate: returns YYYY-MM-DD format', () => {
   assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(getCurrentDate()));
 });
 
+test('getFileCreatedDate: formats birthtime when valid', () => {
+  const { getFileCreatedDate } = require('../src/utils');
+  const stat = { birthtime: new Date(2020, 2, 15), mtime: new Date(2026, 8, 24) };
+  assert.strictEqual(getFileCreatedDate(stat), '2020-03-15');
+});
+
+test('getFileCreatedDate: falls back to mtime when birthtime is epoch', () => {
+  const { getFileCreatedDate } = require('../src/utils');
+  const stat = { birthtime: new Date(0), mtime: new Date(2021, 5, 9) };
+  assert.strictEqual(getFileCreatedDate(stat), '2021-06-09');
+});
+
 // ─── isEmptyValue ───────────────────────────────────────────────────────────
 
 test('isEmptyValue: null, undefined, empty string, empty array are empty', () => {
