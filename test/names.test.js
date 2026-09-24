@@ -338,6 +338,52 @@ test('collectCommonNames: review merged before return; logReview logs on demand'
   resetStubs();
 });
 
+test('collectCommonNames: review cost/tokens surface in bySource and the log record', async () => {
+  const logged = [];
+  reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
+  llmBackend.getCompleter = async () => {
+    const complete = async () => {
+      complete.calls.push({ ms: 10, cost: 0.003, tokens: { input: 17000, output: 50 } });
+      return JSON.stringify({ add: ['llm catch'], remove: [] });
+    };
+    complete.calls = [];
+    return complete;
+  };
+  stubCommonNames({ wikipedia: ['keeper'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: [],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { bySource, logReview } = await collectCommonNames(entity, []);
+  assert.strictEqual(bySource.llmCost, 0.006);
+  assert.deepStrictEqual(bySource.llmTokens, { input: 34000, output: 100 });
+  logReview();
+  assert.strictEqual(logged[0].record.llmCost, 0.006);
+  assert.deepStrictEqual(logged[0].record.llmTokens, { input: 34000, output: 100 });
+  resetStubs();
+});
+
+test('collectCommonNames: stub completers without usage stats leave llmCost unset', async () => {
+  llmBackend.getCompleter = async () =>
+    async () => JSON.stringify({ add: ['llm catch'], remove: [] });
+  stubCommonNames({ wikipedia: ['keeper'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: [],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { bySource } = await collectCommonNames(entity, []);
+  assert.deepStrictEqual(bySource.llmAdded, ['llm catch']);
+  assert.strictEqual(bySource.llmCost, undefined);
+  assert.strictEqual(bySource.llmTokens, undefined);
+  resetStubs();
+});
+
 test('collectCommonNames: without logReview the applied review is recorded nowhere', async () => {
   const logged = [];
   reviewLog.appendReviewRecord = (record, logPath) => logged.push({ record, logPath });
@@ -413,6 +459,31 @@ test('collectCommonNames: review runs without callbacks; no proposal leaves logR
   assert.strictEqual(logReview, null);
   assert.deepStrictEqual(bySource.wikipedia, ['wiki name']);
   assert.deepStrictEqual(names, ['wiki name']);
+  resetStubs();
+});
+
+test('collectCommonNames: review cost surfaces even when the review proposes nothing', async () => {
+  llmBackend.getCompleter = async () => {
+    const complete = async () => {
+      complete.calls.push({ ms: 10, cost: 0.002, tokens: { input: 17000, output: 60 } });
+      return '[]';
+    };
+    complete.calls = [];
+    return complete;
+  };
+  stubCommonNames({ wikipedia: ['wiki name'], extract: 'Wiki text about the plant.' });
+  const entity = {
+    id: 'Q1',
+    scientificName: 'Test thing',
+    commonNames: [],
+    aliases: [],
+    wikipediaTitle: 'Test thing'
+  };
+  const { bySource, logReview } = await collectCommonNames(entity, []);
+  assert.strictEqual(logReview, null);
+  assert.strictEqual(bySource.llmAdded, undefined);
+  assert.strictEqual(bySource.llmCost, 0.004);
+  assert.deepStrictEqual(bySource.llmTokens, { input: 34000, output: 120 });
   resetStubs();
 });
 

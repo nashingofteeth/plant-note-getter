@@ -13,8 +13,27 @@ const { checkAndPruneTag, printHierarchy, resolveTagForNote } = require('./src/t
 const { askYesNo } = require('./src/prompt');
 
 function printSection(title) {
-  const line = '\u2500'.repeat(3) + ' ' + title + ' ' + '\u2500'.repeat(Math.max(1, 60 - title.length - 4));
+  const line = '─'.repeat(3) + ' ' + title + ' ' + '─'.repeat(Math.max(1, 60 - title.length - 4));
   console.log('\n' + line + '\n');
+}
+
+// Cost suffix for the LLM review line, e.g. ` [$0.0060, 17.3k in / 0.2k out]`.
+// Empty when the completer reported no usage (stub completers, unknown).
+function formatTokens(n) {
+  if (typeof n !== 'number') return null;
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+}
+
+function formatReviewCost(bySource) {
+  if (typeof bySource.llmCost !== 'number') return null;
+  const parts = [`$${bySource.llmCost.toFixed(4)}`];
+  const tokens = bySource.llmTokens || {};
+  const input = formatTokens(tokens.input);
+  const output = formatTokens(tokens.output);
+  if (input !== null || output !== null) {
+    parts.push(`${input === null ? '?' : input} in / ${output === null ? '?' : output} out`);
+  }
+  return parts.join(', ');
 }
 
 async function main() {
@@ -105,6 +124,8 @@ async function main() {
       }
     });
     const llmAdded = bySource.llmAdded || [];
+    const reviewCost = formatReviewCost(bySource);
+    if (reviewCost !== null) console.log(`\n  Review cost: ${reviewCost}`);
 
     printSection('Entity');
 

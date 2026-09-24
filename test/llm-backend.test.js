@@ -355,6 +355,55 @@ test('opencode: sends basic auth when OPENCODE_SERVER_PASSWORD is set', async ()
   }
 });
 
+test('opencode: completer records per-call cost and tokens on complete.calls', async () => {
+  useOpencode();
+  useOpencodeServer((url, init) => {
+    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
+    if (url.endsWith('/message')) {
+      return okJson({
+        info: { structured: { add: [] }, cost: 0.006, tokens: { input: 17314, output: 140 } },
+        parts: []
+      });
+    }
+    if (init.method === 'DELETE') return okJson(true);
+    return okJson({});
+  });
+  const complete = await backend.getCompleter();
+  assert.deepStrictEqual(complete.calls, []);
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.strictEqual(complete.calls.length, 1);
+  assert.strictEqual(complete.calls[0].cost, 0.006);
+  assert.deepStrictEqual(complete.calls[0].tokens, { input: 17314, output: 140 });
+  assert.strictEqual(typeof complete.calls[0].ms, 'number');
+});
+
+test('opencode: missing cost/tokens in info records nulls, not zeros', async () => {
+  useOpencode();
+  useOpencodeServer((url, init) => {
+    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
+    if (url.endsWith('/message')) return okJson({ info: {}, parts: [{ type: 'text', text: '{}' }] });
+    if (init.method === 'DELETE') return okJson(true);
+    return okJson({});
+  });
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user');
+  assert.strictEqual(complete.calls[0].cost, null);
+  assert.deepStrictEqual(complete.calls[0].tokens, { input: null, output: null });
+});
+
+test('ollama: completer records eval counts with zero cost on complete.calls', async () => {
+  useOllama();
+  stubFetch((url) => {
+    if (url.endsWith('/api/tags')) return okJson({ models: [] });
+    return okJson({ message: { content: '{}' }, prompt_eval_count: 100, eval_count: 20 });
+  });
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.strictEqual(complete.calls.length, 1);
+  assert.strictEqual(complete.calls[0].cost, 0);
+  assert.deepStrictEqual(complete.calls[0].tokens, { input: 100, output: 20 });
+});
+
 test('parseOpencodeModel splits on the first slash and rejects malformed specs', () => {
   assert.deepStrictEqual(backend.parseOpencodeModel('anthropic/claude-sonnet-4-5'), {
     providerID: 'anthropic',

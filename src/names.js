@@ -144,6 +144,10 @@ async function collectCommonNames(entity, candidateEntities, { onReviewStart } =
         },
         { completer, maxInputChars: config.LLM_MAX_INPUT_CHARS }
       );
+      // Cost is display-only and applies whether or not the review proposed
+      // anything — record it before a no-op review is discarded below.
+      if (reviewed.cost !== null && reviewed.cost !== undefined) bySource.llmCost = reviewed.cost;
+      if (reviewed.tokens) bySource.llmTokens = reviewed.tokens;
       if (!(reviewed.added.length || reviewed.removed.length)) reviewed = null;
     }
     if (reviewed) {
@@ -166,7 +170,9 @@ async function collectCommonNames(entity, candidateEntities, { onReviewStart } =
             extractLength: wikiArticle.extract.length,
             baseNames: bySource.wikipediaBase,
             llmAdded: reviewed.added,
-            llmRemoved: removedWithCategories
+            llmRemoved: removedWithCategories,
+            llmCost: reviewed.cost,
+            llmTokens: reviewed.tokens
           },
           config.REVIEW_LOG_PATH
         );

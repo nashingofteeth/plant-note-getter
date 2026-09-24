@@ -134,7 +134,11 @@ async function buildOpencodeCompleter() {
     if (process.env.OPENCODE_AUTOSTART === 'false') throw err;
     await module.exports._spawnServe(baseUrl);
   }
-  return async function complete(systemPrompt, userPrompt, options = {}) {
+  // Per-call usage stats for cost reporting (see reviewWikipediaNames):
+  // each entry is { ms, cost, tokens } with tokens as { input, output }.
+  // Unknown values stay null so callers can skip display instead of
+  // printing a misleading $0.00.
+  async function complete(systemPrompt, userPrompt, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...basicAuthHeaders() };
     const created = await fetch(`${baseUrl}/session`, {
       method: 'POST',
@@ -150,6 +154,7 @@ async function buildOpencodeCompleter() {
     if (!sessionId) {
       throw new Error('opencode session create returned no session id');
     }
+    const t0 = Date.now();
     try {
       const body = {
         model: parsed,
@@ -169,7 +174,18 @@ async function buildOpencodeCompleter() {
         throw new Error(`opencode chat failed: HTTP ${res.status}`);
       }
       const data = await res.json();
-      return extractCompletion(data);
+      const text = extractCompletion(data);
+      const info = (data && data.info) || {};
+      const tokens = info.tokens || {};
+      complete.calls.push({
+        ms: Date.now() - t0,
+        cost: typeof info.cost === 'number' ? info.cost : null,
+        tokens: {
+          input: typeof tokens.input === 'number' ? tokens.input : null,
+          output: typeof tokens.output === 'number' ? tokens.output : null
+        }
+      });
+      return text;
     } finally {
       // One-shot session: best-effort cleanup, failures are harmless.
       fetch(`${baseUrl}/session/${sessionId}`, {
@@ -178,7 +194,9 @@ async function buildOpencodeCompleter() {
         signal: AbortSignal.timeout(5000)
       }).catch(() => {});
     }
-  };
+  }
+  complete.calls = [];
+  return complete;
 }
 
 // External Ollama daemon completer. Talks to the daemon's native /api/chat
@@ -199,7 +217,7 @@ async function buildOllamaCompleter() {
   if (!probeRes.ok) {
     throw new Error(`ollama daemon probe failed: HTTP ${probeRes.status}`);
   }
-  return async function complete(systemPrompt, userPrompt, options = {}) {
+  async function complete(systemPrompt, userPrompt, options = {}) {
     const body = {
       model,
       messages: [
@@ -211,6 +229,7 @@ async function buildOllamaCompleter() {
       options: { temperature: 0, num_predict: 2048 }
     };
     if (options && options.jsonSchema) body.format = options.jsonSchema;
+    const t0 = Date.now();
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,8 +241,19 @@ async function buildOllamaCompleter() {
     }
     const data = await res.json();
     const content = data && data.message && data.message.content;
+    // Local daemon: no cost; token counts when the daemon reports them.
+    complete.calls.push({
+      ms: Date.now() - t0,
+      cost: 0,
+      tokens: {
+        input: typeof data.prompt_eval_count === 'number' ? data.prompt_eval_count : null,
+        output: typeof data.eval_count === 'number' ? data.eval_count : null
+      }
+    });
     return typeof content === 'string' ? content.trim() : '';
-  };
+  }
+  complete.calls = [];
+  return complete;
 }
 
 async function buildCompleter() {

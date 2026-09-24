@@ -390,17 +390,35 @@ function buildRemovePrompt(text, base, taxon, rank) {
 //   options.completer   async (system, user, { jsonSchema }) => string (from
 //                       llm-backend); null disables.
 //   options.maxInputChars cap for the extract sent to the model (default 16000)
-// Returns { names, added, removed, reason } where names is the final
-// Wikipedia list (base minus removals plus additions, order preserved),
-// added/removed are applied LLM decisions for CLI display and logging.
+// Returns { names, added, removed, reason, cost, tokens } where names is
+// the final Wikipedia list (base minus removals plus additions, order
+// preserved), added/removed are applied LLM decisions for CLI display and
+// logging. cost/tokens summarize the completer's own per-call stats
+// (completer.calls entries made during this review): cost is a summed
+// number or null when unknown (e.g. stub completers), tokens is
+// { input, output } with nulls where unreported.
+function collectCallStats(completer, callsBefore) {
+  const calls = (completer && Array.isArray(completer.calls) && completer.calls.slice(callsBefore)) || [];
+  let cost = null;
+  let input = null;
+  let output = null;
+  for (const c of calls) {
+    if (typeof c.cost === 'number') cost = (cost === null ? 0 : cost) + c.cost;
+    if (c.tokens && typeof c.tokens.input === 'number') input = (input === null ? 0 : input) + c.tokens.input;
+    if (c.tokens && typeof c.tokens.output === 'number') output = (output === null ? 0 : output) + c.tokens.output;
+  }
+  return { cost, tokens: input === null && output === null ? null : { input, output } };
+}
+
 async function reviewWikipediaNames(input = {}, options = {}) {
   const extract = input.extract || '';
   const base = [...(input.baseNames || [])];
   const completer = options.completer || input.completer || null;
-  const result = { names: [...base], added: [], removed: [], reason: 'llm-disabled' };
+  const result = { names: [...base], added: [], removed: [], reason: 'llm-disabled', cost: null, tokens: null };
 
   if (!completer) return result;
   if (!extract) return result;
+  const callsBefore = Array.isArray(completer.calls) ? completer.calls.length : 0;
 
   const capped = capInput(extract, options.maxInputChars || input.maxInputChars || 16000);
   let firstError = null;
@@ -475,6 +493,10 @@ async function reviewWikipediaNames(input = {}, options = {}) {
       added.push(name);
     }
   }
+
+  const stats = collectCallStats(completer, callsBefore);
+  result.cost = stats.cost;
+  result.tokens = stats.tokens;
 
   if (!added.length && !removed.length) {
     if (firstError) {

@@ -476,6 +476,48 @@ test('reviewWikipediaNames: short unparseable output stays llm-empty (no over-fl
   assert.strictEqual(reason, 'llm-empty');
 });
 
+test('reviewWikipediaNames: cost/tokens aggregate completer.calls made during the review', async () => {
+  const completer = async () => {
+    completer.calls.push(
+      completer.calls.length === 1
+        ? { ms: 100, cost: 0.004, tokens: { input: 17000, output: 120 } }
+        : { ms: 200, cost: 0.002, tokens: { input: 17500, output: 80 } }
+    );
+    return '{"add":["boundary oak"],"remove":[]}';
+  };
+  // A pre-existing entry from an earlier review must not leak in.
+  completer.calls = [{ ms: 1, cost: 0.5, tokens: { input: 1, output: 1 } }];
+  const { names, reason, cost, tokens } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: BASE },
+    { completer }
+  );
+  assert.deepStrictEqual(names, [...BASE, 'boundary oak']);
+  assert.strictEqual(reason, 'llm-reviewed');
+  assert.strictEqual(cost, 0.006);
+  assert.deepStrictEqual(tokens, { input: 34500, output: 200 });
+});
+
+test('reviewWikipediaNames: cost/tokens cover only this review on a shared completer', async () => {
+  const completer = async () => '{"add":[],"remove":[]}';
+  completer.calls = [{ ms: 1, cost: 0.5, tokens: { input: 1, output: 1 } }];
+  const { reason, cost } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: BASE },
+    { completer }
+  );
+  assert.strictEqual(reason, 'llm-empty');
+  // The pre-existing entry predates this review, so nothing is attributed.
+  assert.strictEqual(cost, null);
+});
+
+test('reviewWikipediaNames: stub completers without calls yield null cost', async () => {
+  const { cost, tokens } = await reviewWikipediaNames(
+    { extract: EXTRACT, baseNames: [] },
+    { completer: completerReturning('["boundary oak"]') }
+  );
+  assert.strictEqual(cost, null);
+  assert.strictEqual(tokens, null);
+});
+
 test('REMOVE_SYSTEM_PROMPT: verdict contract, categories, guardrails, keep-bias', () => {
   assert.match(REMOVE_SYSTEM_PROMPT, /decide keep or remove/);
   assert.match(REMOVE_SYSTEM_PROMPT, /one object per entry/);
