@@ -409,6 +409,11 @@ const TESTS = [
     expected: ['Hosta', 'hostas', 'plantain lilies'],
   },
   {
+    name: 'Agrostis (provenance tail after historical name dropped; bare place dropped; species-scoped name retained for reviewer)',
+    extract: 'Agrostis (bent, bentgrass) is a large and very nearly cosmopolitan genus of plants in the grass family, found in nearly all the countries in the world.\nAgrostis stolonifera is the most commonly used species of Agrostis. Historically, it was often called Orcheston long grass, after a village on Salisbury Plain, England.',
+    expected: ['bent', 'bentgrass', 'Orcheston long grass'],
+  },
+  {
     name: 'Populus tremula (hybrid "×" notation filtered; captures grey poplar)',
     extract: 'Populus tremula (commonly called aspen, common aspen) is a species. Its hybrid with Populus alba, known as grey poplar, Populus × canescens, is widely found in Europe.',
     expected: ['aspen', 'common aspen', 'grey poplar'],

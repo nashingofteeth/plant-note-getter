@@ -443,8 +443,10 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     if (!segment) continue;
     // Subordinator-led clause fragments ("although the term is also",
     // "since 1990", "due to its unusual inflorescences", "in contrast to
-    // the he balsam") are explanations, not names.
-    if (/^(?:although|though|while|whereas|because|since|if|when|where|due\s+to|in\s+contrast\s+to)\b/i.test(segment)) {
+    // the he balsam", "after a village on Salisbury Plain" — Agrostis
+    // "often called Orcheston long grass, after a village...") are
+    // explanations, not names. No genuine common name starts with "after".
+    if (/^(?:although|though|while|whereas|because|since|if|when|where|after|due\s+to|in\s+contrast\s+to)\b/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'subordinate-clause' });
       continue;
     }
@@ -704,7 +706,7 @@ const GENERIC_JUNK = new Set([
   'taxa', 'taxon',
 ]);
 
-const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|new\s+zealand|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia)$/i;
+const GEOGRAPHIC_JUNK = /^(?:found\s+in|native\s+to|subcontinent|asia|europe|boreal|temperate|tropical|regions|northern|southern|eastern|africa|americas|eurasia|oceania|australia|antarctica|atlantic|mediterranean|brazil|japan|china|india|mexico|canada|new\s+zealand|european|american|african|asian|arctic|alpine|subtropical|south\s+america|north\s+america|central\s+america|south\s+africa|south-east\s+asia|south-eastern\s+asia|southeast\s+asia|southeastern\s+asia|england|scotland|wales|britain|great\s+britain|united\s+kingdom|uk)$/i;
 
 const PROCEDURE_WORDS = /^(?:consists|grows|ranging|occurs|includes|especially|within|found|cultivated|grown|harvested|used|produced|distributed|sold|shipped|marketed|selected|applied|obtained|derived|extracted|processed|manufactured|imported|exported|introduced|naturalized|endemic|originating|hailing|coming|native\s+to|referred\s+to\s+as\s+a|of\s+flowering\s+plants|of\s+plants|denoting|often)/i;
 

@@ -180,6 +180,13 @@ const REMOVE_SYSTEM_PROMPT =
   "them.\n" +
   'When unsure whether an entry is a genuine name, verdict keep.\n' +
   'Remove rules (verdict remove, with a category):\n' +
+  "- 'member-species': a common name the article attributes to a MEMBER of " +
+  "this taxon rather than to the taxon itself — e.g. in a genus article a " +
+  "name stated for one member species ('Orcheston long grass' stated for " +
+  "Agrostis stolonifera in the Agrostis article; 'creeping bent', " +
+  "'colonial bent', 'velvet bent' for their species) is never a name of " +
+  'the genus — remove it. Variety/subspecies/cultivar-group names OF this ' +
+  'taxon stay keep (see keep rules).\n' +
   "- 'condition-or-process': livestock conditions and diseases stated in " +
   "the article ('fescue foot'), and modes, processes, or mechanisms " +
   "('vertical transmission') — these name an ailment or a mechanism, not " +
@@ -188,7 +195,10 @@ const REMOVE_SYSTEM_PROMPT =
   "- 'broken-capture': sentence fragments, ungrammatical spans, or stray " +
   "phrases from sloppy extraction (e.g. 'although once included', 'which " +
   "means shut happy', 'To add to the confusion', 'are also known as " +
-  "mimosa'), including detached place fragments ('from Verona'), entries " +
+  "mimosa'), including detached place fragments ('from Verona') and " +
+  "provenance explanations ('after a village on Salisbury Plain' from " +
+  "'often called Orcheston long grass, after a village on Salisbury " +
+  "Plain, England' — the name ends before the comma), entries " +
   'wrapped in stray quotation marks (e.g. \'"figwort"\'), and phrases ' +
   "about other members of the family (e.g. 'other members of the " +
   'Scrophulariaceae\'). An entry that starts with a verb, conjunction, or ' +
@@ -359,7 +369,11 @@ function buildRemovePrompt(text, base, taxon, rank) {
     'plant parts, color names, alternative literal-translation glosses, ' +
     "sentence-fragment extractions (naming scaffolding like 'plant is " +
     "called X' when the bare name X is also listed — remove the fragment, " +
-    'keep the bare name), and mode/process terms; keep genuine names of ' +
+    'keep the bare name; provenance tails like \'after a village on ' +
+    "Salisbury Plain'), bare places with no plant word ('England'), " +
+    'names of member species stated for one member rather than this taxon ' +
+    "itself ('Orcheston long grass' for Agrostis stolonifera in an Agrostis " +
+    'genus article), and mode/process terms; keep genuine names of ' +
     'the taxon.'
   );
 }
