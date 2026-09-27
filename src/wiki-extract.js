@@ -713,6 +713,11 @@ const PROCEDURE_WORDS = /^(?:consists|grows|ranging|occurs|includes|especially|w
 function isGenericJunk(name) {
   const lower = name.toLowerCase().trim();
   if (GENERIC_JUNK.has(lower)) return true;
+  // Ecological/taxonomic role descriptors whose head noun is the rank word
+  // "species" ("pioneer species" from Pinus rigida's "known as a pioneer
+  // species", "invasive species", "dioecious species") describe the plant,
+  // not name it. No plant common name ends in the bare head noun "species".
+  if (/(?:^|\s)species$/.test(lower)) return true;
   if (/^[a-z]+s?$/.test(lower) && lower.length <= 4) {
     if (/^(?:tree|shrub|herb|plant|grass|weed|vine|fern|moss|bush|crop|flower|leaf|seed|root|stem|fruit|bark|wood)$/.test(lower)) return true;
   }
