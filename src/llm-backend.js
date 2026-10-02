@@ -1,12 +1,18 @@
 // LLM completer (advisory second pass for common-name extraction).
 //
 // Two interchangeable backends, selected by LLM_BACKEND:
-//   - 'opencode' (default): remote models through the opencode server HTTP
-//     API. LLM_MODEL is 'provider/model' (e.g. anthropic/claude-sonnet-4-5);
-//     credentials live in opencode itself — no API keys in this repo. If no
-//     server is reachable, one is auto-started as a detached `opencode serve`
-//     daemon unless OPENCODE_AUTOSTART=false. JSON output is enforced by the
-//     server's structured-output format (json_schema) instead of a grammar.
+//   - 'opencode' (default): remote models through the opencode V2 server.
+//     LLM_MODEL is 'provider/model' (e.g. anthropic/claude-sonnet-4-5);
+//     credentials live in opencode itself — no API keys in this repo.
+//     Requests go through the `opencode api` CLI, which owns service
+//     discovery, authentication, and auto-start of the background service.
+//     Set OPENCODE_SERVER_URL to target a specific server (passed to
+//     `opencode api --server`); OPENCODE_SERVER_PASSWORD authenticates
+//     against a password-protected server. Each completion runs in its own
+//     one-shot session: create (with the model) → generate text → delete.
+//     The V2 generate route has no structured-output field, so the JSON
+//     schema is appended to the prompt and the reviewer's tolerant parser
+//     handles fences/prose.
 //   - 'ollama': local Ollama daemon over HTTP (LLM_SERVER_URL, model
 //     LLM_MODEL) with grammar-constrained JSON output.
 // No in-process ML stack, no API keys. The completer is a lazy singleton:
@@ -16,17 +22,68 @@
 const { spawn } = require('child_process');
 
 const DEFAULT_SERVER_URL = 'http://localhost:11434';
-const DEFAULT_OPENCODE_URL = 'http://localhost:4096';
-const OPENCODE_AUTOSTART_TIMEOUT = 15000;
 
-// Basic auth for a password-protected opencode server
-// (OPENCODE_SERVER_PASSWORD / OPENCODE_SERVER_USERNAME, mirroring `opencode
-// serve`'s own env vars). Empty when no password is set.
-function basicAuthHeaders() {
-  const password = process.env.OPENCODE_SERVER_PASSWORD || '';
-  if (!password) return {};
-  const user = process.env.OPENCODE_SERVER_USERNAME || 'opencode';
-  return { Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` };
+// Spawn `opencode api <args>` for one request and capture its output. Kept as
+// a named export so tests can stub the transport without a real CLI. Resolves
+// { stdout, stderr, code }; rejects only when the process cannot be spawned.
+function _runApi(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('opencode', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...(options.env || {}) }
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ stdout, stderr, code }));
+  });
+}
+
+// Build the `opencode api` argv for one request. With OPENCODE_SERVER_URL set
+// the CLI is pinned to that server (no discovery/auto-start); otherwise it
+// discovers the shared background service.
+function buildApiArgs(method, apiPath, body) {
+  const args = ['api', method, apiPath];
+  const serverUrl = (process.env.OPENCODE_SERVER_URL || '').trim().replace(/\/+$/, '');
+  if (serverUrl) args.push('--server', serverUrl);
+  if (body !== undefined) args.push('--data', JSON.stringify(body));
+  return args;
+}
+
+// One request against the opencode V2 server through `opencode api`. Returns
+// the parsed JSON body; throws the server's message on a non-zero exit so the
+// reviewer records reason 'completer-error' instead of parsing junk.
+async function runOpencodeApi(method, apiPath, body) {
+  const env = {};
+  if (process.env.OPENCODE_SERVER_PASSWORD) env.OPENCODE_PASSWORD = process.env.OPENCODE_SERVER_PASSWORD;
+  const { stdout, stderr, code } = await module.exports._runApi(
+    buildApiArgs(method, apiPath, body),
+    { env }
+  );
+  const text = String(stdout || '').trim();
+  let parsed = null;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      parsed = null;
+    }
+  }
+  if (code !== 0) {
+    const stderrLine = String(stderr || '').trim().split('\n')[0];
+    const message =
+      (parsed && parsed.message) || stderrLine || `opencode api exited with code ${code}`;
+    throw new Error(`opencode api ${method.toUpperCase()} ${apiPath} failed: ${message}`);
+  }
+  return parsed;
 }
 
 // Split an LLM_MODEL of the form 'provider/model' (first slash separates, so
@@ -37,87 +94,14 @@ function parseOpencodeModel(model) {
   return { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) };
 }
 
-// Probe the opencode server's health endpoint. Throws on unreachable/!ok so
-// callers can distinguish "not up yet" from "up".
-async function healthCheck(baseUrl) {
-  const res = await fetch(`${baseUrl}/global/health`, {
-    headers: basicAuthHeaders(),
-    signal: AbortSignal.timeout(5000)
-  });
-  if (!res.ok) {
-    throw new Error(`opencode server probe failed: HTTP ${res.status}`);
-  }
-}
-
-// Start a detached `opencode serve` daemon for baseUrl and poll /global/health
-// until it answers. Only sensible for local hostnames — a remote opencode
-// server cannot be spawned from here. The daemon is intentionally left
-// running after this process exits so later runs reuse it.
-async function _spawnServe(baseUrl) {
-  const url = new URL(baseUrl);
-  const hostname = url.hostname || '127.0.0.1';
-  const port = url.port || '4096';
-  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) {
-    throw new Error(
-      `opencode server unreachable at ${baseUrl} and OPENCODE_AUTOSTART only ` +
-        'supports local hosts — start it manually with `opencode serve`'
-    );
-  }
-  const child = spawn('opencode', ['serve', '--hostname', hostname, '--port', port], {
-    stdio: 'ignore',
-    detached: true
-  });
-  child.unref();
-  const deadline = Date.now() + OPENCODE_AUTOSTART_TIMEOUT;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      await healthCheck(baseUrl);
-      return;
-    } catch {
-      // daemon not up yet — keep polling until the deadline
-    }
-  }
-  throw new Error(
-    `opencode serve did not become healthy on ${baseUrl} within ${OPENCODE_AUTOSTART_TIMEOUT}ms`
-  );
-}
-
-// Pull the completion text out of the message endpoint response. With
-// structured output the validated JSON arrives as info.structured (any JSON
-// value, stringified here when needed); otherwise assistant text parts are
-// joined. Message-level error shapes (StructuredOutputError,
-// ProviderAuthError, ...) surface as thrown errors so the reviewer records
-// reason 'completer-error' instead of parsing junk.
-function extractCompletion(data) {
-  const info = data && data.info;
-  if (info && info.error) {
-    const detail = info.error.message ? `: ${info.error.message}` : '';
-    throw new Error(`opencode chat failed: ${info.error.name || 'error'}${detail}`);
-  }
-  const structured = info && info.structured;
-  if (structured !== undefined && structured !== null) {
-    return typeof structured === 'string' ? structured.trim() : JSON.stringify(structured);
-  }
-  const parts = (data && data.parts) || [];
-  return parts
-    .filter((p) => p && p.type === 'text' && typeof p.text === 'string')
-    .map((p) => p.text)
-    .join('\n')
-    .trim();
-}
-
-// External opencode server completer. Each completion runs in its own
-// one-shot session (created per call, deleted afterwards) so the two reviewer
-// passes stay independent. Structured output via body.format replaces the
-// Ollama grammar constraint; no temperature control exists on this API.
-// No default model: without LLM_MODEL in 'provider/model' form there is
-// nothing to complete with, so this throws and getCompleter below degrades
-// to a null completer. A cheap /global/health probe at build time turns an
-// unreachable server into either an auto-started daemon (default) or a null
-// completer (OPENCODE_AUTOSTART=false) instead of failing on the first review.
+// External opencode V2 completer. Each completion runs in its own one-shot
+// session (created with the model, deleted afterwards) so the two reviewer
+// passes stay independent. No default model: without LLM_MODEL in
+// 'provider/model' form there is nothing to complete with, so this throws and
+// getCompleter below degrades to a null completer. A cheap /api/info request
+// at build time turns an unreachable server (or a missing `opencode` CLI)
+// into a null completer instead of failing on the first review.
 async function buildOpencodeCompleter() {
-  const baseUrl = (process.env.OPENCODE_SERVER_URL || DEFAULT_OPENCODE_URL).replace(/\/+$/, '');
   const model = (process.env.LLM_MODEL || '').trim();
   if (!model) {
     throw new Error('LLM_MODEL is not set — reviewer disabled');
@@ -128,71 +112,43 @@ async function buildOpencodeCompleter() {
       `LLM_MODEL '${model}' is not 'provider/model' — the opencode backend needs e.g. anthropic/claude-sonnet-4-5`
     );
   }
-  try {
-    await healthCheck(baseUrl);
-  } catch (err) {
-    if (process.env.OPENCODE_AUTOSTART === 'false') throw err;
-    await module.exports._spawnServe(baseUrl);
-  }
+  await runOpencodeApi('get', '/api/info');
+
+  const modelRef = { providerID: parsed.providerID, id: parsed.modelID };
+
   // Per-call usage stats for cost reporting (see reviewWikipediaNames):
   // each entry is { ms, cost, tokens } with tokens as { input, output }.
-  // Unknown values stay null so callers can skip display instead of
-  // printing a misleading $0.00.
+  // The V2 generate route reports no usage, so cost/tokens stay null and
+  // callers skip display instead of printing a misleading $0.00.
   async function complete(systemPrompt, userPrompt, options = {}) {
-    const headers = { 'Content-Type': 'application/json', ...basicAuthHeaders() };
-    const created = await fetch(`${baseUrl}/session`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ title: 'plant-note-getter reviewer' }),
-      signal: AbortSignal.timeout(30000)
+    const t0 = Date.now();
+    const created = await runOpencodeApi('post', '/api/session', {
+      title: 'plant-note-getter reviewer',
+      model: modelRef
     });
-    if (!created.ok) {
-      throw new Error(`opencode session create failed: HTTP ${created.status}`);
-    }
-    const session = await created.json();
-    const sessionId = session && session.id;
+    const sessionId = created && created.data && created.data.id;
     if (!sessionId) {
       throw new Error('opencode session create returned no session id');
     }
-    const t0 = Date.now();
     try {
-      const body = {
-        model: parsed,
-        system: systemPrompt,
-        parts: [{ type: 'text', text: userPrompt }]
-      };
+      let prompt = systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt;
       if (options && options.jsonSchema) {
-        body.format = { type: 'json_schema', schema: options.jsonSchema };
+        prompt += `\n\nRespond with a single JSON object matching this JSON Schema:\n${JSON.stringify(
+          options.jsonSchema
+        )}`;
       }
-      const res = await fetch(`${baseUrl}/session/${sessionId}/message`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(600000)
+      const generated = await runOpencodeApi('post', `/api/session/${sessionId}/generate`, {
+        prompt
       });
-      if (!res.ok) {
-        throw new Error(`opencode chat failed: HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      const text = extractCompletion(data);
-      const info = (data && data.info) || {};
-      const tokens = info.tokens || {};
-      complete.calls.push({
-        ms: Date.now() - t0,
-        cost: typeof info.cost === 'number' ? info.cost : null,
-        tokens: {
-          input: typeof tokens.input === 'number' ? tokens.input : null,
-          output: typeof tokens.output === 'number' ? tokens.output : null
-        }
-      });
+      const text =
+        generated && generated.data && typeof generated.data.text === 'string'
+          ? generated.data.text.trim()
+          : '';
+      complete.calls.push({ ms: Date.now() - t0, cost: null, tokens: null });
       return text;
     } finally {
       // One-shot session: best-effort cleanup, failures are harmless.
-      fetch(`${baseUrl}/session/${sessionId}`, {
-        method: 'DELETE',
-        headers,
-        signal: AbortSignal.timeout(5000)
-      }).catch(() => {});
+      runOpencodeApi('delete', `/api/session/${sessionId}`).catch(() => {});
     }
   }
   complete.calls = [];
@@ -283,8 +239,8 @@ module.exports = {
   getCompleter,
   resetCompleter,
   DEFAULT_SERVER_URL,
-  DEFAULT_OPENCODE_URL,
   parseOpencodeModel,
-  extractCompletion,
-  _spawnServe
+  buildApiArgs,
+  runOpencodeApi,
+  _runApi
 };

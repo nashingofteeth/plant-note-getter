@@ -7,7 +7,6 @@ const ENV_KEYS = [
   'LLM_SERVER_URL',
   'LLM_MODEL',
   'OPENCODE_SERVER_URL',
-  'OPENCODE_AUTOSTART',
   'OPENCODE_SERVER_PASSWORD',
   'OPENCODE_SERVER_USERNAME'
 ];
@@ -15,7 +14,7 @@ const savedEnv = {};
 for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
 const originalFetch = global.fetch;
 const originalWarn = console.warn;
-const originalSpawnServe = backend._spawnServe;
+const originalRunApi = backend._runApi;
 
 afterEach(() => {
   for (const k of ENV_KEYS) {
@@ -24,7 +23,7 @@ afterEach(() => {
   }
   global.fetch = originalFetch;
   console.warn = originalWarn;
-  backend._spawnServe = originalSpawnServe;
+  backend._runApi = originalRunApi;
   backend.resetCompleter();
 });
 
@@ -38,7 +37,6 @@ function useOllama() {
 function useOpencode() {
   process.env.LLM_BACKEND = 'opencode';
   delete process.env.OPENCODE_SERVER_URL;
-  delete process.env.OPENCODE_AUTOSTART;
   delete process.env.OPENCODE_SERVER_PASSWORD;
   delete process.env.OPENCODE_SERVER_USERNAME;
   process.env.LLM_MODEL = 'test-provider/test-model';
@@ -59,13 +57,40 @@ const okJson = (obj) => ({ ok: true, status: 200, json: async () => obj });
 
 const SCHEMA = { type: 'object', properties: { add: { type: 'array' } } };
 
-function useOpencodeServer(handler) {
-  const calls = stubFetch((url, init) => {
-    if (String(url).endsWith('/global/health')) return okJson({ healthy: true, version: 'test' });
-    return handler(url, init);
-  });
+// Stub the `opencode api` transport. Records { args, options } per call.
+function stubApi(handler) {
+  const calls = [];
+  console.warn = () => {};
+  backend._runApi = async (args, options) => {
+    const call = { args, options };
+    calls.push(call);
+    return handler(args, options);
+  };
   return calls;
 }
+
+// Read the JSON payload after `--data` from an `opencode api` argv.
+const dataArg = (args) => JSON.parse(args[args.indexOf('--data') + 1]);
+
+const okApi = (body) => ({ stdout: JSON.stringify(body), stderr: '', code: 0 });
+const errApi = (body, http = 'HTTP 500 Internal Server Error') => ({
+  stdout: body === undefined ? '' : JSON.stringify(body),
+  stderr: http,
+  code: 1
+});
+
+// Happy-path handler: probe, create session, generate, delete.
+function happyApiHandler({ text = '{"add":[],"remove":[]}', create = { data: { id: 'ses_abc' } } } = {}) {
+  return (args) => {
+    if (args[1] === 'get' && args[2] === '/api/info') return okApi({ version: '2' });
+    if (args[1] === 'post' && args[2] === '/api/session') return okApi(create);
+    if (args[1] === 'post' && /\/generate$/.test(args[2])) return okApi({ data: { text } });
+    if (args[1] === 'delete') return okApi({ data: true });
+    return okApi({});
+  };
+}
+
+// --- ollama backend (unchanged HTTP transport) ---------------------------------
 
 test('ollama: builds the expected /api/chat request and returns trimmed content', async () => {
   useOllama();
@@ -167,230 +192,6 @@ test('ollama: missing message content resolves to empty string', async () => {
   assert.strictEqual(await complete('sys', 'user', {}), '');
 });
 
-test('opencode: builds session/message requests and returns stringified structured output', async () => {
-  useOpencode();
-  const calls = useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_abc' });
-    if (url.endsWith('/message')) {
-      return okJson({
-        info: { id: 'msg_1', structured: { add: ['X'], remove: [] } },
-        parts: [{ type: 'text', text: '  {"add":["X"],"remove":[]}  ' }]
-      });
-    }
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  assert.strictEqual(typeof complete, 'function');
-  const out = await complete('sys', 'user', { jsonSchema: SCHEMA });
-  assert.strictEqual(out, '{"add":["X"],"remove":[]}');
-  assert.strictEqual(calls.length, 4);
-  assert.strictEqual(calls[0].url, 'http://localhost:4096/global/health');
-  const create = calls[1];
-  assert.strictEqual(create.url, 'http://localhost:4096/session');
-  assert.strictEqual(create.init.method, 'POST');
-  assert.deepStrictEqual(JSON.parse(create.init.body), { title: 'plant-note-getter reviewer' });
-  const chat = calls[2];
-  assert.strictEqual(chat.url, 'http://localhost:4096/session/ses_abc/message');
-  assert.strictEqual(chat.init.method, 'POST');
-  assert.deepStrictEqual(JSON.parse(chat.init.body), {
-    model: { providerID: 'test-provider', modelID: 'test-model' },
-    system: 'sys',
-    parts: [{ type: 'text', text: 'user' }],
-    format: { type: 'json_schema', schema: SCHEMA }
-  });
-  assert.strictEqual(calls[3].url, 'http://localhost:4096/session/ses_abc');
-  assert.strictEqual(calls[3].init.method, 'DELETE');
-});
-
-test('opencode: honors OPENCODE_SERVER_URL (trailing slash) and LLM_MODEL overrides', async () => {
-  useOpencode();
-  process.env.OPENCODE_SERVER_URL = 'http://127.0.0.1:4999/';
-  process.env.LLM_MODEL = 'openrouter/anthropic/claude-3.5-sonnet';
-  const calls = useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) return okJson({ info: {}, parts: [{ type: 'text', text: '{}' }] });
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  await complete('sys', 'user', { jsonSchema: SCHEMA });
-  assert.strictEqual(calls[0].url, 'http://127.0.0.1:4999/global/health');
-  assert.strictEqual(calls[2].url, 'http://127.0.0.1:4999/session/ses_1/message');
-  const body = JSON.parse(calls[2].init.body);
-  assert.deepStrictEqual(body.model, { providerID: 'openrouter', modelID: 'anthropic/claude-3.5-sonnet' });
-});
-
-test('opencode: omits format when no jsonSchema is passed', async () => {
-  useOpencode();
-  const calls = useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) return okJson({ info: {}, parts: [{ type: 'text', text: '{}' }] });
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  await complete('sys', 'user');
-  const body = JSON.parse(calls[2].init.body);
-  assert.ok(!('format' in body));
-});
-
-test('opencode: falls back to joined text parts, ignoring non-text parts', async () => {
-  useOpencode();
-  useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) {
-      return okJson({
-        info: {},
-        parts: [
-          { type: 'reasoning', text: 'let me think' },
-          { type: 'text', text: '{"add":' },
-          { type: 'other', text: 'junk' },
-          { type: 'text', text: '[]}' }
-        ]
-      });
-    }
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  assert.strictEqual(await complete('sys', 'user', { jsonSchema: SCHEMA }), '{"add":\n[]}');
-});
-
-test('opencode: message-level error info rejects the completion', async () => {
-  useOpencode();
-  useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) {
-      return okJson({ info: { error: { name: 'StructuredOutputError', message: 'no valid output' } }, parts: [] });
-    }
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  await assert.rejects(
-    () => complete('sys', 'user', { jsonSchema: SCHEMA }),
-    /opencode chat failed: StructuredOutputError: no valid output/
-  );
-});
-
-test('opencode: missing LLM_MODEL yields a null completer without probing', async () => {
-  useOpencode();
-  delete process.env.LLM_MODEL;
-  backend.resetCompleter();
-  const calls = useOpencodeServer(() => okJson({ healthy: true, version: 'test' }));
-  assert.strictEqual(await backend.getCompleter(), null);
-  assert.strictEqual(calls.length, 0);
-});
-
-test('opencode: LLM_MODEL without a provider slash yields a null completer', async () => {
-  useOpencode();
-  process.env.LLM_MODEL = 'qwen3:4b';
-  backend.resetCompleter();
-  const calls = useOpencodeServer(() => okJson({ healthy: true, version: 'test' }));
-  const warnings = [];
-  console.warn = (msg) => warnings.push(String(msg));
-  assert.strictEqual(await backend.getCompleter(), null);
-  assert.strictEqual(calls.length, 0);
-  assert.ok(warnings.some((w) => w.includes('provider/model')));
-});
-
-test('opencode: probe failure with autostart disabled yields a null completer', async () => {
-  useOpencode();
-  process.env.OPENCODE_AUTOSTART = 'false';
-  backend._spawnServe = async () => {
-    throw new Error('must not spawn');
-  };
-  const calls = stubFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
-  assert.strictEqual(await backend.getCompleter(), null);
-  assert.strictEqual(calls.length, 1);
-});
-
-test('opencode: unreachable local server is auto-started', async () => {
-  useOpencode();
-  const spawned = [];
-  backend._spawnServe = async (baseUrl) => {
-    spawned.push(baseUrl);
-  };
-  let healthCalls = 0;
-  const calls = stubFetch((url) => {
-    if (String(url).endsWith('/global/health')) {
-      healthCalls++;
-      if (healthCalls <= 2) throw new Error('connect ECONNREFUSED');
-      return okJson({ healthy: true, version: 'test' });
-    }
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  assert.strictEqual(typeof complete, 'function');
-  assert.deepStrictEqual(spawned, ['http://localhost:4096']);
-  assert.strictEqual(healthCalls, 1);
-});
-
-test('opencode: failed autostart yields a null completer', async () => {
-  useOpencode();
-  backend._spawnServe = async () => {
-    throw new Error('opencode serve did not become healthy');
-  };
-  stubFetch(() => {
-    throw new Error('connect ECONNREFUSED');
-  });
-  assert.strictEqual(await backend.getCompleter(), null);
-});
-
-test('opencode: sends basic auth when OPENCODE_SERVER_PASSWORD is set', async () => {
-  useOpencode();
-  process.env.OPENCODE_SERVER_PASSWORD = 'secret';
-  const expected = `Basic ${Buffer.from('opencode:secret').toString('base64')}`;
-  const calls = useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) return okJson({ info: {}, parts: [{ type: 'text', text: '{}' }] });
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  await complete('sys', 'user', { jsonSchema: SCHEMA });
-  for (const call of calls) {
-    assert.strictEqual(call.init.headers.Authorization, expected);
-  }
-});
-
-test('opencode: completer records per-call cost and tokens on complete.calls', async () => {
-  useOpencode();
-  useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) {
-      return okJson({
-        info: { structured: { add: [] }, cost: 0.006, tokens: { input: 17314, output: 140 } },
-        parts: []
-      });
-    }
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  assert.deepStrictEqual(complete.calls, []);
-  await complete('sys', 'user', { jsonSchema: SCHEMA });
-  assert.strictEqual(complete.calls.length, 1);
-  assert.strictEqual(complete.calls[0].cost, 0.006);
-  assert.deepStrictEqual(complete.calls[0].tokens, { input: 17314, output: 140 });
-  assert.strictEqual(typeof complete.calls[0].ms, 'number');
-});
-
-test('opencode: missing cost/tokens in info records nulls, not zeros', async () => {
-  useOpencode();
-  useOpencodeServer((url, init) => {
-    if (url.endsWith('/session') && init.method === 'POST') return okJson({ id: 'ses_1' });
-    if (url.endsWith('/message')) return okJson({ info: {}, parts: [{ type: 'text', text: '{}' }] });
-    if (init.method === 'DELETE') return okJson(true);
-    return okJson({});
-  });
-  const complete = await backend.getCompleter();
-  await complete('sys', 'user');
-  assert.strictEqual(complete.calls[0].cost, null);
-  assert.deepStrictEqual(complete.calls[0].tokens, { input: null, output: null });
-});
-
 test('ollama: completer records eval counts with zero cost on complete.calls', async () => {
   useOllama();
   stubFetch((url) => {
@@ -402,6 +203,201 @@ test('ollama: completer records eval counts with zero cost on complete.calls', a
   assert.strictEqual(complete.calls.length, 1);
   assert.strictEqual(complete.calls[0].cost, 0);
   assert.deepStrictEqual(complete.calls[0].tokens, { input: 100, output: 20 });
+});
+
+// --- opencode V2 backend (opencode api CLI transport) --------------------------
+
+test('opencode: probes, creates a session with the model, generates, then deletes', async () => {
+  useOpencode();
+  const calls = stubApi(happyApiHandler({ text: '  {"add":["X"],"remove":[]}  ' }));
+  const complete = await backend.getCompleter();
+  assert.strictEqual(typeof complete, 'function');
+  const out = await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.strictEqual(out, '{"add":["X"],"remove":[]}');
+  assert.strictEqual(calls.length, 4);
+  assert.deepStrictEqual(calls[0].args, ['api', 'get', '/api/info']);
+  assert.deepStrictEqual(calls[1].args, [
+    'api',
+    'post',
+    '/api/session',
+    '--data',
+    JSON.stringify({ title: 'plant-note-getter reviewer', model: { providerID: 'test-provider', id: 'test-model' } })
+  ]);
+  assert.strictEqual(calls[2].args[0], 'api');
+  assert.strictEqual(calls[2].args[1], 'post');
+  assert.strictEqual(calls[2].args[2], '/api/session/ses_abc/generate');
+  const prompt = dataArg(calls[2].args).prompt;
+  assert.ok(prompt.startsWith('sys\n\nuser'));
+  assert.ok(prompt.includes(JSON.stringify(SCHEMA)));
+  assert.deepStrictEqual(calls[3].args, ['api', 'delete', '/api/session/ses_abc']);
+});
+
+test('opencode: omits the schema hint when no jsonSchema is passed', async () => {
+  useOpencode();
+  const calls = stubApi(happyApiHandler());
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user');
+  const prompt = dataArg(calls[2].args).prompt;
+  assert.strictEqual(prompt, 'sys\n\nuser');
+});
+
+test('opencode: honors OPENCODE_SERVER_URL (trailing slash) and LLM_MODEL overrides', async () => {
+  useOpencode();
+  process.env.OPENCODE_SERVER_URL = 'http://127.0.0.1:4999/';
+  process.env.LLM_MODEL = 'openrouter/anthropic/claude-3.5-sonnet';
+  const calls = stubApi(happyApiHandler());
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.deepStrictEqual(calls[0].args, [
+    'api',
+    'get',
+    '/api/info',
+    '--server',
+    'http://127.0.0.1:4999'
+  ]);
+  const createBody = dataArg(calls[1].args);
+  assert.deepStrictEqual(createBody.model, {
+    providerID: 'openrouter',
+    id: 'anthropic/claude-3.5-sonnet'
+  });
+});
+
+test('opencode: passes OPENCODE_SERVER_PASSWORD to the CLI as OPENCODE_PASSWORD', async () => {
+  useOpencode();
+  process.env.OPENCODE_SERVER_PASSWORD = 'secret';
+  const calls = stubApi(happyApiHandler());
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  for (const call of calls) {
+    assert.strictEqual(call.options.env.OPENCODE_PASSWORD, 'secret');
+  }
+});
+
+test('opencode: no password means no OPENCODE_PASSWORD in the child env', async () => {
+  useOpencode();
+  const calls = stubApi(happyApiHandler());
+  const complete = await backend.getCompleter();
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.deepStrictEqual(calls[0].options.env, {});
+});
+
+test('opencode: missing LLM_MODEL yields a null completer without calling the CLI', async () => {
+  useOpencode();
+  delete process.env.LLM_MODEL;
+  backend.resetCompleter();
+  const calls = stubApi(() => okApi({}));
+  assert.strictEqual(await backend.getCompleter(), null);
+  assert.strictEqual(calls.length, 0);
+});
+
+test('opencode: LLM_MODEL without a provider slash yields a null completer', async () => {
+  useOpencode();
+  process.env.LLM_MODEL = 'qwen3:4b';
+  backend.resetCompleter();
+  const calls = stubApi(() => okApi({}));
+  const warnings = [];
+  console.warn = (msg) => warnings.push(String(msg));
+  assert.strictEqual(await backend.getCompleter(), null);
+  assert.strictEqual(calls.length, 0);
+  assert.ok(warnings.some((w) => w.includes('provider/model')));
+});
+
+test('opencode: probe failure yields a null completer', async () => {
+  useOpencode();
+  stubApi(() => errApi({ _tag: 'UnauthorizedError', message: 'Authentication required' }, 'HTTP 401 Unauthorized'));
+  assert.strictEqual(await backend.getCompleter(), null);
+});
+
+test('opencode: unreachable CLI yields a null completer', async () => {
+  useOpencode();
+  backend._runApi = async () => {
+    throw new Error('spawn opencode ENOENT');
+  };
+  assert.strictEqual(await backend.getCompleter(), null);
+});
+
+test('opencode: generate HTTP error rejects the completion with the server message', async () => {
+  useOpencode();
+  stubApi((args) => {
+    if (args[1] === 'get') return okApi({ version: '2' });
+    if (args[1] === 'post' && args[2] === '/api/session') return okApi({ data: { id: 'ses_1' } });
+    if (args[1] === 'delete') return okApi({ data: true });
+    return errApi({ message: 'Model unavailable: test-provider/test-model' }, 'HTTP 400 Bad Request');
+  });
+  const complete = await backend.getCompleter();
+  await assert.rejects(
+    () => complete('sys', 'user', {}),
+    /opencode api POST \/api\/session\/ses_1\/generate failed: Model unavailable/
+  );
+});
+
+test('opencode: missing session id rejects the completion', async () => {
+  useOpencode();
+  stubApi((args) => {
+    if (args[1] === 'get') return okApi({ version: '2' });
+    if (args[1] === 'post' && args[2] === '/api/session') return okApi({ data: {} });
+    return okApi({ data: { text: '{}' } });
+  });
+  const complete = await backend.getCompleter();
+  await assert.rejects(() => complete('sys', 'user', {}), /returned no session id/);
+});
+
+test('opencode: missing generate text resolves to empty string', async () => {
+  useOpencode();
+  stubApi((args) => {
+    if (args[1] === 'get') return okApi({ version: '2' });
+    if (args[1] === 'post' && args[2] === '/api/session') return okApi({ data: { id: 'ses_1' } });
+    if (args[1] === 'delete') return okApi({ data: true });
+    return okApi({ data: {} });
+  });
+  const complete = await backend.getCompleter();
+  assert.strictEqual(await complete('sys', 'user', {}), '');
+});
+
+test('opencode: session delete failure is harmless', async () => {
+  useOpencode();
+  stubApi((args) => {
+    if (args[1] === 'get') return okApi({ version: '2' });
+    if (args[1] === 'post' && args[2] === '/api/session') return okApi({ data: { id: 'ses_1' } });
+    if (args[1] === 'delete') return errApi({ message: 'boom' }, 'HTTP 500 Internal Server Error');
+    return okApi({ data: { text: '{"add":[]}' } });
+  });
+  const complete = await backend.getCompleter();
+  assert.strictEqual(await complete('sys', 'user', {}), '{"add":[]}');
+});
+
+test('opencode: completer records per-call stats with null cost/tokens', async () => {
+  useOpencode();
+  stubApi(happyApiHandler());
+  const complete = await backend.getCompleter();
+  assert.deepStrictEqual(complete.calls, []);
+  await complete('sys', 'user', { jsonSchema: SCHEMA });
+  assert.strictEqual(complete.calls.length, 1);
+  assert.strictEqual(complete.calls[0].cost, null);
+  assert.strictEqual(complete.calls[0].tokens, null);
+  assert.strictEqual(typeof complete.calls[0].ms, 'number');
+});
+
+test('buildApiArgs pins --server only when OPENCODE_SERVER_URL is set', () => {
+  delete process.env.OPENCODE_SERVER_URL;
+  assert.deepStrictEqual(backend.buildApiArgs('get', '/api/info'), ['api', 'get', '/api/info']);
+  process.env.OPENCODE_SERVER_URL = 'http://example.test:1234/';
+  assert.deepStrictEqual(backend.buildApiArgs('get', '/api/info'), [
+    'api',
+    'get',
+    '/api/info',
+    '--server',
+    'http://example.test:1234'
+  ]);
+  assert.deepStrictEqual(backend.buildApiArgs('post', '/api/session', { a: 1 }), [
+    'api',
+    'post',
+    '/api/session',
+    '--server',
+    'http://example.test:1234',
+    '--data',
+    '{"a":1}'
+  ]);
 });
 
 test('parseOpencodeModel splits on the first slash and rejects malformed specs', () => {

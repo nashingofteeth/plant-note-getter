@@ -24,10 +24,11 @@ const LABEL_MAP_PATH = path.join(__dirname, '..', 'label-map.json');
 // LLM_MODEL. There is no default model.
 //
 // Two backends, selected by LLM_BACKEND (default 'opencode'):
-//   - 'opencode': remote models via the opencode server API. LLM_MODEL is
-//     'provider/model' (e.g. anthropic/claude-sonnet-4-5); credentials live
-//     in opencode itself, never here. The server is auto-started when
-//     unreachable unless OPENCODE_AUTOSTART=false.
+//   - 'opencode': remote models via the opencode V2 server, reached through
+//     the `opencode api` CLI (which owns discovery/auth/auto-start). LLM_MODEL
+//     is 'provider/model' (e.g. anthropic/claude-sonnet-4-5); credentials live
+//     in opencode itself, never here. OPENCODE_SERVER_URL pins a specific
+//     server; unset uses the shared background service.
 //   - 'ollama': local Ollama daemon (LLM_SERVER_URL), LLM_MODEL is a daemon
 //     model name.
 const LLM_MODEL = process.env.LLM_MODEL || '';
@@ -38,8 +39,7 @@ const LLM_DISABLED =
 const LLM_ENABLED = !LLM_DISABLED;
 const LLM_BACKEND = (process.env.LLM_BACKEND || 'opencode').toLowerCase();
 const LLM_SERVER_URL = process.env.LLM_SERVER_URL || 'http://localhost:11434';
-const OPENCODE_SERVER_URL = process.env.OPENCODE_SERVER_URL || 'http://localhost:4096';
-const OPENCODE_AUTOSTART = process.env.OPENCODE_AUTOSTART !== 'false';
+const OPENCODE_SERVER_URL = process.env.OPENCODE_SERVER_URL || '';
 const LLM_MAX_INPUT_CHARS = parseInt(process.env.LLM_MAX_INPUT_CHARS || '16000', 10);
 
 // Review-gap tally log (LLM corrections later become red tests → regex patches).
@@ -54,7 +54,6 @@ module.exports = {
   LLM_MODEL,
   LLM_SERVER_URL,
   OPENCODE_SERVER_URL,
-  OPENCODE_AUTOSTART,
   LLM_MAX_INPUT_CHARS,
   REVIEW_LOG_PATH
 };
