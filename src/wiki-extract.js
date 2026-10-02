@@ -973,7 +973,11 @@ function isTaxonomicSentence(sentence, isFirst) {
 // A pronoun+verb continuation (", it includes ...", ", they are ...") also marks a
 // new independent clause after a name — e.g. "referred to as sage, it includes two
 // widely used herbs, Salvia officinalis ..." — so the name capture stops at the comma.
-const DESCRIPTIVE_CONTINUATION = /,\s+(?:gives|since|because|where|tastes|in\s+which|such\s+as|as\s+the|as\s+a|which\s+|that\s+the|(?:and\s+)?(?:it|they|these|those)\s+(?:includes?|include|contains?|contain|produces?|produce|gives?|give|yields?|yield|has|have|is|are|was|were)\b)/i;
+// A comma followed by a bare copula (", and is used ...") likewise starts a new
+// clause, not another name — e.g. Okra's "referred to as quimbombó, and is used in
+// dishes such as quimbombó guisado ..., a dish similar to gumbo" must stop at
+// "quimbombó" so the dish description never becomes a capture.
+const DESCRIPTIVE_CONTINUATION = /,\s+(?:gives|since|because|where|tastes|in\s+which|such\s+as|as\s+the|as\s+a|which\s+|that\s+the|(?:and\s+)?(?:is|are|was|were)\b|(?:and\s+)?(?:it|they|these|those)\s+(?:includes?|include|contains?|contain|produces?|produce|gives?|give|yields?|yield|has|have|is|are|was|were)\b)/i;
 function truncateAtDescriptiveClause(capture) {
   const m = capture.match(DESCRIPTIVE_CONTINUATION);
   if (m) return capture.slice(0, m.index).trim();
@@ -1242,8 +1246,8 @@ function _extractWikipediaCommonNames(text, trace) {
 
   // --- Sentence-by-sentence pattern matching ---
   // ─── RULE INDEX (construction → rule; category banners below) ─────────────
-  // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R33, R37, R38, R44, R53, R56, R57, R59, R60
-  // "known as / called / referred to": R7, R8, R8b, R9, R10, R11, R11b, R11c, R11d, R11e,
+  // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R5c, R33, R37, R38, R44, R53, R56, R57, R59, R60
+  // "known as / called / referred to": R7, R8, R8b, R8c, R9, R10, R11, R11b, R11c, R11d, R11e,
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
@@ -1444,6 +1448,22 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R5b', capture: r5b[2] });
     }
 
+    // R5c: "CommonName (pronunciation) ..." — the standard Wikipedia lead
+    // with a pronunciation parenthetical, optionally followed by the
+    // binomial: "Okra (US: , UK: ), Abelmoschus esculentus, known ... as
+    // lady's fingers, is a flowering plant ..." and "Oregano (US: , UK: ;
+    // Origanum vulgare), sometimes called ...". The paren must carry a
+    // pronunciation marker (US:/UK:/IPA slashes) so binomial-only or
+    // descriptive parentheticals stay with R4/R5, and the lead must not be
+    // a binomial or article-led.
+    const r5c = sentence.match(/^([A-ZÀ-Ÿ][\w''\u2019-]+(?:\s+[\w''\u2019-]+){0,2})\s*\(([^)]*(?:US:|UK:|\/[^/]+\/)[^)]*)\)/);
+    if (r5c) {
+      const lead = r5c[1];
+      if (!/^(?:The|A|An)\s+/i.test(lead) && !isSubjectBinomial(lead) && !isAbbreviatedBinomialLike(lead)) {
+        caps.push({ rule: 'R5c', capture: lead });
+      }
+    }
+
     // ─── Parenthetical glosses ───────────────────────────────────────────
     // R6: Parenthetical common names — "ScientificName (known as/called/commonly known as X, Y, Z) is"
     // Only when the gloss directly follows a scientific name (uppercase-initial word, optionally + epithet),
@@ -1629,6 +1649,19 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
+    // R8c: "known in <place/region> as X" without an adverb — Okra's
+    // "known in some English-speaking countries as lady's fingers, is a
+    // flowering plant". R8 requires an adverb (commonly/often/...) and R8b
+    // requires "known as" with no qualifier; this covers the bare
+    // "known in <multi-word region> as <name>" lead. Terminates at a comma
+    // followed by a copula or at the end, so a trailing relative clause is
+    // not swallowed.
+    const r8c = sentence.match(/\bknown\s+in\s+([^,;]+?)\s+as\s+(?:the\s+)?(.+?)(?:\s*,\s*(?:is|was|are|were)\b|\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
+    if (r8c) {
+      const capture = finalizeCapture(r8c[2], 300);
+      if (capture) caps.push({ rule: 'R8c', capture: capture });
+    }
+
     // R9: "commonly called" — stop at copula or end. Also stops at a
     // resumptive subject ("...or mountain maple the species is native...",
     // Acer heldreichii): the copula's complement there is an adjective
@@ -1648,7 +1681,16 @@ function _extractWikipediaCommonNames(text, trace) {
     // glosses (Sorbaria sorbifolia: lit. 'pearl plum') still yield theirs.
     const r9b = sentence.match(/lit\.?\s*['"“]([^'"]+)['"”]/i);
     const r9bOrGloss = /lit\.?\s*['"“][^'"“”]+['"”]\s+or\s+['"“]/i.test(sentence);
-    if (r9b && !r9bOrGloss) {
+    // Skip when the gloss translates the scientific name itself: Okra's "The
+    // scientific name can be broken down and translated: Abelmoschus is
+    // Neo-Latin from the Arabic (romanized: abu l-misk, lit. 'father of
+    // musk')" is a literal meaning of the genus name, not a vernacular name.
+    // Genuine translated names (Sorbaria "lit. 'pearl plum'", Rhododendron
+    // "lit. 'Alishan azalea'") sit in ordinary naming sentences, not
+    // scientific-name etymologies.
+    const scientificNameGloss =
+      /\bscientific\s+name\b/i.test(sentence) || /\b(?:Neo-)?Latin\s+for\b/i.test(sentence);
+    if (r9b && !r9bOrGloss && !scientificNameGloss) {
       const capture = finalizeCapture(r9b[1], 200);
       if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R9b', capture: capture });
     }
