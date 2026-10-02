@@ -414,6 +414,71 @@ const TESTS = [
     expected: ['bent', 'bentgrass', 'Orcheston long grass'],
   },
   {
+    name: 'Psilotum (family-scoped "commonly known as" clause without a preceding comma must yield only the name)',
+    extract: 'Psilotum is a genus of fern-like vascular plants. It is one of two genera in the family Psilotaceae commonly known as whisk ferns, the other being Tmesipteris.',
+    expected: ['whisk ferns'],
+  },
+  {
+    name: 'Amorpha fruticosa ("known by several common names, including" list without a preceding "various")',
+    extract: 'Amorpha fruticosa is a species of flowering plant in the legume family Fabaceae, known by several common names, including desert false indigo, false indigo-bush, and bastard indigobush. It is native to North America.',
+    expected: ['desert false indigo', 'false indigo-bush', 'bastard indigobush'],
+  },
+  {
+    name: 'Gesneriaceae (family appositive "X, the <name> family, is a family of...")',
+    extract: 'Gesneriaceae, the gesneriad family, is a family of flowering plants consisting of about 152 genera and ca. 3,540 species in the tropics and subtropics of the Old World.',
+    expected: ['gesneriad family'],
+  },
+  {
+    name: 'Pistia stratiotes (single-quoted regional name after "commonly called")',
+    extract: "In Nigeria and Gambia, the leaf is infused in water to create an eyewash to treat allergic conjunctivitis. Therefore, the plant is commonly called 'eye-pity' in Africa.",
+    expected: ['eye-pity'],
+  },
+  {
+    name: 'Agrostis (name in an "also known as" aside stops before the trailing "after <place>" provenance clause)',
+    extract: 'Agrostis stolonifera is the most commonly used species of Agrostis. Historically, it was also known as Orcheston long grass, after a village on Salisbury Plain, England.',
+    expected: ['Orcheston long grass'],
+  },
+  {
+    name: 'Quercus robur ("will often be called" list after a plant-product subject)',
+    extract: 'Quercus robur, pedunculate oak, European oak, or English oak, is a species of flowering plant in the beech and oak family, Fagaceae.\n=== Names ===\nQuercus robur has numerous common names including pedunculate oak, common oak, European oak, or English oak. In French it is called chêne pédonculé. As a wood product its timber will often be called French oak, Polish oak, Slavonian oak, or similar names based upon its geographic origin.',
+    expected: ['pedunculate oak', 'common oak', 'European oak', 'English oak', 'chêne pédonculé', 'French oak', 'Polish oak', 'Slavonian oak'],
+  },
+  {
+    name: 'Fuchsia ("commonly known as" leading clause and its recapitulation)',
+    extract: 'Fuchsia ( FEW-shə) is a genus of flowering plants commonly known as fuchsias that consists mostly of shrubs or small trees. Almost 110 species of Fuchsia are recognized.',
+    expected: ['fuchsias'],
+  },
+  {
+    name: 'Actinidia arguta ("<plant plural> are known as X" without "commonly"; part name darae-sun excluded)',
+    extract: 'In Korea, kiwiberries are known as darae (다래). Young leaves, called darae-sun, are often consumed as namul vegetable.',
+    expected: ['darae'],
+  },
+  {
+    name: 'Origanum vulgare ("Other plants called oregano" section names another taxon — not extracted)',
+    extract: 'Oregano (US: , UK: ; Origanum vulgare), sometimes called wild marjoram, is a species of flowering plant in the mint family, Lamiaceae.\n\n== Other plants called "oregano" ==\nColeus amboinicus, known as Cuban oregano, orégano poleo (\'pennyroyal oregano\'), orégano francés (\'French oregano\'), Mexican mint, Mexican thyme, and many other names, is also of the mint family (Lamiaceae).',
+    expected: ['Oregano', 'wild marjoram'],
+  },
+  {
+    name: 'Festuca (quoted morphological structure after a structure subject is not a name)',
+    extract: 'These longitudinal strands occasionally merge into interrupted or continuous bands. Bands of confluent strands that reach veins are known as "pillars". The adaxial sclerenchyma tissue sometimes forms strands that are opposite or extend to epidermal veins. Some strands form "girders" together with the sclerenchyma.',
+    expected: ['fescue'].slice(0, 0),
+  },
+  {
+    name: 'Quercus robur (individual specimen-tree naming sentence skipped: Kongeegen + its locality Denmark)',
+    extract: "Two individuals of notable longevity are the Stelmužė Oak in Lithuania and the Granit Oak in Bulgaria, which are believed to be more than 1500 years old, possibly making them the oldest oaks in Europe; another specimen, called the 'Kongeegen' ('Kings Oak'), estimated to be about 1,200 years old, grows in Jægerspris, Denmark. Yet another can be found in Kvilleken, Sweden, that is over 1000 years old and 14 m (46 ft) around.",
+    expected: [],
+  },
+  {
+    name: 'Actinidia arguta (variety-list autonym is nomenclature, not a common name)',
+    extract: 'The species consists of three varieties:\n\nActinidia arguta var. arguta (autonym)\nActinidia arguta var. giraldii (Diels) Vorosch.\nActinidia arguta var. hypoleuca (Nakai) Kitam.',
+    expected: [],
+  },
+  {
+    name: 'Actinidia arguta (R9c "hence the name" captures the full multi-word name, not just its first word)',
+    extract: 'The fast-growing, climbing, twining vine (bine) is very hardy (hence the name hardy kiwi), and is capable of surviving slow temperature drops to −45 °C (−49 °F), and summer temperatures exceeding 37 °C (99 °F), although young shoots can be vulnerable to frost in the spring.',
+    expected: ['hardy kiwi'],
+  },
+  {
     name: 'Populus tremula (hybrid "×" notation filtered; captures grey poplar)',
     extract: 'Populus tremula (commonly called aspen, common aspen) is a species. Its hybrid with Populus alba, known as grey poplar, Populus × canescens, is widely found in Europe.',
     expected: ['aspen', 'common aspen', 'grey poplar'],
