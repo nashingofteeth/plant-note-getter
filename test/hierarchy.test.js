@@ -172,6 +172,31 @@ const TESTS = [
     ownId: 'Q147525',
     expected: 'life/eukaryota/plantae/tracheophytes/spermatophytes/angiosperms/eudicots/rosids/fagales/fagaceae/quercus',
   },
+  {
+    name: 'amorpha (legume keeps Fabales/Fabaceae order and family)',
+    ancestors: [
+      { id: 'Q756', label: 'plant', rankLabel: 'kingdom' },
+      { id: 'Q27133', label: 'tracheophyte', rankLabel: 'division' },
+      { id: 'Q25814', label: 'Spermatophyta', rankLabel: 'subdivision' },
+      { id: 'Q25314', label: 'Angiosperms', rankLabel: null },
+      { id: 'Q165468', label: 'Eudicots', rankLabel: null },
+      { id: 'Q869087', label: 'Core eudicots', rankLabel: null },
+      { id: 'Q23905211', label: 'superrosids', rankLabel: null },
+      { id: 'Q338878', label: 'Rosids', rankLabel: null },
+      { id: 'Q124488452', label: 'Eurosids', rankLabel: null },
+      { id: 'Q2683213', label: 'fabids', rankLabel: null },
+      { id: 'Q21878', label: 'Fabales', rankLabel: 'order' },
+      { id: 'Q44448', label: 'Fabaceae', rankLabel: 'family' },
+      { id: 'Q316856', label: 'Faboideae', rankLabel: 'subfamily' },
+      { id: 'Q28432236', label: 'Meso-Papilionoideae', rankLabel: null },
+      { id: 'Q17460728', label: 'Dalbergioids', rankLabel: null },
+      { id: 'Q4747727', label: 'Amorpheae', rankLabel: 'tribe' },
+      { id: 'Q1318931', label: 'Amorpha', rankLabel: 'genus' },
+      { id: 'Q2074094', label: 'Amorpha canescens', rankLabel: 'species' },
+    ],
+    ownId: 'Q2074094',
+    expected: 'life/eukaryota/plantae/tracheophytes/spermatophytes/angiosperms/eudicots/rosids/fabales/fabaceae/amorpha',
+  },
 ];
 
 for (const { name, ancestors, ownId, expected } of TESTS) {
