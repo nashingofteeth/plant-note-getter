@@ -827,7 +827,12 @@ function subjectTaxonFromLead(lead) {
   if (paren && isSubjectBinomial(paren[1])) return paren[1];
   const start = lead.match(/^([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\b/);
   if (start && isSubjectBinomial(start[1])) return start[1];
-  const genus = lead.match(/^(?:The\s+)?([A-Z][a-zà-ÿ]{2,})/);
+  // A single capitalized word is a genus/family taxon only when the lead
+  // presents it as one ("Fuchsia (FEW-shə) is a genus ...", "Malpighiaceae is
+  // a family ..."). Otherwise the lead is a common name ("Wild rice, also
+  // called ...", "The olive (Olea europaea)") and there is no binomial to
+  // scope to.
+  const genus = lead.match(/^([A-Z][a-zà-ÿ]{2,})\s*(?:\(|(?:is|was)\s+(?:a|an)\s+(?:genus|family|species|subgenus|tribe)\b)/);
   return genus ? genus[1] : '';
 }
 
@@ -836,12 +841,21 @@ function sameTaxon(a, b) {
   return norm(a) === norm(b);
 }
 
+// A capture whose name is immediately defined by a parenthetical binomial
+// other than the article subject belongs to that other taxon:
+// "The western sugar maple (Acer grandidentatum) ...". Comparing against the
+// lead taxon keeps the article's own lead ("The peanut (Arachis hypogaea)")
+// and hyphenated/author-cited forms intact.
+function definesOtherTaxon(sentence, capture, subjectTaxon) {
+  if (!subjectTaxon) return false;
+  const m = sentence.match(new RegExp(`${escapeRegExp(capture)}\\s*\\(([A-Z][a-zà-ÿ]+\\s+[a-zà-ÿ][\\w-]*)`, 'i'));
+  return !!(m && isSubjectBinomial(m[1]) && !sameTaxon(m[1], subjectTaxon));
+}
+
 // A sentence whose naming construction describes another taxon, or a product
 // derived from the plant, rather than the article subject. Sentence-scoped
 // (not capture-scoped) because the whole naming clause belongs to the other
 // referent:
-//   - "The western sugar maple (Acer grandidentatum) ... are treated as
-//     varieties ..." defines that binomial's name (Acer saccharum).
 //   - "Datura stramonium (commonly known as thornapple or jimson weed)" and
 //     "Malpighia emarginata, often called acerola" name the other species
 //     (Atropa bella-donna, Malpighiaceae).
@@ -849,12 +863,13 @@ function sameTaxon(a, b) {
 //     genus (Oenothera villosa).
 //   - "This salt substitute, also called zakankau" and "the entheogenic brew
 //     known as ayahuasca" name a product, not the plant.
+// Names defined by another binomial in an otherwise useful sentence
+// ("... subspecies of northern sugar maple") are filtered per capture by
+// definesOtherTaxon instead.
 // The other binomial is validated with isSubjectBinomial so capitalized common
 // names ("Black walnut, also known as ...") are not mistaken for taxa.
 function isOtherTaxonSentence(sentence, subjectTaxon) {
   if (!subjectTaxon) return false;
-  const leadDef = sentence.match(/^The\s+[^()]{2,80}?\(([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)[^)]*\)/);
-  if (leadDef && isSubjectBinomial(leadDef[1]) && !sameTaxon(leadDef[1], subjectTaxon)) return true;
   const binomParen = sentence.match(/\b([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\s*\([^)]*\b(?:known\s+as|called)\b/i);
   if (binomParen && isSubjectBinomial(binomParen[1]) && !sameTaxon(binomParen[1], subjectTaxon)) return true;
   const otherSpecies = sentence.match(/\b(?:species|plant|taxon|tree|shrub|herb)\s+(?:called|known\s+as)\s+([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)/);
@@ -1128,15 +1143,85 @@ function pushResult(results, seenKeys, name, trace, rule) {
   if (trace) trace.captures.push({ name, rule });
 }
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Leading modifiers that shorten a common name without changing its referent
+// ("eastern American black walnut" → "black walnut", "eastern black walnut").
+const DIRECTIONAL_MODIFIERS = new Set([
+  'eastern', 'western', 'northern', 'southern', 'central',
+  'american', 'european', 'african', 'asian', 'australian', 'canadian',
+  'mexican', 'chinese', 'japanese', 'indian', 'pacific', 'atlantic',
+]);
+
+// Derived head forms: a multi-word name whose leading directional/demonym
+// modifiers are dropped yields a shorter name, but only when the article uses
+// that shorter form independently (never merely as a substring of the full
+// name). "eastern American black walnut" + "Black walnut is allelopathic" →
+// "black walnut"; + "the eastern black walnut overlaps" → "eastern black
+// walnut" (Juglans nigra).
+function addDerivedHeadForms(results, seenKeys, trace, text) {
+  for (const name of [...results]) {
+    const words = name.split(/\s+/);
+    const modifiers = words.slice(0, -2);
+    // Two or more modifier words ("eastern American black walnut") — a single
+    // modifier ("western white fir") is too weak a signal to invent a head.
+    if (modifiers.length < 2 || !modifiers.every((w) => DIRECTIONAL_MODIFIERS.has(w.toLowerCase()))) continue;
+    // Search outside the full name itself so a dropped-modifier suffix that
+    // only occurs inside the full phrase is not treated as independent usage.
+    const independent = text.replace(new RegExp(escapeRegExp(name), 'gi'), ' ');
+    const candidates = new Set([words.slice(-2).join(' ')]);
+    for (let i = 0; i < words.length - 2; i++) {
+      candidates.add(words.filter((_, j) => j !== i).join(' '));
+    }
+    for (const candidate of candidates) {
+      if (candidate.split(/\s+/).length < 2) continue;
+      const cap = candidate[0].toUpperCase() + candidate.slice(1);
+      const used = new RegExp(`\\b${escapeRegExp(cap)}\\b`).test(independent)
+        || new RegExp(`\\b[Tt]he\\s+${escapeRegExp(candidate)}\\b`).test(independent);
+      if (used) pushResult(results, seenKeys, candidate, trace, 'head-form');
+    }
+  }
+}
+
+// A genus/family article that uses the taxon name as a lowercase common noun
+// ("The fuchsias are most closely related to ...", Fuchsia) contributes that
+// vernacular form. Only for single-word lead taxa; the case-sensitive match
+// keeps the capitalized scientific name out.
+function addGenusVernacular(subjectTaxon, results, seenKeys, trace, text) {
+  if (!subjectTaxon || /\s/.test(subjectTaxon)) return;
+  const base = subjectTaxon.toLowerCase();
+  const re = new RegExp(`\\b${escapeRegExp(base)}(?:e?s)?\\b`, 'g');
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    // Skip etymological mentions ("derives from Latin salvia") — the Latin
+    // etymon is not a vernacular usage.
+    const before = text.slice(Math.max(0, m.index - 20), m.index).toLowerCase();
+    if (/\b(?:latin|greek|neo-latin|ancient\s+greek|from|derives?\s+from|borrowed\s+from)\s+$/.test(before)) continue;
+    pushResult(results, seenKeys, base, trace, 'genus-vernacular');
+    return;
+  }
+}
+
 // `captures` is an array of { rule, capture } tuples (one per pushed capture,
 // including whole sentences for section-based extraction). Runs each capture
 // through the junk classifiers and records every decision on the trace.
 // `sentence` is the source sentence for sentence-level caps (null for section
 // callers that already pass the sentence as capture); used for capture-level
 // classifiers like family-restatement that need sentence context.
-function addNames(captures, results, seenKeys, trace, sentence = null) {
+function addNames(captures, results, seenKeys, trace, sentence = null, subjectTaxon = null) {
   for (const { rule, capture, allowBinomialLike, allowPhonetic } of captures) {
     if (!capture || !capture.trim()) continue;
+    // A name defined by its own parenthetical binomial belongs to that
+    // binomial, not to the article subject ("The western sugar maple (Acer
+    // grandidentatum) ..."). Capture-level so the rest of the sentence can
+    // still yield the subject's own name ("... subspecies of northern sugar
+    // maple").
+    if (sentence && definesOtherTaxon(sentence, capture, subjectTaxon)) {
+      if (trace) trace.rejected.push({ name: capture, rule, by: 'other-taxon-definition' });
+      continue;
+    }
     // Capture-level: family-name restatements (e.g. "family Fabaceae or commonly
     // known as legume or bean family") are taxonomic synonyms of the family,
     // not species common names. Centralized here so R8/R14/etc don't each need
@@ -1359,10 +1444,24 @@ function _extractWikipediaCommonNames(text, trace) {
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75, R81
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75, R81, R82, R83
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
+  let anaphoricOtherTaxon = null;
   for (const sentence of sentences) {
+    // Track a member-species binomial introduced as a sentence subject so a
+    // follow-up anaphoric naming sentence ("Historically, it was often called
+    // ...") stays scoped to it. Reset at section boundaries.
+    if (/^\s*={2,}/.test(sentence)) anaphoricOtherTaxon = null;
+    const anaphoricTarget = anaphoricOtherTaxon;
+    const sentenceBinom = sentence.match(/^([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\s+(?:is|was|are|were)\b/);
+    if (sentenceBinom && isSubjectBinomial(sentenceBinom[1])) {
+      anaphoricOtherTaxon = sameTaxon(sentenceBinom[1], subjectTaxon) ? null : sentenceBinom[1];
+    } else {
+      // Only the sentence immediately after the member-species statement
+      // inherits its scope; anything further must not stay suppressed.
+      anaphoricOtherTaxon = null;
+    }
     // Skip species-list sections for genus alias extraction
     if (selectedSpeciesSentences.has(sentence)) {
       if (trace) trace.skippedSentences.push({ sentence });
@@ -1416,6 +1515,17 @@ function _extractWikipediaCommonNames(text, trace) {
     // reviewer's "never add individual specimen trees" rule (Quercus robur
     // review gap: "Kongeegen" [cultivar] + "Denmark" [geographic]).
     if (/\b(?:specimen|individual)(?:s)?\s*,\s+(?:also\s+)?(?:known\s+as|called)\b/i.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
+    // An anaphoric naming sentence ("Historically, it was often called X",
+    // "It is also known as Y") after a sentence that introduced another
+    // binomial belongs to that member species (Agrostis' "Creeping bent"
+    // section: Orcheston long grass names A. stolonifera, not the genus).
+    if (anaphoricTarget
+        && /^(?:It|They|Historically|Traditionally|Currently|Today|Formerly|Previously|In\s+the\s+past)\b/i.test(sentence)
+        && /\b(?:called|known\s+as|referred\s+to\s+as)\b/i.test(sentence)) {
       if (trace) trace.skippedSentences.push({ sentence });
       continue;
     }
@@ -1994,6 +2104,27 @@ function _extractWikipediaCommonNames(text, trace) {
     const r81 = sentence.match(/^The\s+[A-Z][a-z]+\s+word\s+for\s+(?:this|the)\s+(?:species|plant)\s+is\s+([A-Za-zÀ-ÿ\u0100-\u017F][\w''\u2019\u0100-\u017F-]*)(?=[.,;:)\s]|$)/);
     if (r81) {
       caps.push({ rule: 'R81', capture: r81[1], allowPhonetic: true });
+    }
+
+    // R82: "treated as a variety/varieties or subspecies of <common name>" —
+    // the broader taxon's vernacular name back-references the article subject
+    // ("... subspecies of northern sugar maple", Acer saccharum). Lowercase-led
+    // so a binomial after "of" (a different taxon) stays with the binomial
+    // filters.
+    const r82 = sentence.match(/(?:[Vv]ariet(?:y|ies)|[Ss]ubspecies|[Ff]orms?)\s+of\s+([a-z][\w''-]*(?:\s+[\w''-]+){1,3})(?=[.,;:]|\s+(?:by|in|on|for|from|and|or)\b|$)/);
+    if (r82) {
+      const capture = finalizeCapture(r82[1], 200);
+      if (capture && !isGenericJunk(capture) && !isTaxonRankRef(capture)) caps.push({ rule: 'R82', capture: capture });
+    }
+
+    // R83: quoted culinary nickname — "brought back a taste for the 'pizza
+    // herb'" (Origanum vulgare). Restricted to popularity/affection frames
+    // and multi-word quotes so single quoted words (dish names, jargon) and
+    // R50's naming-verb cases stay separate.
+    const r83 = sentence.match(/\b(?:taste\s+for|nicknamed|dubbed|popularly|affectionately|moniker)\s+(?:the\s+)?["'\u201C\u2018]([^"'\u201D\u2019]*\s[^"'\u201D\u2019]*)["'\u201D\u2019]/i);
+    if (r83) {
+      const capture = finalizeCapture(r83[1], 200);
+      if (capture && !isGenericJunk(capture) && !isProcedural(capture)) caps.push({ rule: 'R83', capture: capture });
     }
 
     // R11c: "Members are commonly known as X, Y, or Z" and "Some species of
@@ -2739,7 +2870,7 @@ function _extractWikipediaCommonNames(text, trace) {
       caps.push({ rule: 'R60', capture: r60[2] });
     }
 
-    addNames(caps, results, seenKeys, trace, sentence);
+    addNames(caps, results, seenKeys, trace, sentence, subjectTaxon);
   }
 
   // --- Post-process: expand "the X or Y family" → "X family, Y family" ---
@@ -2762,6 +2893,11 @@ function _extractWikipediaCommonNames(text, trace) {
       expanded.push(name);
     }
   }
+
+  // Names grounded in the article's own usage: shorter head forms of
+  // modifier-led names, and the lowercase vernacular of a genus/family taxon.
+  addDerivedHeadForms(expanded, seenKeys, trace, processed);
+  addGenusVernacular(subjectTaxon, expanded, seenKeys, trace, processed);
 
   return expanded;
 }

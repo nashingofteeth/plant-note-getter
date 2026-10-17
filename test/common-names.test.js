@@ -171,7 +171,7 @@ const TESTS = [
   {
     name: 'Pelargonium ("commonly called" with period before next sentence)',
     extract: 'Pelargonium () is a genus of flowering plants commonly called geraniums, pelargoniums, or storksbills. It includes about 280 species of perennials, succulents, and shrubs.',
-    expected: ['geraniums', 'pelargoniums', 'storksbills'],
+    expected: ['geraniums', 'pelargoniums', 'storksbills', 'pelargonium'],
   },
   {
     name: 'Erigeron glaucus (singular "common name" not just "common names")',
@@ -409,9 +409,11 @@ const TESTS = [
     expected: ['Hosta', 'hostas', 'plantain lilies'],
   },
   {
-    name: 'Agrostis (provenance tail after historical name dropped; bare place dropped; species-scoped name retained for reviewer)',
+    name: 'Agrostis (provenance tail after historical name dropped; member-species anaphoric name dropped)',
     extract: 'Agrostis (bent, bentgrass) is a large and very nearly cosmopolitan genus of plants in the grass family, found in nearly all the countries in the world.\nAgrostis stolonifera is the most commonly used species of Agrostis. Historically, it was often called Orcheston long grass, after a village on Salisbury Plain, England.',
-    expected: ['bent', 'bentgrass', 'Orcheston long grass'],
+    expected: ['bent', 'bentgrass'],
+    // Species-scoped name ("Orcheston long grass" names A. stolonifera) is now
+    // dropped deterministically by the anaphoric member-species guard.
   },
   {
     name: 'Psilotum (family-scoped "commonly known as" clause without a preceding comma must yield only the name)',
@@ -446,7 +448,7 @@ const TESTS = [
   {
     name: 'Fuchsia ("commonly known as" leading clause and its recapitulation)',
     extract: 'Fuchsia ( FEW-shə) is a genus of flowering plants commonly known as fuchsias that consists mostly of shrubs or small trees. Almost 110 species of Fuchsia are recognized.',
-    expected: ['fuchsias'],
+    expected: ['fuchsias', 'fuchsia'],
   },
   {
     name: 'Actinidia arguta ("<plant plural> are known as X" without "commonly"; part name darae-sun excluded)',
@@ -571,7 +573,7 @@ const TESTS = [
   {
     name: 'Thuja ("Members are commonly known as X, Y, or Z" with parenthetical aside)',
     extract: 'Thuja ( THEW-y\u0259) is a genus of coniferous tree or shrub in the Cupressaceae (cypress family). There are five species in the genus. Members are commonly known as arborvitaes (from the Latin term for \'tree of life\'), thujas, or New World false cedars.\n\n== Description ==',
-    expected: ['arborvitaes', 'thujas', 'New World false cedars'],
+    expected: ['arborvitaes', 'thujas', 'New World false cedars', 'thuja'],
   },
   {
     name: 'Philadelphus ("() (mock-orange) is a genus")',
@@ -968,7 +970,7 @@ const TESTS = [
   {
     name: 'Brassica (informally known as cruciferous vegetables etc. — reject etymology)',
     extract: 'Brassica () is a genus of plants in the cabbage and mustard family (Brassicaceae). The members of the genus are informally known as cruciferous vegetables, cabbages, mustard plants, or simply brassicas. Crops from this genus are sometimes called cole crops—derived from the Latin caulis, denoting the stem or stalk of a plant.',
-    expected: ['cruciferous vegetables', 'cabbages', 'mustard plants', 'brassicas', 'cole crops'],
+    expected: ['cruciferous vegetables', 'cabbages', 'mustard plants', 'brassicas', 'cole crops', 'brassica'],
   },
   {
     name: 'Valeriana officinalis (Other names include garden valerian etc. — reject "often grown in gardens"/"but"/"red valerian")',
@@ -1281,9 +1283,9 @@ const TESTS = [
     expected: ['Okra', "lady's fingers", 'quimbombó', 'molondrón'],
   },
   {
-    name: 'Acer saccharum (mid-list "particularly in reference to" aside rejected; other-taxon names in the similar-species sentence dropped, hard maple kept)',
+    name: 'Acer saccharum (mid-list "particularly in reference to" aside rejected; other-taxon names in the similar-species sentence dropped, hard maple and the "subspecies of northern sugar maple" back-reference kept)',
     extract: 'Acer saccharum, the sugar maple, is a species of flowering plant in the soapberry and lychee family, Sapindaceae. It may also be called rock maple, sugar tree, sweet maple, or, particularly in reference to the wood, hard maple. The western sugar maple (Acer grandidentatum) and southern sugar maple (Acer floridanum) are also treated as a varieties or subspecies of northern sugar maple by some botanists.',
-    expected: ['sugar maple', 'rock maple', 'sugar tree', 'sweet maple', 'hard maple'],
+    expected: ['sugar maple', 'rock maple', 'sugar tree', 'sweet maple', 'hard maple', 'northern sugar maple'],
   },
   {
     name: 'Atropa bella-donna (varietal name rejected; related-species names and the "have occasionally" tail dropped)',
@@ -1321,14 +1323,29 @@ const TESTS = [
     expected: ['skunkbush sumac', 'sourberry', 'skunkbush', 'three-leaf sumac', 'ece'],
   },
   {
-    name: 'Juglans nigra (R1 appositive subject cannot contain a finite verb: no "releasing chemicals" / "give the tree" captures)',
-    extract: 'Juglans nigra, the eastern American black walnut, is a species of deciduous tree in the walnut family, Juglandaceae, native to central and eastern North America, growing mostly in riparian zones. Black walnut is allelopathic, releasing chemicals from its roots and other tissues that may harm other organisms and give the tree a competitive advantage, but there is no scientific consensus that this is a primary competitive factor.',
-    expected: ['eastern American black walnut'],
+    name: 'Juglans nigra (R1 appositive subject cannot contain a finite verb: no "releasing chemicals" / "give the tree" captures; shorter head forms used independently in the article are added)',
+    extract: 'Juglans nigra, the eastern American black walnut, is a species of deciduous tree in the walnut family, Juglandaceae, native to central and eastern North America, growing mostly in riparian zones. Black walnut is allelopathic, releasing chemicals from its roots and other tissues that may harm other organisms and give the tree a competitive advantage, but there is no scientific consensus that this is a primary competitive factor. Where the range of the eastern black walnut overlaps that of the Texas black walnut (J. microcarpa), the two species sometimes interbreed.',
+    expected: ['eastern American black walnut', 'black walnut', 'eastern black walnut'],
   },
   {
-    name: 'Fuchsia (R68 taxonomic-anagram name and R10 person alias rejected)',
-    extract: 'Fuchsia (FEW-shə) is a genus of flowering plants that consists mostly of shrubs or small trees. Along with Otto Brunfels (1489–1534) and Hieronymus Bock (1498–1554), also called Hieronymus Tragus, he is today considered one of the three fathers of botany. === Section Schufia === The name Schufia is a taxonomic anagram derived from Fuchsia.',
-    expected: [],
+    name: 'Fuchsia (R68 taxonomic-anagram name and R10 person alias rejected; lowercase genus vernacular from "The fuchsias are" added)',
+    extract: 'Fuchsia (FEW-shə) is a genus of flowering plants that consists mostly of shrubs or small trees. The fuchsias are most closely related to the northern hemisphere genus Circaea, the two lineages having diverged around 41 million years ago. Along with Otto Brunfels (1489–1534) and Hieronymus Bock (1498–1554), also called Hieronymus Tragus, he is today considered one of the three fathers of botany. === Section Schufia === The name Schufia is a taxonomic anagram derived from Fuchsia.',
+    expected: ['fuchsia'],
+  },
+  {
+    name: 'Agrostis (member-species anaphoric naming dropped: "Historically, it was often called" refers to Agrostis stolonifera)',
+    extract: 'Agrostis (bent, bentgrass) is a large and very nearly cosmopolitan genus of plants in the grass family, found in nearly all the countries in the world.\n\n=== Creeping bent ===\nAgrostis stolonifera is the most commonly used species of Agrostis. Historically, it was often called Orcheston long grass, after a village on Salisbury Plain, England. It is cultivated almost exclusively on golf courses, especially on putting greens.',
+    expected: ['bent', 'bentgrass'],
+  },
+  {
+    name: 'Origanum vulgare (quoted culinary nickname "pizza herb" captured)',
+    extract: 'Oregano (US: , UK: ; Origanum vulgare), sometimes called wild marjoram, is a species of flowering plant in the mint family, Lamiaceae. It became popular in the U.S. after soldiers returning from World War II brought back a taste for the "pizza herb", which had probably been eaten in Southern Italy for centuries.',
+    expected: ['Oregano', 'wild marjoram', 'pizza herb'],
+  },
+  {
+    name: 'Acer saccharum ("subspecies of <common name>" back-reference captured; names defined by another binomial rejected)',
+    extract: 'Acer saccharum, the sugar maple, is a species of flowering plant in the soapberry and lychee family, Sapindaceae. The western sugar maple (Acer grandidentatum) and southern sugar maple (Acer floridanum) are also treated as a varieties or subspecies of northern sugar maple by some botanists.',
+    expected: ['sugar maple', 'northern sugar maple'],
   },
 ];
 
