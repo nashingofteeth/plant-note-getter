@@ -399,6 +399,13 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'example-intro' });
       continue;
     }
+    // Adverb-led side notes inside a name list ("sweet maple, or,
+    // particularly in reference to the wood, hard maple") are asides, not
+    // names. No common name starts with a focusing adverb.
+    if (/^(?:particularly|especially|specifically|mainly|mostly|primarily)\b/i.test(segment)) {
+      if (trace) trace.rejected.push({ name: segment, rule, by: 'aside-clause' });
+      continue;
+    }
     // Segments naming a disease ("Massaria disease") are about a pathogen,
     // not a plant common name. Likewise bracket-fungus terms ("hemlock
     // varnish shelf") — "shelf"/"shelves" never occur in plant names.
@@ -599,7 +606,10 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     }
     // Reject subspecific/varietal scientific notation ("Vicia lens subsp.
     // culinaris") that leaks from taxonomic passages — not common names.
-    if (/\b(?:subsp\.|ssp\.|subsp\b|ssp\b|varietas|var\.)\b/i.test(segment)) {
+    // The optional dot matters: a trailing \b after "var\." can never match
+    // (both characters are non-word), so the dotted forms need an explicit
+    // following epithet instead.
+    if (/\b(?:subsp\.?|ssp\.?|varietas|var\.?)\s+[A-Za-zÀ-ÿ]/i.test(segment)) {
       if (trace) trace.rejected.push({ name: segment, rule, by: 'subspecific-name' });
       continue;
     }
@@ -741,7 +751,11 @@ function isGeographicJunk(name) {
 }
 
 function isProcedural(name) {
-  return PROCEDURE_WORDS.test(name.trim());
+  const s = name.trim();
+  // Chemical/product names ("Gamma Linolenic Acid", "Evening Primrose Oil")
+  // describe a substance derived from the plant, not the plant itself.
+  if (/\b(?:acid|oil)$/i.test(s)) return true;
+  return PROCEDURE_WORDS.test(s);
 }
 
 function isHumanJunk(name) {
@@ -768,6 +782,9 @@ function isOtherOrganismJunk(name) {
 // family") — multiword phrases whose head is a rank word, not a plant common name.
 function isTaxonRankRef(name) {
   const s = name.trim();
+  // A bare rank word ("order", from "the same family and order") is a rank
+  // reference, never a common name.
+  if (/^(?:family|genus|species|subfamily|tribe|order|class|division|variety|subspecies)$/i.test(s)) return true;
   if (!/\b(?:family|genus|species|subfamily|tribe|order|class|division)\b/i.test(s)) return false;
   const words = s.split(/\s+/);
   // Allow genuine 2-word expanded names (e.g. "coffee family" from a list
@@ -795,6 +812,61 @@ function isFamilyRestatement(sentence) {
 // uses "is a species of", not "is also of the".
 function isOtherTaxonDescription(sentence) {
   return /^[A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*\b[^.]*?\b(?:known\s+as|called)\b[^.]*?\bis\s+also\s+of\s+the\s+/i.test(sentence);
+}
+
+// The taxon the article is about, taken from the lead sentence:
+//   "Acer saccharum, the sugar maple, ..."      → "Acer saccharum"
+//   "The sugar maple (Acer saccharum) is ..."   → "Acer saccharum"
+//   "Agrostis (bent, bentgrass) is ..."         → "Agrostis"
+//   "Malpighiaceae is a family ..."             → "Malpighiaceae"
+function subjectTaxonFromLead(lead) {
+  // Prefer the binomial in the lead parenthetical ("The peanut (Arachis
+  // hypogaea) ...") — for common-name-led articles that is the scientific
+  // name, and a bare first pair ("coast live") is not.
+  const paren = lead.match(/\(([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\b/);
+  if (paren && isSubjectBinomial(paren[1])) return paren[1];
+  const start = lead.match(/^([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\b/);
+  if (start && isSubjectBinomial(start[1])) return start[1];
+  const genus = lead.match(/^(?:The\s+)?([A-Z][a-zà-ÿ]{2,})/);
+  return genus ? genus[1] : '';
+}
+
+function sameTaxon(a, b) {
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  return norm(a) === norm(b);
+}
+
+// A sentence whose naming construction describes another taxon, or a product
+// derived from the plant, rather than the article subject. Sentence-scoped
+// (not capture-scoped) because the whole naming clause belongs to the other
+// referent:
+//   - "The western sugar maple (Acer grandidentatum) ... are treated as
+//     varieties ..." defines that binomial's name (Acer saccharum).
+//   - "Datura stramonium (commonly known as thornapple or jimson weed)" and
+//     "Malpighia emarginata, often called acerola" name the other species
+//     (Atropa bella-donna, Malpighiaceae).
+//   - "a species called Oenothera biennis" names a different member of the
+//     genus (Oenothera villosa).
+//   - "This salt substitute, also called zakankau" and "the entheogenic brew
+//     known as ayahuasca" name a product, not the plant.
+// The other binomial is validated with isSubjectBinomial so capitalized common
+// names ("Black walnut, also known as ...") are not mistaken for taxa.
+function isOtherTaxonSentence(sentence, subjectTaxon) {
+  if (!subjectTaxon) return false;
+  const leadDef = sentence.match(/^The\s+[^()]{2,80}?\(([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)[^)]*\)/);
+  if (leadDef && isSubjectBinomial(leadDef[1]) && !sameTaxon(leadDef[1], subjectTaxon)) return true;
+  const binomParen = sentence.match(/\b([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\s*\([^)]*\b(?:known\s+as|called)\b/i);
+  if (binomParen && isSubjectBinomial(binomParen[1]) && !sameTaxon(binomParen[1], subjectTaxon)) return true;
+  const otherSpecies = sentence.match(/\b(?:species|plant|taxon|tree|shrub|herb)\s+(?:called|known\s+as)\s+([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)/);
+  if (otherSpecies && isSubjectBinomial(otherSpecies[1]) && !sameTaxon(otherSpecies[1], subjectTaxon)) return true;
+  // A family/genus article introducing a member species and its name: "One
+  // useful species in the family is Malpighia emarginata, often called
+  // acerola." (Malpighiaceae). The explicit "species in/of the family" frame
+  // keeps this from swallowing shared names in species articles (Dicentra's
+  // related-plant "bleeding heart").
+  if (/\b(?:species|member)\s+(?:in|of)\s+the\s+(?:family|genus)\b[^.]*\b(?:known\s+as|called)\b/i.test(sentence)) return true;
+  if (/\b(?:acids?|brews?|teas?|dishes?|drinks?|beverages?|substitutes?|oils?|extracts?|powders?|flours?|syrups?|juices?|resins?|latex|saps?|salts?)\s*,?\s*(?:also\s+)?(?:known\s+as|called)\s+/i.test(sentence)) return true;
+  return false;
 }
 
 // A sentence that defines a biological mechanism/process rather than naming the
@@ -847,6 +919,10 @@ function isSubjectBinomial(subject) {
   const words = normalized.split(/\s+/);
   if (words.length < 2 || words.length > 4) return false;
   if (!/^[A-Z]/.test(words[0])) return false;
+  // A binomial never contains a finite verb. R1's subject span is greedy, so
+  // a sentence like "Black walnut is allelopathic, releasing ... is a ..."
+  // would otherwise treat the whole clause as the appositive subject.
+  if (words.some((w) => /^(?:is|are|was|were|has|have|had|does|do|did|can|could|may|might|will|would|should)$/i.test(w.replace(/[.,;:)]/g, '')))) return false;
   for (let i = 1; i < words.length; i++) {
     const w = words[i].replace(/^[\s\(\)\[\]\{\}"']/, '');
     if (!/^[a-z]/.test(w)) return false;
@@ -954,7 +1030,7 @@ function isTaxonomicSentence(sentence, isFirst) {
   // (e.g. "...bok choy is called baby bok choy" inside a lit-gloss
   // sentence that R9b then misreads). "usually" admitted alongside "also"
   // (Kerria japonica: "the plant is usually called Yellow Rose of Texas").
-  if (/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:(?:also|usually)\s+)?called\b/i.test(sentence)) return true;
+  if (/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower|bush|bushes)\s+(?:is|are|was|were)\s+(?:(?:also|usually)\s+)?called\b/i.test(sentence)) return true;
   if (/^Some\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}species\s+are\s+called\b/i.test(sentence)) return true;
   if (/\bas\s+it\s+is\s+known\s+to\b/i.test(sentence)) return true;
   if (/(?:Its|Their|The)\s+(?:[A-Za-zÀ-ÿ][\w''\u2019-]*\s+){0,2}names?\s+[A-Za-zÀ-ÿ]/i.test(sentence)) return true;
@@ -986,6 +1062,9 @@ function isTaxonomicSentence(sentence, isFirst) {
   // language, tumi in the Hopi language, and both aʼpilalu and ado꞉we in the Zuni
   // language." — unquoted "called X in the <Lang> language" (Cleomella serrulata).
   if (/called\s+.+?\s+in\s+(?:the\s+)?[A-Za-z-]+\s+language\b/i.test(sentence)) return true;
+  // "<Language> word for this species is X" — "The Hawaiian word for this
+  // species is kō" (Saccharum officinarum).
+  if (/^The\s+[A-Z][a-z]+\s+word\s+for\s+(?:this|the)\s+(?:species|plant)\s+is\b/.test(sentence)) return true;
   return false;
 }
 
@@ -1204,6 +1283,7 @@ function _extractWikipediaCommonNames(text, trace) {
   const sentences = getSentences(processed);
   const isFirst = new Set();
   if (sentences.length > 0) isFirst.add(sentences[0]);
+  const subjectTaxon = sentences.length > 0 ? subjectTaxonFromLead(sentences[0]) : '';
 
   // --- Section-based extraction ---
   const commonSection = extractSection(processed, 'Common names');
@@ -1279,7 +1359,7 @@ function _extractWikipediaCommonNames(text, trace) {
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
   // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
-  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75
+  // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75, R81
   // No-ops (handled elsewhere):       R27, R40, R42, R45
   // ──────────────────────────────────────────────────────────────────────────
   for (const sentence of sentences) {
@@ -1336,6 +1416,14 @@ function _extractWikipediaCommonNames(text, trace) {
     // reviewer's "never add individual specimen trees" rule (Quercus robur
     // review gap: "Kongeegen" [cultivar] + "Denmark" [geographic]).
     if (/\b(?:specimen|individual)(?:s)?\s*,\s+(?:also\s+)?(?:known\s+as|called)\b/i.test(sentence)) {
+      if (trace) trace.skippedSentences.push({ sentence });
+      continue;
+    }
+
+    // Names attached to another taxon or to a plant product ("Datura
+    // stramonium (commonly known as thornapple)", "This salt substitute, also
+    // called zakankau") do not belong to the article subject.
+    if (isOtherTaxonSentence(sentence, subjectTaxon)) {
       if (trace) trace.skippedSentences.push({ sentence });
       continue;
     }
@@ -1628,6 +1716,9 @@ function _extractWikipediaCommonNames(text, trace) {
       const content = m[1].split(';')[0].trim();
       if (!/^\s*(?:syn\.?|botanical\s+name|see|cf\.?|also\s+(?:known\s+as|called|spelled?))\b/i.test(content)
           && /^["']?[a-z\u00E0-\u00F6\u00F8-\u00FF]/.test(content)
+          // An article-led descriptive gloss ("a federally recognized tribe
+          // from Tollhouse, California") is prose, not a vernacular name.
+          && !/^\s*(?:a|an)\s+/i.test(content)
           && !/[&=/]/.test(content)
           && !/^[A-Z][a-z]+\s+[a-z]+$/.test(content)
           && !isAbbreviatedBinomialLike(content)) {
@@ -1758,7 +1849,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // Greedy over words with a terminator lookahead so multi-word names
     // ("hence the name hardy kiwi") capture whole instead of first-word-only;
     // a preposition-led capture ("the name of the …") is not a name.
-    const r9c = sentence.match(/(?:hence|whence|thus|whereby)\s+the\s+name\s+([A-Za-z][\w''\u2019-]+(?:\s+[\w''\u2019-]+){0,4})(?=[.,;:)\u201d"']|\s+(?:and|or|is|was|are|were|to|of|for|in|on|by|with|from|that|which)\b|\s*$)/i);
+    const r9c = sentence.match(/(?:hence|whence|thus|whereby)\s+the\s+(?:common\s+)?name\s+["'\u201C\u2018]?([A-Za-z][\w''\u2019-]+(?:\s+[\w''\u2019-]+){0,4})(?=[.,;:)\u201d"'\u2019]|\s+(?:and|or|is|was|are|were|to|of|for|in|on|by|with|from|that|which)\b|\s*$)/i);
     if (r9c && !/^(?:of|for|to|in|on|by|with|from|the)\b/i.test(r9c[1])) {
       const capture = finalizeCapture(r9c[1], 200);
       if (capture && !isGenericJunk(capture)) caps.push({ rule: 'R9c', capture: capture });
@@ -1818,6 +1909,10 @@ function _extractWikipediaCommonNames(text, trace) {
       // rather than the whole plant — the gloss is about the part, not a species
       // common name (e.g. "Cecropia fruit, known as snake fingers, ...").
       if (/\b(?:people|nation|tribes?|tribal)\b/i.test(r10Prologue)
+          // A naming clause whose prologue lists people with lifespans and
+          // resumes with "he/she" names a person ("... also called Hieronymus
+          // Tragus, he is today considered ..."), not the plant.
+          || (/\(\d{3,4}[–-]\d{3,4}\)/.test(sentence) && /\b(?:he|she)\b/i.test(sentence))
           || /\b(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|stem|stems|wood|branch|branches|foliage|nut|nuts|cone|cones|petal|petals|sap|tuber|bulb|thorn|spine|husk|peel|rind|grain|kernel)\b/i.test(r10Prologue.slice(r10Prologue.lastIndexOf(',') + 1))) { /* skip */ }
       else {
         let capture = truncateAtDescriptiveClause(r10[1].replace(/\s*[.,]\s*$/, ''));
@@ -1879,6 +1974,9 @@ function _extractWikipediaCommonNames(text, trace) {
       if (
         !/\bother\s+than\b/i.test(sentence)
         && !/\bBotanical\s+Latin\b/i.test(sentence)
+        // "The name Schufia is a taxonomic anagram derived from Fuchsia" — a
+        // coined sectional name, not a vernacular alias.
+        && !/\banagram\b/i.test(sentence)
         && !/\b(?:scientific|botanical|latin|binomial|specific|epithet|genus|generic|species|family|order|tribe|taxon)\b/i.test(r68[1])
         && !/^(?:is|are|was|were|be|been|being|a|an|the|and|or|also|often|sometimes|usually|commonly|generally|widely|rarely|mainly|mostly|typically|frequently|therefore|however|instead|indeed|already|never|ever|always|quite|rather|largely|chiefly|primarily|broadly|loosely|strictly|formally|apparently|actually|index|list|page|section|table|figure|database|known|called|named|given|considered)\b/i.test(r68[2])) {
         // Explicit naming sentence ("its Chinese name is dìtáng") — the
@@ -1887,6 +1985,15 @@ function _extractWikipediaCommonNames(text, trace) {
         // allowBinomialLike).
         caps.push({ rule: 'R68', capture: r68[2], allowPhonetic: true });
       }
+    }
+
+    // R81: "<Language> word for this species is X" — "The Hawaiian word for
+    // this species is kō" (Saccharum officinarum). The language adjective is
+    // capitalized and the copula is required, so ordinary "word for ..." prose
+    // stays out; the explicit naming assertion bypasses the phonetic gate.
+    const r81 = sentence.match(/^The\s+[A-Z][a-z]+\s+word\s+for\s+(?:this|the)\s+(?:species|plant)\s+is\s+([A-Za-zÀ-ÿ\u0100-\u017F][\w''\u2019\u0100-\u017F-]*)(?=[.,;:)\s]|$)/);
+    if (r81) {
+      caps.push({ rule: 'R81', capture: r81[1], allowPhonetic: true });
     }
 
     // R11c: "Members are commonly known as X, Y, or Z" and "Some species of
@@ -2060,7 +2167,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // name the part, not the plant, cf. R10). Trailing "in <Place>"
     // qualifiers are stripped downstream; leading-preposition captures
     // ("into question") are rejected.
-    const r67 = sentence.match(/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|are|was|were)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s+and\s+the\s+(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|wood|nut|nuts|berry|berries)\b|,\s*which\b|\.\s*$|$)/i);
+    const r67 = sentence.match(/(?:^|\s)The\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower|bush|bushes)\s+(?:is|are|was|were)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s+and\s+the\s+(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|wood|nut|nuts|berry|berries)\b|,\s*which\b|\.\s*$|$)/i);
     if (r67) {
       const capture = finalizeCapture(r67[1], 300);
       if (capture && !/^(?:into|in|on|at|to|for|with|by|of|from)\b/i.test(capture)) {
