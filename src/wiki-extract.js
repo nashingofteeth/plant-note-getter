@@ -131,6 +131,16 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
     return ', ' + spellings;
   });
 
+  // Expand an "(a.k.a. X, Y, or Z)" alias parenthetical before stripping
+  // parens — the paren is a genuine alternate-name list, not an aside
+  // (Aegle marmelos: "commonly known as bael (a.k.a. bel, beli, or bhel)").
+  // Content must start lowercase: an uppercase continuation is an author
+  // abbreviation ("(aka Maxim.)" — Onoclea sensibilis), which keeps its
+  // existing aka-author rejection path untouched.
+  text = text.replace(/\(\s*a\.?\s?k\.?\s?a\.?\s+([^()]+?)\s*\)/gi, (m0, list) =>
+    /^[a-z\u00E0-\u00F6\u00F8-\u00FF]/.test(list.trim()) ? ', ' + list : m0
+  );
+
   // Expand a TRAILING parenthetical single-alternative gloss before stripping
   // parens, e.g. "witloof (or witlof)" -> "witloof, witlof". Anchored to the
   // end of the capture: mid-phrase "X (or Y) head" alternatives (the Erica
@@ -949,6 +959,17 @@ function isSubjectBinomial(subject) {
   return true;
 }
 
+// A period does not end a sentence when it follows a known abbreviation or a
+// personal-name initial. Initials may be single ("John C. Frémont") or paired
+// ("J. C. Frémont"); without this guard the split strands an unclosed
+// parenthetical on the name (Berberis fremontii: "known by the common name
+// Frémont's mahonia (after John C. Frémont)" split after "C.", capturing
+// "Frémont's mahonia (after John C").
+function isNonTerminalPeriod(before) {
+  return /\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|approx|ca|cf|e\.g|i\.e|viz|al|fig|vol|no|pp|pg|ed|rev|subsp|ssp|var|f|sp|syn|L)\.\s*$/.test(before)
+    || /\b[A-Z]\.\s*$/.test(before);
+}
+
 function sentenceEnds(text) {
   const ends = [];
   // Split at newlines (section headers, paragraph breaks)
@@ -961,8 +982,7 @@ function sentenceEnds(text) {
   const re = /(?<=[.!?])\s+(?=[A-Z])/g;
   while ((m = re.exec(text)) !== null) {
     const before = text.slice(Math.max(0, m.index - 40), m.index + 1);
-    if (!/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|approx|ca|cf|e\.g|i\.e|viz|al|fig|vol|no|pp|pg|ed|rev|subsp|ssp|var|f|sp|syn|L)\.\s*$/.test(before)
-        && !/\b[A-Z]\.[A-Z]\.\s*$/.test(before)) {
+    if (!isNonTerminalPeriod(before)) {
       ends.push(m.index);
     }
   }
@@ -980,8 +1000,7 @@ function sentenceEnds(text) {
   const parenSentRe = /(?<=[.!?])\s+(?=\()/g;
   while ((m = parenSentRe.exec(text)) !== null) {
     const before = text.slice(Math.max(0, m.index - 40), m.index + 1);
-    if (!/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|approx|ca|cf|e\.g|i\.e|viz|al|fig|vol|no|pp|pg|ed|rev|subsp|ssp|var|f|sp|syn|L)\.\s*$/.test(before)
-        && !/\b[A-Z]\.[A-Z]\.\s*$/.test(before)) {
+    if (!isNonTerminalPeriod(before)) {
       ends.push(m.index);
     }
   }
@@ -1033,6 +1052,11 @@ function isTaxonomicSentence(sentence, isFirst) {
   // Mirrors R8's adverb set + "in <language>" qualifier.
   if (/(?:commonly|generally|widely|often)\s+known\s+(?:in\s+[A-Za-z]+\s+)?as\b/i.test(sentence)) return true;
   if (/known\s+(?:by|as)\s/i.test(sentence)) return true;
+  // Language-gloss parenthetical ("known in <lang> as X") — mirrors R6e.
+  // The construction is a naming gloss regardless of surrounding prose
+  // (Aegle marmelos: "... sacred trees of Hindus, (known in Sanskrit as
+  // बिल्व bilva), ...").
+  if (/\(\s*known\s+in\s+[A-Za-zÀ-ÿ-]+\s+as\b/i.test(sentence)) return true;
   // Bare binomial lead with a gloss paren ("Salix alba var. serica (silver
   // willow)") — mirrors R64. Case-sensitive: the capitalized lead is
   // load-bearing.
@@ -1442,7 +1466,7 @@ function _extractWikipediaCommonNames(text, trace) {
   // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R5c, R33, R37, R38, R44, R53, R56, R57, R59, R60
   // "known as / called / referred to": R7, R8, R8b, R8c, R9, R10, R11, R11b, R11c, R11d, R11e,
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
-  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R28, R29, R36, R47, R64, R72
+  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R6e, R28, R29, R36, R47, R64, R72
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
   // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75, R81, R82, R83
   // No-ops (handled elsewhere):       R27, R40, R42, R45
@@ -1776,6 +1800,18 @@ function _extractWikipediaCommonNames(text, trace) {
       }
     }
 
+    // R6e: language-gloss parenthetical "(known in <Language> as <gloss>)" —
+    // "Bael is considered ... (known in Sanskrit as बिल्व bilva), ...". The
+    // gloss may prefix the native-script word (Devanagari, CJK, ...): the
+    // trailing Latin-script run is the romanized name, mirroring
+    // extractCjkAnnotatedNames' romanized-gloss handling. No copula
+    // requirement — a gloss paren is naming evidence wherever it sits.
+    const r6e = sentence.match(/\(\s*known\s+in\s+[A-Za-zÀ-ÿ-]+\s+as\s+([^()<>,;]+?)\s*\)/i);
+    if (r6e) {
+      const latinTail = (r6e[1].match(/[A-Za-zÀ-ÿ][\w''\u2019-]*(?:\s+[A-Za-zÀ-ÿ][\w''\u2019-]*)*$/) || [])[0];
+      if (latinTail) caps.push({ rule: 'R6e', capture: latinTail });
+    }
+
     // R64: bare binomial lead with a gloss parenthetical — "Salix alba var.
     // serica (silver willow) grows in wet soils", or the predicate-less
     // variety-list fragment "Salix alba var. serica (silver willow)". The binomial-lead gate
@@ -1916,7 +1952,14 @@ function _extractWikipediaCommonNames(text, trace) {
     // followed by a copula or at the end, so a trailing relative clause is
     // not swallowed.
     const r8c = sentence.match(/\bknown\s+in\s+([^,;]+?)\s+as\s+(?:the\s+)?(.+?)(?:\s*,\s*(?:is|was|are|were)\b|\s+(?:is|was|are|were)\s+(?:a|an|the)\b|$)/i);
-    if (r8c) {
+    if (r8c
+        // The "known in ..." aside may itself sit inside a parenthetical
+        // gloss — R6e owns those (Aegle marmelos: "(known in Sanskrit as
+        // बिल्व bilva)"); R8c's open-ended capture would swallow the rest
+        // of the sentence ("... bilva), and thus they are used in Hindu
+        // rites."). Okra's "known in some English-speaking countries as
+        // lady's fingers" stands outside parens and still flows through.
+        && !isInsideParens(sentence, r8c.index)) {
       const capture = finalizeCapture(r8c[2], 300);
       if (capture) caps.push({ rule: 'R8c', capture: capture });
     }
@@ -2023,6 +2066,14 @@ function _extractWikipediaCommonNames(text, trace) {
           // resumes with "he/she" names a person ("... also called Hieronymus
           // Tragus, he is today considered ..."), not the plant.
           || (/\(\d{3,4}[–-]\d{3,4}\)/.test(sentence) && /\b(?:he|she)\b/i.test(sentence))
+          // A ", also called" clause whose prologue is a made/prepared-into
+          // construction glosses the PREPARATION, not the plant (Aegle
+          // marmelos: "The juice can be made into sharbat, also called
+          // bela pana" — bela pana is the sharbat's name, not the tree's).
+          // The fireweed contrast ("fireweed is made into a tea known as
+          // Ivan-Chai") runs through R41 instead — no comma-breaks the
+          // product from its naming verb there.
+          || /\b(?:made|produced|processed|turned|cooked)\s+(?:from\s+\S+\s+)?(?:in|out\s+of\s+\S+\s+)?into\s+[A-Za-z'][\s\S]*$/i.test(r10Prologue)
           || /\b(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|stem|stems|wood|branch|branches|foliage|nut|nuts|cone|cones|petal|petals|sap|tuber|bulb|thorn|spine|husk|peel|rind|grain|kernel)\b/i.test(r10Prologue.slice(r10Prologue.lastIndexOf(',') + 1))) { /* skip */ }
       else {
         let capture = truncateAtDescriptiveClause(r10[1].replace(/\s*[.,]\s*$/, ''));
@@ -2636,9 +2687,18 @@ function _extractWikipediaCommonNames(text, trace) {
       // "a mode known as X" / "a condition known as X" name the mode or
       // condition, not the plant (Lolium arundinaceum: "a mode known as
       // vertical transmission", 'a condition known as "fescue foot" might
-      // afflict cattle'). Variety/cultivar preWords are NOT excluded —
+      // afflict cattle'). Preceding a custom/rite noun ("a fertility ritual
+      // for girls known as the Bel Bibaaha" — Aegle marmelos) the naming
+      // clause attaches to the custom, never the plant; plant-name
+      // constructions in R41 keep generic vehicles like "a tea known as
+      // Ivan-Chai" (fireweed) so those contrast cases stay live. Catching the
+      // custom noun in the pre-match tail matters because the surface token
+      // before "known as" can be an intermediate participant ("girls"), not
+      // the custom itself. Variety/cultivar preWords are NOT excluded —
       // variety-level names still name the taxon.
-      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease)$/.test(preWord) && !isInsideParens(sentence, r41Match.index)) {
+      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease)$/.test(preWord)
+          && !/(?:ritual|rites?|ceremon(?:y|ies)|festival|celebration|customs?|traditions?)\b[^.]{0,60}$/.test(sentence.slice(0, r41Match.index).slice(-120))
+          && !isInsideParens(sentence, r41Match.index)) {
         let capture = r41Match[3].replace(/\s*\(.*$/, '').trim();
         // Strip surrounding quotes and a trailing period ("Agave Noah". -> Agave Noah)
         capture = capture.replace(/^["'\u2018\u2019\u201C\u201D]+/, '').replace(/["'\u2018\u2019\u201C\u201D]+\.?\s*$/, '').trim();

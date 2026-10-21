@@ -412,6 +412,33 @@ test('buildAddPrompt: reinforces gall/individual exclusion in the task line', ()
   assert.match(add, /Never add group-membership nouns from taxonomy sentences, confusion-disclaimer names of other taxa, galls, diseases, pests, or individual specimen trees/);
 });
 
+test('Aegle-driven prompt rules: product-or-custom removals', () => {
+  // The remove pass kept both junk names the deterministic extractor
+  // captured ('bela pana' — a drink; 'Bel Bibaaha' — a rite) because no
+  // remove category covered product/custom names. The category leads the
+  // remove rules (primacy, mirroring the ADD prompt's gall exclusions) and
+  // repeats in the task line via buildRemovePrompt.
+  assert.match(REMOVE_SYSTEM_PROMPT, /'product-or-custom'/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /bela pana names a drink/);
+  assert.match(REMOVE_SYSTEM_PROMPT, /Bel Bibaaha names a rite/);
+  // Primacy: the product/custom exclusion leads the remove-rule list.
+  assert.ok(
+    REMOVE_SYSTEM_PROMPT.indexOf('product-or-custom') < REMOVE_SYSTEM_PROMPT.indexOf('broken-capture'),
+    'product-or-custom exclusion precedes broken-capture'
+  );
+  assert.match(
+    buildRemovePrompt('text', ['bela pana'], 'Aegle marmelos', 'species'),
+    /ceremonies or customs/
+  );
+  // Add-pass script rule: the reviewer added the native-script token
+  // 'बिल्व' alongside the romanization 'bilva' — the pipeline is
+  // Latin-script only, so the prompt now demands romanizations only.
+  assert.match(
+    ADD_SYSTEM_PROMPT,
+    /Never add native-script tokens .* add only the romanization \("bilva"\)/
+  );
+});
+
 test('Lolium-driven prompt rules: group-membership adds, condition/process removals', () => {
   // The reviewer kept all six deterministic junk names and added
   // 'ryegrass' from a genus-membership sentence — locked here.

@@ -137,7 +137,12 @@ const ADD_SYSTEM_PROMPT =
   '- Return at most 10 names. On long articles with many candidate ' +
   'strings, keep only the strongest naming-construction matches so the ' +
   'output stays within budget.\n' +
-  '- Regional non-English vernaculars for the taxon itself are welcome.\n' +
+  '- Regional non-English vernaculars for the taxon itself are welcome — ' +
+  "but only in Latin script (diacritics fine: 'dìtáng', 'chêne " +
+  "pédonculé'). Never add native-script tokens (Devanagari, CJK, Arabic, " +
+  "Thai, ... — e.g. 'बिल्व', '木瓜'): when the article pairs a " +
+  "native-script name with a romanization ('known in Sanskrit as बिल्व " +
+  'bilva\'), add only the romanization ("bilva").\n' +
   'Do not invent, paraphrase, or translate. When unsure, leave it out. ' +
   'Empty arrays allowed.';
 
@@ -180,6 +185,15 @@ const REMOVE_SYSTEM_PROMPT =
   "them.\n" +
   'When unsure whether an entry is a genuine name, verdict keep.\n' +
   'Remove rules (verdict remove, with a category):\n' +
+  "- 'product-or-custom': a name the article gives to a food, drink, " +
+  'preparation, or ceremony made from or associated with the taxon — not ' +
+  "to the taxon itself. The quoted span must show the alias attaching to " +
+  "the product or custom ('the juice can be made into sharbat, also " +
+  "called bela pana' — bela pana names a drink; 'a fertility ritual for " +
+  "girls known as the Bel Bibaaha' — Bel Bibaaha names a rite). Names " +
+  "that ARE plants ('breadfruit', 'Ivan-Chai' as a fireweed tea name) stay " +
+  'keep — this category never applies to a word the article uses as the ' +
+  "plant's own name.\n" +
   "- 'member-species': a common name the article attributes to a MEMBER of " +
   "this taxon rather than to the taxon itself — e.g. in a genus article a " +
   "name stated for one member species ('Orcheston long grass' stated for " +
@@ -367,6 +381,10 @@ function buildRemovePrompt(text, base, taxon, rank) {
     'for EVERY listed entry, each with a category (leave "add" empty). ' +
     'Remove livestock conditions and diseases, other-organism names, ' +
     'plant parts, color names, alternative literal-translation glosses, ' +
+    "names of foods/drinks/preparations and of ceremonies or customs " +
+    "derived from or associated with the taxon ('bela pana' the drink, " +
+    "'Bel Bibaaha' the rite) whenever the quote proves the alias names the " +
+    'product or custom and not the plant, ' +
     "sentence-fragment extractions (naming scaffolding like 'plant is " +
     "called X' when the bare name X is also listed — remove the fragment, " +
     'keep the bare name; provenance tails like \'after a village on ' +

@@ -1347,6 +1347,76 @@ const TESTS = [
     extract: 'Acer saccharum, the sugar maple, is a species of flowering plant in the soapberry and lychee family, Sapindaceae. The western sugar maple (Acer grandidentatum) and southern sugar maple (Acer floridanum) are also treated as a varieties or subspecies of northern sugar maple by some botanists.',
     expected: ['sugar maple', 'northern sugar maple'],
   },
+  {
+    name: "Berberis fremontii (etymology paren after a person's middle initial: initial \"C.\" must not split the sentence; trailing \"(after John C. Frémont)\" stripped)",
+    extract: `Berberis fremontii is a species of barberry known by the common name Frémont's mahonia (after John C. Frémont).
+
+
+== Description ==
+Berberis fremontii is an erect evergreen shrub growing up to 4.5 meters tall. The leaves are several centimeters long and are made up of several holly-leaf-shaped leaflets, each most often 1–2.6 centimeters long and edged with spiny teeth. The leaves are purplish when new, green when mature, and greenish blue when aged.
+The abundant inflorescences each bear 8 to 12 bright yellow flowers, blooming in the spring. Each flower is made up of nine sepals and six petals all arranged in whorls of three. The fruit is a berry up to 1.5 centimeters wide, ranging in color from yellowish to purple to nearly black.
+
+
+== Taxonomy ==
+Berberis fremontii was scientifically described and named by John Torrey. For many years it has been part of the controversy on if parts of the Berberis genus should be classified as Mahonia. Friedrich Karl Georg Fedde classified it as Mahonia fremontii in 1901. However, as of 2023 Plants of the World Online (POWO) classifies it as part of Berberis.
+
+
+=== Names ===
+The plant was named in honor of John C. Frémont.
+
+
+== Distribution and habitat ==
+Berberis fremontii is native to mountainous regions of the US states of Arizona, Nevada, California, Colorado, New Mexico and Utah. It grows in desert grassland and pinyon-juniper woodland.
+
+
+== Uses ==
+The Zuni people use the crushed berries as a purple coloring for the skin and for objects employed in ceremonies.
+
+
+== References ==
+
+
+== External links ==
+
+Calflora Database: Berberis fremontii (Fremont barberry)—formerly Mahonia fremontii.
+Jepson Manual eFlora (TJM2) treatment Berberis fremontii  (Fremont barberry)—formerly Mahonia fremontii.
+USDA Plants Profile for Mahonia fremontii (Fremont barberry)
+Colorado Wildflowers Mahonia Fact Sheet
+U.C. Photos gallery of Berberis fremontii`,
+    expected: ["Frémont's mahonia"],
+  },
+  {
+    name: 'Aegle marmelos ("a.k.a." alias parenthetical splits, Sanskrit-script gloss, drink + ritual rejection)',
+    extract: `Aegle marmelos, commonly known as bael (a.k.a. bel, beli, or bhel), also Bengal quince, golden apple, Japanese bitter orange, stone apple or wood apple, is a species of tree native to the Indian subcontinent and Southeast Asia. It is present in India, Pakistan, Bangladesh, Sri Lanka, and Nepal as a naturalized species. The tree is considered to be sacred by Hindus and Buddhists. Bael is the only member of the monotypic genus Aegle.
+
+
+== Common names ==
+The fruit has various common names, such as bael fruit, Indian bael, golden apple, elephant apple, Indian quince, and stone apple.
+
+
+== Description ==
+Aegle marmelos is a deciduous shrub or small to medium-sized tree, up to 13 metres (43 feet) tall with slender drooping branches and rather open, irregular crown.
+
+
+== Uses ==
+
+
+=== Culinary ===
+Rich in vitamin C, the fruits can be eaten either fresh from trees or after being dried and produced into candy, toffee, pulp powder or nectar. If fresh, the juice is strained and sweetened to make a drink similar to lemonade. The juice can be made into sharbat, also called bela pana.
+
+
+== In culture ==
+
+Bael is considered to be one of the sacred trees of Hindus, (known in Sanskrit as बिल्व bilva), and thus they are used in Hindu rites. Earliest evidence of the religious importance of bael appears in the Sri Sukta of the Rigveda, which reveres this plant as the residence of goddess Lakshmi, the deity of wealth and prosperity. Bael trees are also considered an incarnation of the goddess Sati. Bael trees can be usually seen near Hindu temples and home gardens. It is believed that Shiva is fond of bael trees, to a point of having earned the epithet बिल्वदण्ड Bilvadaṇḍa or "bel-staffed". Its leaves and fruit still play a main role in his worship, because the leaf's trifoliate shape is seen to symbolise his trident. Another belief is that the trifoliate shape of Bael leaf is symbolic representation of three eyes of Lord Shiva.
+In the traditional practice of the Hindu and Buddhist religions by people of the Newar culture of Nepal, the bael tree is part of a fertility ritual for girls known as the Bel Bibaaha. Girls are "married" to the bael fruit; as long as the fruit is kept safe and never cracks, the girl can never become widowed, even if her human husband dies. This is a ritual that guarantees the high status of widows in the Newar community compared to other women in Nepal.`,
+    expected: [
+      'bael', 'bel', 'beli', 'bhel',
+      'Bengal quince', 'golden apple', 'Japanese bitter orange',
+      'stone apple', 'wood apple',
+      'bael fruit', 'Indian bael', 'elephant apple', 'Indian quince',
+      'bilva',
+    ],
+  },
 ];
 
 const GBIF_TESTS = [
