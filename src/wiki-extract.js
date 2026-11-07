@@ -229,6 +229,24 @@ function extractNamesFromCapture(captured, trace, rule, opts = {}) {
   // alternation apart and leave a bare headless fragment ("Service").
   text = text.replace(/"([^"]+)"\s+or\s+"([^"]+)"\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)/gi, '"$1 $3", "$2 $3"');
 
+  // Distribute a shared head noun over a longer quoted list, e.g. Pinus
+  // echinata's 'referred to as the "old field", "spruce", "rosemary",
+  // "yellow", "two-leaf" and "heart" pine' -> one name per quoted modifier
+  // with the trailing head ("old field pine", "spruce pine", ...). Anchored to
+  // the end of the capture so only a list that ends in a bare head word is
+  // expanded; bare '"X" or "Y"' pairs without a head stay two names, and a
+  // trailing function word ("... and "heart" are") never becomes a head.
+  const quotedHeadList = text.match(/((?:"[^"]+"\s*(?:,\s*|\s+(?:and|or)\s+))+"[^"]+")\s+([A-Za-zÀ-ÿ][\w''\u2019-]*)$/);
+  if (quotedHeadList) {
+    const head = quotedHeadList[2];
+    const items = [...quotedHeadList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1].trim());
+    const headless = /^(?:is|are|was|were|and|or|the|a|an|in|of|to|for|with|on|at|by|from|as)$/i.test(head);
+    if (!headless && items.length >= 2 && items.every((it) => it && it.split(/\s+/).length <= 3)) {
+      const prefix = text.slice(0, quotedHeadList.index);
+      text = prefix + items.map((it) => `"${it} ${head}"`).join(', ');
+    }
+  }
+
   text = text.replace(/\s*,?\s+(?:and|or)\s+/gi, (match, offset, string) => {
     // Don't split "X or Y family/genus/species" patterns, but only when the
     // parts are short (not long descriptive phrases ending with "species")
@@ -892,6 +910,21 @@ function isOtherTaxonSentence(sentence, subjectTaxon) {
   if (/\b(?:species|member)\s+(?:in|of)\s+the\s+(?:family|genus)\b[^.]*\b(?:known\s+as|called)\b/i.test(sentence)) return true;
   if (/\b(?:acids?|brews?|teas?|dishes?|drinks?|beverages?|substitutes?|oils?|extracts?|powders?|flours?|syrups?|juices?|resins?|latex|saps?|salts?)\s*,?\s*(?:also\s+)?(?:known\s+as|called)\s+/i.test(sentence)) return true;
   return false;
+}
+
+// A naming clause whose immediate prologue is a plant PART/feature ("The bark
+// has resin pockets (sometimes called pitch patches)") glosses the part, not
+// the plant — the name is not a vernacular for the taxon. Requires the naming
+// verb to sit inside a parenthetical: a bare "a fruit salad called haft mēwa"
+// (Elaeagnus) names a preparation, not a part. The immediate clause (after
+// the last comma) is checked so a part word elsewhere in the sentence can't
+// veto a genuine name. Shared by R24/R51.
+const PLANT_PART_WORDS = /\b(?:fruit|fruits|leaf|leaves|flower|flowers|seed|seeds|bark|root|roots|stem|stems|wood|branch|branches|foliage|nut|nuts|cone|cones|petal|petals|sap|resin|tuber|bulb|thorn|spine|husk|peel|rind|grain|kernel)\b/i;
+
+function isPartNamingClause(sentence, index) {
+  if (!isInsideParens(sentence, index)) return false;
+  const prologue = sentence.slice(0, index);
+  return PLANT_PART_WORDS.test(prologue.slice(prologue.lastIndexOf(',') + 1));
 }
 
 // A sentence that defines a biological mechanism/process rather than naming the
@@ -1611,6 +1644,15 @@ function _extractWikipediaCommonNames(text, trace) {
     const r2 = sentence.match(/^([A-ZÀ-Ÿ][\w.''-]+(?:\s+[\w.''-]+){0,3})\s+or\s+(.+?)(?:\s+(?:is|was)\s+(?:a|an|the|some|one)\b)/i);
     if (r2 && isSubjectBinomial(r2[1])) {
       caps.push({ rule: 'R2', capture: r2[2] });
+    } else if (r2 && isSubjectBinomial(r2[2])) {
+      // Reverse lead: "The shortleaf pine or Pinus echinata is a species..."
+      // names the taxon in the first slot and gives the binomial in the
+      // second. Capture the common name (article stripped); the binomial
+      // check keeps "A or B" common-name pairs out of this branch.
+      const leadName = stripArticle(r2[1]).trim();
+      if (leadName && !isAbbreviatedBinomialLike(leadName) && !isGenericJunk(leadName)) {
+        caps.push({ rule: 'R2', capture: leadName });
+      }
     }
 
     // R3: "The X (Binomial), also called/known as..." — leading name + parenthetical binomial + alias
@@ -2328,6 +2370,12 @@ function _extractWikipediaCommonNames(text, trace) {
     const r24 = sentence.match(/(?<!(?:also|is|are|was|were|being)\s)called\s+(?:the\s+)?(.+?)(?:\s+(?:is|was)\s+(?:a|an|the)\b|\s+the\s+(?:species|tree|plant|shrub|herb|vine|fern|grass|flower)\s+(?:is|was)\b|\s+by\b(?!\s+the\s+[A-Z])|\s*[.,]\s*$)/i);
     if (r24) {
       const capture = finalizeCapture(r24[1], 200);
+      // A naming gloss attached to a plant PART ("The bark has resin pockets
+      // (sometimes called pitch patches)") names the part/feature, not the
+      // plant (Pinus echinata). Sentence-scoped like R10's part guard: the
+      // clause before the naming verb decides the referent, so the subject's
+      // own names elsewhere in the article are unaffected.
+      const partGloss = isPartNamingClause(sentence, r24.index);
       // Reject historical/etymological attribution: "called Salvia by the Romans"
       // is the Latin name used by an ancient people, not a common name. The bare
       // "by the <People>" (no indigenous/people qualifier) is a Latin-name
@@ -2335,7 +2383,7 @@ function _extractWikipediaCommonNames(text, trace) {
       // preserved by R10/R25 elsewhere. Likewise "called salicin, after the
       // Latin name Salix" marks a derivation (usually a chemical/product),
       // not a vernacular — drop the whole capture, including the head name.
-      if (capture && !/\s+by\s+the?\s+[A-Z][a-z]+\b/.test(capture) && !/\bafter\s+the\s+Latin\b/i.test(capture)) {
+      if (capture && !partGloss && !/\s+by\s+the?\s+[A-Z][a-z]+\b/.test(capture) && !/\bafter\s+the\s+Latin\b/i.test(capture)) {
         caps.push({ rule: 'R24', capture: capture });
       }
     }
@@ -2803,7 +2851,9 @@ function _extractWikipediaCommonNames(text, trace) {
     const r51 = sentence.match(/(?:often|sometimes|frequently)\s+(?:also\s+)?called\s+(?:the\s+)?(.+?)(?:\s+by\b(?!\s+the\s+[A-Z])|\s*[,.;]\s*|$)/i);
     if (r51) {
       const capture = finalizeCapture(r51[1], 200);
-      if (capture) caps.push({ rule: 'R51', capture: capture });
+      // Part/feature gloss ("The bark has resin pockets (sometimes called
+      // pitch patches)") names the part, not the taxon — see the R24 guard.
+      if (capture && !isPartNamingClause(sentence, r51.index)) caps.push({ rule: 'R51', capture: capture });
     }
 
     // R51b: "is also called X" — e.g. "Valerian is also called cat's love due to..."
