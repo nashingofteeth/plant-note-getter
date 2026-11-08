@@ -17,6 +17,20 @@ function printSection(title) {
   console.log('\n' + line + '\n');
 }
 
+// Some network failures arrive as an AggregateError with an empty message
+// (Node's happy-eyeballs connect aggregates the per-address errors in
+// `.errors`), which used to print as a bare `Error: `. Fall back to the
+// error code and aggregated causes so the failure is always actionable.
+function errorDetail(error) {
+  if (!error) return String(error);
+  if (error.message) return error.message;
+  if (Array.isArray(error.errors) && error.errors.length > 0) {
+    return error.errors.map((e) => e?.message || e?.code || String(e)).join('; ');
+  }
+  if (error.code) return error.code;
+  return String(error);
+}
+
 // Cost suffix for the LLM review line, e.g. ` [$0.0060, 17.3k in / 0.2k out]`.
 // Empty when the completer reported no usage (stub completers, unknown).
 function formatTokens(n) {
@@ -232,9 +246,9 @@ async function main() {
       }
     }
   } catch (error) {
-    console.error(`Error: ${error.message}`);
+    console.error(`Error: ${errorDetail(error)}`);
     process.exit(1);
   }
 }
 
-main().catch(e => { console.error(e.message); process.exit(1); });
+main().catch(e => { console.error(`Error: ${errorDetail(e)}`); process.exit(1); });

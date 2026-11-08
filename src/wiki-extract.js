@@ -900,7 +900,7 @@ function isOtherTaxonSentence(sentence, subjectTaxon) {
   if (!subjectTaxon) return false;
   const binomParen = sentence.match(/\b([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)\s*\([^)]*\b(?:known\s+as|called)\b/i);
   if (binomParen && isSubjectBinomial(binomParen[1]) && !sameTaxon(binomParen[1], subjectTaxon)) return true;
-  const otherSpecies = sentence.match(/\b(?:species|plant|taxon|tree|shrub|herb)\s+(?:called|known\s+as)\s+([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)/);
+  const otherSpecies = sentence.match(/\b(?:species|plant|taxon|tree|shrub|herb)\s+(?:called|known\s+(?:[a-zà-ÿ]+\s+)?as)\s+(?:the\s+)?([A-Z][a-zà-ÿ]+\s+[a-zà-ÿ][\w-]*)/);
   if (otherSpecies && isSubjectBinomial(otherSpecies[1]) && !sameTaxon(otherSpecies[1], subjectTaxon)) return true;
   // A family/genus article introducing a member species and its name: "One
   // useful species in the family is Malpighia emarginata, often called
@@ -1082,8 +1082,9 @@ function isTaxonomicSentence(sentence, isFirst) {
   if (/referred\s+to\s+as/i.test(sentence)) return true;
   if (/(?:alternative|other|local|regional)(?:\s+vernacular)?\s+names?\s/i.test(sentence)) return true;
   if (/name\s+.+\s+is\s+(?:often|also|commonly|frequently|widely)\s+applied\s+to/i.test(sentence)) return true;
-  // Mirrors R8's adverb set + "in <language>" qualifier.
-  if (/(?:commonly|generally|widely|often)\s+known\s+(?:in\s+[A-Za-z]+\s+)?as\b/i.test(sentence)) return true;
+  // Mirrors R8's "known as" forms: pre-"known" adverb (plus "in <language>")
+  // or post-"known" "colloquially".
+  if (/(?:(?:commonly|generally|widely|often)\s+known|known\s+colloquially)\s+(?:in\s+[A-Za-z]+\s+)?as\b/i.test(sentence)) return true;
   if (/known\s+(?:by|as)\s/i.test(sentence)) return true;
   // Language-gloss parenthetical ("known in <lang> as X") — mirrors R6e.
   // The construction is a naming gloss regardless of surrounding prose
@@ -1949,7 +1950,8 @@ function _extractWikipediaCommonNames(text, trace) {
     // ─── "known as / called / referred to as" ────────────────────────────
     // R8: "commonly known as" / "generally known as" / "often known as" — stop at copula, an
     // explanatory "because" clause, or end. An "in <language>" qualifier may
-    // sit between "known" and "as" ("often known in English as planes").
+    // sit between "known" and "as" ("often known in English as planes"), as
+    // may a post-"known" adverb ("known colloquially as X").
     // Skipped when the prologue names a disease/pathogen ("a disease,
     // commonly known as Massaria disease, has attacked..." names the
     // disease, not the plant — cf. R10's prologue guards, R1's
@@ -1967,7 +1969,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // Tmesipteris"; Psilotum) — a comma followed by a bare noun otherwise
     // belongs to the name list ("..., many-footed fern, ...") and must not
     // truncate the capture.
-    const r8 = sentence.match(/(?:commonly|generally|widely|often)\s+known\s+(?:in\s+[A-Za-z]+\s+)?as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s+(?:that|which|who|whose)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety)|is|are|was|were)\b|\s*,\s+(?:the\s+|its\s+|their\s+|another\s+)?\w+(?:\s+\w+){0,2}\s+(?:being|are|is|was|were|include|includes|including)\b|\s+because\b|$)/i);
+    const r8 = sentence.match(/(?:(?:commonly|generally|widely|often)\s+known|known\s+colloquially)\s+(?:in\s+[A-Za-z]+\s+)?as\s+(?:the\s+)?(.+?)(?:\s+(?:is|was|are|were)\s+(?:a|an|the|some|one)\b|\s+(?:that|which|who|whose)\b|\s*,\s+(?:of|usually|typically|placed|classified|a\s+(?:species|genus|plant|tree|subspecies|variety)|is|are|was|were)\b|\s*,\s+(?:the\s+|its\s+|their\s+|another\s+)?\w+(?:\s+\w+){0,2}\s+(?:being|are|is|was|were|include|includes|including)\b|\s+because\b|$)/i);
     if (r8 && !/\b(?:disease|diseases|pathogen|blight)\b/i.test(sentence.slice(0, r8.index))) {
       const capture = finalizeCapture(r8[1], 300);
       if (capture) caps.push({ rule: 'R8', capture: capture });
@@ -2729,7 +2731,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // The ",\s+a\s+term..." terminator stops a trailing shared-term clause from
     // leaking other genera as names (Echinocereus: "known as hedgehog cacti,
     // a term also used for the Pediocactus and Echinopsis" -> [hedgehog cacti]).
-    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|(?:,?\s*(?:and\s+)?there\s+)?(?:is|are|was|were)\b|$)/i);
+    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|\s+(?:would|will|can|could|may|might|must|should)\b|(?:,?\s*(?:and\s+)?there\s+)?(?:is|are|was|were)\b|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
       // "a mode known as X" / "a condition known as X" name the mode or
@@ -2744,7 +2746,7 @@ function _extractWikipediaCommonNames(text, trace) {
       // before "known as" can be an intermediate participant ("girls"), not
       // the custom itself. Variety/cultivar preWords are NOT excluded —
       // variety-level names still name the taxon.
-      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease)$/.test(preWord)
+      if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease|spirit|deity|god|goddess)$/.test(preWord)
           && !/(?:ritual|rites?|ceremon(?:y|ies)|festival|celebration|customs?|traditions?)\b[^.]{0,60}$/.test(sentence.slice(0, r41Match.index).slice(-120))
           && !isInsideParens(sentence, r41Match.index)) {
         let capture = r41Match[3].replace(/\s*\(.*$/, '').trim();
@@ -2755,11 +2757,6 @@ function _extractWikipediaCommonNames(text, trace) {
           // Trim at "and/or commonly as" even in comma lists (Wisteria: "Agrobacterium and commonly as crown gall, is...")
           if (/\b(?:and|or)\s+commonly\s+as\b/i.test(capture)) {
             trimmed = capture.replace(/\s+(?:and|or)\s+commonly\s+as\b.*/i, '').trim();
-          } else if (!/,/.test(capture)) {
-            // Only trim at "or/and" when the capture is a single name (no comma list);
-            // for comma-separated lists like "cruciferous vegetables, cabbages, ... or simply brassicas"
-            // the "or" is a list connector, not a terminator.
-            trimmed = capture.replace(/\s+(?:or|and)\s+.*$/i, '').trim();
           }
           if (trimmed && !isGenericJunk(trimmed)) caps.push({ rule: 'R41', capture: trimmed });
         }
