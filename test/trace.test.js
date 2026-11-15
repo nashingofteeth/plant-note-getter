@@ -59,6 +59,18 @@ test('traceExtraction: rejected entries record the rule and the rejection reason
   );
 });
 
+test('traceExtraction: R84 labels region-tagged parenthetical names', () => {
+  const trace = traceExtraction('It (achira in Hispanic America, cana-da-índia in Brazil) has been a minor food crop.');
+  assert.deepStrictEqual(trace.names, ['achira', 'cana-da-índia']);
+  assert.ok(
+    trace.captures.some((c) => c.name === 'cana-da-índia' && c.rule === 'R84'),
+    'cana-da-índia captured by R84'
+  );
+
+  const distribution = traceExtraction('Canna indica is a plant. It (native in Brazil, found in Chile) has been cultivated.');
+  assert.ok(!distribution.names.includes('native') && !distribution.names.includes('found'), 'distribution gloss not captured');
+});
+
 test('traceExtraction: rejected entries never leak into names', () => {
   const hawthorn = traceExtraction(HAWTHORN);
   assert.deepStrictEqual(hawthorn.names, []);

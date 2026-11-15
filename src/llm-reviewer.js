@@ -103,6 +103,11 @@ const ADD_SYSTEM_PROMPT =
   "members (e.g. text names A, B, C, D, E but the list has only A, B, D → " +
   'add C and E). A parenthetical after a name is a qualifier, never part ' +
   "of the name: from 'cushín (short variety)' add \"cushín\".\n" +
+  '- Region-tagged lists in a parenthetical also name the taxon in each ' +
+  "region: from '(achira in Hispanic America, cana-da-índia in Brazil)' " +
+  "each comma-separated '<name> in <place>' item is a separate name — add " +
+  "the ones the list is missing (e.g. add 'cana-da-índia' when only " +
+  "'achira' is present).\n" +
   '- Never add galls, diseases, or pests (e.g. \'oak apple\', ' +
   "'oak marble gall', 'pineapple gall') — those belong to other organisms, " +
   'not this plant.\n' +
@@ -239,7 +244,9 @@ const REMOVE_SYSTEM_PROMPT =
   "- 'morphological': structural descriptors like 'lanceolate', and " +
   "plant-part/anatomy terms — any entry naming a PART of the plant rather " +
   "than the plant itself ('mouth', 'trigger hairs', 'utricles', 'bark', " +
-  "'roots') is not a name of the taxon.\n" +
+  "'roots', 'hota seeds' for the seeds used as rattle filling) is not a " +
+  'name of the taxon. A named preparation of the plant is not a part ' +
+  "('black jujubes' for smoked fruit stays keep).\n" +
   "- 'procedural': extraction artifacts like a leading 'known as', and " +
   "meta-language about names (an entry like 'word gooseberry' from a " +
   "sentence about names including a word — describing names is not " +

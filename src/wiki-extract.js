@@ -927,6 +927,16 @@ function isPartNamingClause(sentence, index) {
   return PLANT_PART_WORDS.test(prologue.slice(prologue.lastIndexOf(',') + 1));
 }
 
+// A naming clause whose grammatical subject is a plant PART names that part,
+// not the taxon: Canna indica's "where the seeds are known as hota seeds"
+// (the seeds are the rattle filling). Contrast a preparation subject —
+// "Smoked jujubes ... are referred to as black jujubes" (Ziziphus jujuba) —
+// which is a genuine food name and carries no part word. Used by R43.
+const PART_SUBJECT_NAMING = new RegExp(
+  `\\b(?:the|these|those|its|their)\\s+${PLANT_PART_WORDS.source}\\s+(?:are|is|was|were)\\s+(?:also\\s+)?(?:known\\s+as|referred\\s+to\\s+as|called)\\b`,
+  'i'
+);
+
 // A sentence that defines a biological mechanism/process rather than naming the
 // taxon — "<Term> ( <gloss> ) is a characteristic of ...", "is a mechanism of",
 // "is a mode of", etc. The parenthetical gloss is a definition of the term (e.g.
@@ -1500,7 +1510,7 @@ function _extractWikipediaCommonNames(text, trace) {
   // Sentence-open constructions:      R1, R2, R3, R4, R4b, R4c, R4d, R5, R5b, R5c, R33, R37, R38, R44, R53, R56, R57, R59, R60
   // "known as / called / referred to": R7, R8, R8b, R8c, R9, R10, R11, R11b, R11c, R11d, R11e,
   //                                    R15, R16, R21, R23, R24, R25, R25b, R26, R30, R39, R41, R43, R46, R58, R63, R65, R67, R68
-  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R6e, R28, R29, R36, R47, R64, R72
+  // Parenthetical glosses:            R6, R6b, R6b2, R6c, R6d, R6e, R28, R29, R36, R47, R64, R72, R84
   // Common-name list constructions:   R12, R13, R14, R18, R19, R20, R32, R32b, R34, R35, R35b, R54
   // Misc / special-case:              R17, R22, R31, R40, R42, R45, R66, R69, R70, R71, R73, R74, R75, R81, R82, R83
   // No-ops (handled elsewhere):       R27, R40, R42, R45
@@ -1855,6 +1865,29 @@ function _extractWikipediaCommonNames(text, trace) {
       if (latinTail) caps.push({ rule: 'R6e', capture: latinTail });
     }
 
+    // R84: region-tagged name list in a parenthetical — "It (achira in
+    // Hispanic America, cana-da-índia in Brazil) has been a minor food crop"
+    // (Canna indica). Each comma-separated item is "<lowercase name> in
+    // <Capitalized place>"; the place tags mark a regional vernacular list,
+    // while descriptive glosses ("native in Brazil", "ripe in autumn") fail
+    // the lowercase-name + capitalized-place shape, and two items are
+    // required. Downstream the trailing "in <place>" qualifier is stripped,
+    // leaving one name per region.
+    const r84 = sentence.match(/\(([^()]+?)\)\s+(?:is|was|are|were|has|have|had)\b/i);
+    if (r84) {
+      const r84Items = r84[1].split(',').map((s) => s.trim()).filter(Boolean).map((item) => {
+        const m = item.match(/^([a-zà-ÿ][\p{Script=Latin}''\u2019 .-]*?)\s+in\s+([A-ZÀ-Ÿ][\w-]*(?:\s+[A-ZÀ-Ÿ][\w-]*)*)$/u);
+        return m ? { name: m[1], place: m[2] } : null;
+      });
+      // A bare status word is a distribution gloss ("(native in Brazil,
+      // found in Chile)"), not a name; a modified name ("common canna in
+      // France") still passes.
+      const r84Descriptor = /^(?:native|found|grown|common|rare|used|eaten|seen|cultivated|naturali[sz]ed|introduced|widespread|abundant|endemic|invasive|present|known|called|reported|recorded|occurring|distributed|absent|frequent|occasional)$/i;
+      if (r84Items.length >= 2 && r84Items.every((it) => it && !r84Descriptor.test(it.name))) {
+        caps.push({ rule: 'R84', capture: r84[1] });
+      }
+    }
+
     // R64: bare binomial lead with a gloss parenthetical — "Salix alba var.
     // serica (silver willow) grows in wet soils", or the predicate-less
     // variety-list fragment "Salix alba var. serica (silver willow)". The binomial-lead gate
@@ -1867,7 +1900,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // accepts any capitalized lead, so "The tillers (non-flowering stems)
     // are..." (Lolium arundinaceum — a parenthetical gloss of an anatomical
     // term, not a name) would otherwise pass as a binomial lead.
-    const r64 = sentence.match(/^([A-Z][a-zà-ÿ]+(?:\s+[a-zà-ÿ×.x'-]+){1,3})\s+\(([^()]+)\)(?:,?\s+(?:is|was|are|were|grows?|grew|flowers?|reaches?|occurs?)\b|\s*[.,]?\s*$)/i);
+    const r64 = sentence.match(/^([A-Z][a-zà-ÿ]+(?:\s+[a-zà-ÿ×.x'-]+){1,3})\s+\(([^()]+)\)(?:,?\s+(?:is|was|are|were|grows?|grew|flowers?|reaches?|occurs?|has\s+been|have\s+been|had\s+been)\b|\s*[.,]?\s*$)/i);
     if (r64 && isSubjectBinomial(r64[1]) && !/^(?:the|a|an)\s+/i.test(r64[1]) && !/\b(?:presentation|mechanism|process|syndrome|phenomenon|mode|method|system)\b/i.test(r64[1]) && !/\bacid\b/i.test(r64[1])) {
       // Semicolon tails stripped before guards (see R6c). The gloss must
       // start lowercase (vernacular: "silver willow") — capitalized glosses
@@ -2731,7 +2764,7 @@ function _extractWikipediaCommonNames(text, trace) {
     // The ",\s+a\s+term..." terminator stops a trailing shared-term clause from
     // leaking other genera as names (Echinocereus: "known as hedgehog cacti,
     // a term also used for the Pediocactus and Echinopsis" -> [hedgehog cacti]).
-    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|\s+(?:would|will|can|could|may|might|must|should)\b|(?:,?\s*(?:and\s+)?there\s+)?(?:is|are|was|were)\b|$)/i);
+    const r41Match = sentence.match(/((?:,\s*|\s)(\w+)\s+known\s+as\s+)(.+?)(?:\s+\(|\s+because\s+|,\s+a\s+term\s+(?:also\s+)?(?:used|applied)\s+(?:for|to)\b|\s+(?:would|will|can|could|may|might|must|should)\b|(?:,?\s*(?:and\s+)?there\s+|\s+)(?:is|are|was|were)\b|$)/i);
     if (r41Match && !r8 && !r8b && !r6) {
       const preWord = r41Match[2].toLowerCase();
       // "a mode known as X" / "a condition known as X" name the mode or
@@ -2746,7 +2779,13 @@ function _extractWikipediaCommonNames(text, trace) {
       // before "known as" can be an intermediate participant ("girls"), not
       // the custom itself. Variety/cultivar preWords are NOT excluded —
       // variety-level names still name the taxon.
+      // An other-organism preWord ("a caterpillar known as the worst pest for
+      // this plant" — Canna indica) makes that organism the naming subject,
+      // not the plant; the pest nouns are the same ones the whole-name
+      // classifier already rejects. The leading-whitespace copula terminators
+      // above keep captures from stopping mid-word ("for th|is").
       if (!/^(?:is|are|was|were|be|been|also)$/.test(preWord) && !/^(?:mode|manner|process|mechanism|method|condition|phenomenon|syndrome|disease|spirit|deity|god|goddess)$/.test(preWord)
+          && !isOtherOrganismJunk(preWord)
           && !/(?:ritual|rites?|ceremon(?:y|ies)|festival|celebration|customs?|traditions?)\b[^.]{0,60}$/.test(sentence.slice(0, r41Match.index).slice(-120))
           && !isInsideParens(sentence, r41Match.index)) {
         let capture = r41Match[3].replace(/\s*\(.*$/, '').trim();
@@ -2892,7 +2931,10 @@ function _extractWikipediaCommonNames(text, trace) {
     const r43 = sentence.match(/\b(?:consumed|eaten|used)\b\s+.*?(?:referred\s+to\s+as|known\s+as)\s+(?:a\s+)?(.+?)\.\s*$/i);
     if (r43 && !/\b(?:species|dioecious|genus)\b/i.test(sentence)) {
       const capture = finalizeCapture(r43[1], 200);
-      if (capture && !isGenericJunk(capture)) {
+      // A part-word subject ("where the seeds are known as hota seeds") names
+      // the part; the trigger prefix ends where the capture begins.
+      const r43Prologue = sentence.slice(0, r43.index + r43[0].length - r43[1].length);
+      if (capture && !isGenericJunk(capture) && !PART_SUBJECT_NAMING.test(r43Prologue)) {
         caps.push({ rule: 'R43', capture: capture });
       }
     }
